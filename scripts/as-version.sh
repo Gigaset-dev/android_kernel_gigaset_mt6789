@@ -21,8 +21,8 @@ get_canonical_version()
 	echo $((10000 * $1 + 100 * ${2:-0} + ${3:-0}))
 }
 
-# Clang fails to handle -Wa,--version unless -fno-integrated-as is given.
-# We check -fintegrated-as, expecting it is explicitly passed in for the
+# Clang fails to handle -Wa,--version unless -no-integrated-as is given.
+# We check -(f)integrated-as, expecting it is explicitly passed in for the
 # integrated assembler case.
 check_integrated_as()
 {
@@ -54,6 +54,8 @@ set -- $1
 if [ "$1" = GNU -a "$2" = assembler ]; then
 	shift $(($# - 1))
 	version=$1
+min_tool_version=$(dirname $0)/min-tool-version.sh
+
 	name=GNU
 else
 	echo "$orig_args: unknown assembler invoked" >&2
@@ -65,5 +67,15 @@ fi
 version=${version%-*}
 
 cversion=$(get_canonical_version $version)
+min_cversion=$(get_canonical_version $min_version)
+
+if [ "$cversion" -lt "$min_cversion" ]; then
+	echo >&2 "***"
+	echo >&2 "*** Assembler is too old."
+	echo >&2 "***   Your $name assembler version:    $version"
+	echo >&2 "***   Minimum $name assembler version: $min_version"
+	echo >&2 "***"
+	exit 1
+fi
 
 echo $name $cversion
