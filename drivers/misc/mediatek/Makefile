@@ -150,3 +150,4 @@ obj-$(CONFIG_MTK_MT6382_BDG) += spi_slave_drv/
 #drv add by wangwei1 20230510 start
 obj-$(CONFIG_LCD_BIAS) += lcd_bias/
 #drv add by wangwei1 20230510 end
+obj-y += met_drv_v3/
