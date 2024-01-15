@@ -1021,8 +1021,8 @@ static int lm3643_probe(struct i2c_client *client,
 	flash->need_cooler = 0;
 	flash->target_current[LM3643_LED0] = LM3643_FLASH_BRT_MAX;
 	flash->target_current[LM3643_LED1] = LM3643_FLASH_BRT_MAX;
-	flash->ori_current[LM3643_LED0] = LM3643_TORCH_BRT_MIN;
-	flash->ori_current[LM3643_LED1] = LM3643_TORCH_BRT_MIN;
+	flash->ori_current[LM3643_LED0] = LM3643_TORCH_BRT_MAX;
+	flash->ori_current[LM3643_LED1] = LM3643_TORCH_BRT_MAX;
 	flash->cdev = thermal_of_cooling_device_register(client->dev.of_node,
 			"flashlight_cooler", flash, &lm3643_cooling_ops);
 	if (IS_ERR(flash->cdev))
