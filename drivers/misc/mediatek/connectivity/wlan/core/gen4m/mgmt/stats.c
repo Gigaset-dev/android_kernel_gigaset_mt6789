@@ -491,6 +491,8 @@ void statsParseIPV4Info(struct sk_buff *skb,
 		break;
 	}
 	case IP_PRO_UDP:
+		if (eventType == EVENT_RX)
+			GLUE_SET_PKT_FLAG(skb, ENUM_PKT_UDP);
 		statsParseUDPInfo(skb, pucEthBody, eventType, u2IpId);
 	}
 }
@@ -601,11 +603,11 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
 				/*143 multi listener report v2*/
 				GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
 
-				DBGLOG(RX, INFO,
+				DBGLOG_LIMITED(RX, INFO,
 					"<RX><IPv6> hop-by-hop packet\n");
 				break;
 			case EVENT_TX:
-				DBGLOG(TX, INFO,
+				DBGLOG_LIMITED(TX, INFO,
 					"<TX><IPv6> hop-by-hop packet\n");
 				break;
 			}

@@ -428,6 +428,10 @@ VOID swCtrlCmdCategory0(P_ADAPTER_T prAdapter, UINT_8 ucCate, UINT_8 ucAction, U
 
 				switch (ucOpt0) {
 				case 0:
+					if (ucOpt1 >= TC_NUM) {
+						DBGLOG(SW4, WARN, "ucOpt1 %u invalid\n", ucOpt1);
+						break;
+					}
 					g_au4SwCr[1] = (QM_GET_TX_QUEUE_LEN(prAdapter, ucOpt1));
 					g_au4SwCr[2] = prQM->au4MinReservedTcResource[ucOpt1];
 					g_au4SwCr[3] = prQM->au4CurrentTcResource[ucOpt1];
@@ -435,11 +439,19 @@ VOID swCtrlCmdCategory0(P_ADAPTER_T prAdapter, UINT_8 ucCate, UINT_8 ucAction, U
 					break;
 
 				case 1:
+					if (ucOpt1 >= TC_NUM) {
+						DBGLOG(SW4, WARN, "ucOpt1 %u invalid\n", ucOpt1);
+						break;
+					}
 					g_au4SwCr[1] = prQM->au4ForwardCount[ucOpt1];
 					g_au4SwCr[2] = prQM->au4HeadStaRecIndex[ucOpt1];
 					break;
 
 				case 2:
+					if (ucOpt1 >= TC_NUM) {
+						DBGLOG(SW4, WARN, "ucOpt1 %u invalid\n", ucOpt1);
+						break;
+					}
 					g_au4SwCr[1] = prQM->arTxQueue[ucOpt1].u4NumElem;	/* only one */
 
 					break;
@@ -454,6 +466,10 @@ VOID swCtrlCmdCategory0(P_ADAPTER_T prAdapter, UINT_8 ucCate, UINT_8 ucAction, U
 				prTxCtrl = &prAdapter->rTxCtrl;
 				switch (ucOpt0) {
 				case 0:
+					if (ucOpt1 >= TC_NUM) {
+						DBGLOG(SW4, WARN, "ucOpt1 %u invalid\n", ucOpt1);
+						break;
+					}
 					g_au4SwCr[1] = prAdapter->rTxCtrl.rTc.aucFreeBufferCount[ucOpt1];
 					g_au4SwCr[2] = prAdapter->rTxCtrl.rTc.aucMaxNumOfBuffer[ucOpt1];
 					break;
@@ -510,9 +526,11 @@ VOID swCtrlCmdCategory1(P_ADAPTER_T prAdapter, UINT_8 ucCate, UINT_8 ucAction, U
 		/* Read */
 		switch (ucIndex) {
 		case SWCTRL_STA_QUE_INFO:
-			{
-				g_au4SwCr[1] = prStaRec->arTxQueue[ucOpt1].u4NumElem;
+			if (ucOpt1 >= TC_NUM) {
+				DBGLOG(SW4, WARN, "ucOpt1 %u invalid\n", ucOpt1);
+				break;
 			}
+			g_au4SwCr[1] = prStaRec->arTxQueue[ucOpt1].u4NumElem;
 			break;
 		case SWCTRL_STA_INFO:
 			switch (ucOpt1) {
@@ -898,7 +916,8 @@ VOID swCrDebugInit(P_ADAPTER_T prAdapter)
 	/* debug counter */
 	g_fgSwcrDebugTimer = FALSE;
 
-	cnmTimerInitTimer(prAdapter, &g_rSwcrDebugTimer, (PFN_MGMT_TIMEOUT_FUNC) swCrDebugCheckTimeout, (ULONG) NULL);
+	cnmTimerInitTimer(prAdapter, &g_rSwcrDebugTimer,
+		(PFN_MGMT_TIMEOUT_FUNC) swCrDebugCheckTimeout, (uintptr_t) NULL);
 
 	if (g_u4SwcrDebugCheckTimeout)
 		swCrDebugCheckEnable(prAdapter, TRUE, g_ucSwcrDebugCheckType, g_u4SwcrDebugCheckTimeout);
@@ -917,7 +936,7 @@ VOID swCrDebugCheckEnable(P_ADAPTER_T prAdapter, BOOLEAN fgIsEnable, UINT_8 ucTy
 		g_ucSwcrDebugCheckType = ucType;
 		g_u4SwcrDebugCheckTimeout = u4Timeout;
 		if (g_fgSwcrDebugTimer == FALSE)
-			swCrDebugCheckTimeout(prAdapter, 0);
+			swCrDebugCheckTimeout(prAdapter, (uintptr_t) NULL);
 	} else {
 		cnmTimerStopTimer(prAdapter, &g_rSwcrDebugTimer);
 		g_u4SwcrDebugCheckTimeout = 0;
@@ -1038,7 +1057,7 @@ VOID swCrDebugCheck(P_ADAPTER_T prAdapter, P_CMD_SW_DBG_CTRL_T prCmdSwCtrl)
 		cnmTimerStartTimer(prAdapter, &g_rSwcrDebugTimer, g_u4SwcrDebugCheckTimeout * MSEC_PER_SEC);
 }
 
-VOID swCrDebugCheckTimeout(IN P_ADAPTER_T prAdapter, ULONG ulParam)
+void swCrDebugCheckTimeout(P_ADAPTER_T prAdapter, uintptr_t ulParam)
 {
 	CMD_SW_DBG_CTRL_T rCmdSwCtrl;
 	WLAN_STATUS rStatus;

@@ -3353,6 +3353,7 @@ static int priv_driver_get_wifi_type(IN struct net_device *prNetDev,
 		return -1;
 	}
 
+	kalMemZero(&rParamGetWifiType, sizeof(rParamGetWifiType));
 	prGlueInfo = *((P_GLUE_INFO_T *) netdev_priv(prNetDev));
 
 	rParamGetWifiType.prNetDev = prNetDev;

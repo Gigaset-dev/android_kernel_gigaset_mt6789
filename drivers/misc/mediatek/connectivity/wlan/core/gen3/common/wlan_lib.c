@@ -3039,8 +3039,8 @@ WLAN_STATUS wlanImageSectionDownloadStatus(IN P_ADAPTER_T prAdapter, IN UINT_8 u
 					     aucBuffer,
 					     sizeof(INIT_HIF_RX_HEADER_T) +
 					     sizeof(INIT_EVENT_CMD_RESULT), &u4RxPktLength) != WLAN_STATUS_SUCCESS) {
-			UINT_32 u4MailBox0;
-			UINT_32 u4MailBox1;
+			UINT_32 u4MailBox0 = 0;
+			UINT_32 u4MailBox1 = 0;
 
 			nicGetMailbox(prAdapter, 0, &u4MailBox0);
 			nicGetMailbox(prAdapter, 1, &u4MailBox1);
@@ -4462,6 +4462,7 @@ WLAN_STATUS wlanLoadManufactureData(IN P_ADAPTER_T prAdapter, IN P_REG_INFO_T pr
 	/* 7. set band edge tx power if available */
 	if (prRegInfo->fg2G4BandEdgePwrUsed) {
 		CMD_EDGE_TXPWR_LIMIT_T rCmdEdgeTxPwrLimit;
+		kalMemZero(&rCmdEdgeTxPwrLimit, sizeof(rCmdEdgeTxPwrLimit));
 
 		rCmdEdgeTxPwrLimit.cBandEdgeMaxPwrCCK = prRegInfo->cBandEdgeMaxPwrCCK;
 		rCmdEdgeTxPwrLimit.cBandEdgeMaxPwrOFDM20 = prRegInfo->cBandEdgeMaxPwrOFDM20;
@@ -4967,11 +4968,14 @@ WLAN_STATUS wlanCheckSystemConfiguration(IN P_ADAPTER_T prAdapter)
 	PARAM_SSID_T rSsid;
 	PARAM_802_11_CONFIG_T rConfiguration;
 	PARAM_RATES_EX rSupportedRates;
+
+	kalMemZero(&rSsid, sizeof(rSsid));
 #endif
 
 	DEBUGFUNC("wlanCheckSystemConfiguration");
 
 	ASSERT(prAdapter);
+	kalMemZero(&rConfiguration, sizeof(rConfiguration));
 
 #if (CFG_NVRAM_EXISTENCE_CHECK == 1)
 	if (kalIsConfigurationExist(prAdapter->prGlueInfo) == FALSE) {
@@ -5012,6 +5016,8 @@ WLAN_STATUS wlanCheckSystemConfiguration(IN P_ADAPTER_T prAdapter)
 
 	if (fgGenErrMsg == TRUE) {
 		prBeacon = cnmMemAlloc(prAdapter, RAM_TYPE_BUF, sizeof(WLAN_BEACON_FRAME_T) + sizeof(IE_SSID_T));
+		if (!prBeacon)
+			return WLAN_STATUS_FAILURE;
 
 		/* initialization */
 		kalMemZero(prBeacon, sizeof(WLAN_BEACON_FRAME_T) + sizeof(IE_SSID_T));
@@ -5443,6 +5449,7 @@ WLAN_STATUS wlanQueryStaStatistics(IN P_ADAPTER_T prAdapter, IN PVOID pvQueryBuf
 			prQueryStaStatistics->au4TcQueLen[ucIdx] = prStaRec->arTxQueue[ucIdx].u4NumElem;
 
 		rResult = WLAN_STATUS_SUCCESS;
+		kalMemZero(&rQueryCmdStaStatistics, sizeof(rQueryCmdStaStatistics));
 
 		/* 4 6. Ensure FW supports get station link status */
 		if (prAdapter->u4FwCompileFlag0 & COMPILE_FLAG0_GET_STA_LINK_STATUS) {

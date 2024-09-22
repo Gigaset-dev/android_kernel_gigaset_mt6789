@@ -682,6 +682,12 @@ u_int8_t halTxIsCmdBufEnough(IN struct ADAPTER *prAdapter)
 #endif
 #endif /* CFG_SUPPORT_CONNAC2X == 1 */
 
+	/* Port idx sanity */
+	if (u2Port >= NUM_OF_TX_RING) {
+		DBGLOG(HAL, ERROR, "Invalid Port[%u]\n", u2Port);
+		return FALSE;
+	}
+
 	prTxRing = &prHifInfo->TxRing[u2Port];
 
 	if (prTxRing->u4UsedCnt + 1 < TX_RING_SIZE)
@@ -1867,6 +1873,8 @@ bool halWpdmaAllocRxRing(struct GLUE_INFO *prGlueInfo, uint32_t u4Num,
 	pRxRing->u4BufSize = u4BufSize;
 	pRxRing->u4RingSize = u4Size;
 	pRxRing->fgRxSegPkt = FALSE;
+	pRxRing->pvPacket = NULL;
+	pRxRing->u4PacketLen = 0;
 
 	for (u4Idx = 0; u4Idx < u4Size; u4Idx++) {
 		/* Init RX Ring Size, Va, Pa variables */
@@ -1972,7 +1980,7 @@ bool halWpdmaAllocRing(struct GLUE_INFO *prGlueInfo, bool fgAllocMem)
 	/* Data Rx path */
 	if (!halWpdmaAllocRxRing(prGlueInfo, RX_RING_DATA_IDX_0,
 				 RX_RING0_SIZE, RXD_SIZE,
-				 CFG_RX_MAX_PKT_SIZE, fgAllocMem)) {
+				 CFG_RX_MAX_MPDU_SIZE, fgAllocMem)) {
 		DBGLOG(HAL, ERROR, "AllocRxRing[0] fail\n");
 		return false;
 	}
@@ -2081,7 +2089,7 @@ u_int8_t halWpdmaWaitIdle(struct GLUE_INFO *prGlueInfo,
 	int32_t round, int32_t wait_us)
 {
 	int32_t i = 0;
-	union WPDMA_GLO_CFG_STRUCT GloCfg;
+	union WPDMA_GLO_CFG_STRUCT GloCfg = {0};
 
 	do {
 		kalDevRegRead(prGlueInfo, WPDMA_GLO_CFG, &GloCfg.word);
@@ -2180,18 +2188,21 @@ void halWpdmaInitTxRing(IN struct GLUE_INFO *prGlueInfo, bool fgResetHif)
 			offset = idx * MT_RINGREG_DIFF;
 		}
 #endif /* CFG_SUPPORT_CONNAC2X == 1 */
-		else if (i == TX_RING_DATA1_IDX_1 &&
-				!prBusInfo->tx_ring1_data_idx)
-			continue;
-		else if (i == TX_RING_DATA2_IDX_2 &&
-				!prBusInfo->tx_ring2_data_idx)
-			continue;
+		else if (i == TX_RING_DATA1_IDX_1) {
+			if (!prBusInfo->tx_ring1_data_idx)
+				continue;
+			offset = prBusInfo->tx_ring1_data_idx * MT_RINGREG_DIFF;
+		} else if (i == TX_RING_DATA2_IDX_2) {
+			if (!prBusInfo->tx_ring2_data_idx)
+				continue;
+			offset = prBusInfo->tx_ring2_data_idx * MT_RINGREG_DIFF;
 #if CFG_TRI_TX_RING
-		else if (i == TX_RING_DATA3_IDX_3 &&
-				!prBusInfo->tx_ring3_data_idx)
-			continue;
+		} else if (i == TX_RING_DATA3_IDX_3) {
+			if (!prBusInfo->tx_ring3_data_idx)
+				continue;
+			offset = prBusInfo->tx_ring3_data_idx * MT_RINGREG_DIFF;
 #endif
-		else
+		} else
 			offset = i * MT_RINGREG_DIFF;
 
 		phy_addr = ((uint64_t)prTxCell->AllocPa) &
@@ -2592,15 +2603,26 @@ static bool halWpdmaFillTxRing(struct GLUE_INFO *prGlueInfo,
 	struct RTMP_DMACB *pTxCell;
 	struct TXD_STRUCT *pTxD;
 	uint16_t u2Port = TX_RING_DATA0_IDX_0;
+	struct BUS_INFO *prBusInfo = NULL;
 
 	ASSERT(prGlueInfo);
 
 	prHifInfo = &prGlueInfo->rHifInfo;
 	prChipInfo = prGlueInfo->prAdapter->chip_info;
+	prBusInfo = prChipInfo->bus_info;
 
 	u2Port = halTxRingDataSelect(
 		prGlueInfo->prAdapter, prToken->prMsduInfo);
+
+	if (prBusInfo->enableTxDataRingPrefetch)
+		prBusInfo->enableTxDataRingPrefetch(prGlueInfo, u2Port);
+
 	prTxRing = &prHifInfo->TxRing[u2Port];
+
+	if (prTxRing->TxCpuIdx >= TX_RING_SIZE) {
+		DBGLOG(HAL, ERROR, "Error TxCpuIdx[%u]\n", prTxRing->TxCpuIdx);
+		return false;
+	}
 
 	pTxCell = &prTxRing->Cell[prTxRing->TxCpuIdx];
 	prToken->u4CpuIdx = prTxRing->TxCpuIdx;

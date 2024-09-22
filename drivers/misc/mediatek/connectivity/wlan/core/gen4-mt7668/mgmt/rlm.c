@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
 ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/mgmt/rlm.c#3
 */
@@ -1868,6 +1822,9 @@ static UINT_8 rlmRecIeInfoForClient(P_ADAPTER_T prAdapter, P_BSS_INFO_T prBssInf
 	P_IE_CHANNEL_SWITCH_T prChannelSwitchAnnounceIE;
 	P_IE_SECONDARY_OFFSET_T prSecondaryOffsetIE;
 	P_IE_WIDE_BAND_CHANNEL_T prWideBandChannelIE;
+#if CFG_DFS_NEWCH_DFS_FORCE_DISCONNECT
+	struct ieee80211_channel *Channel = NULL;
+#endif
 #endif
 	PUINT_8 pucDumpIE;
 
@@ -2195,7 +2152,19 @@ static UINT_8 rlmRecIeInfoForClient(P_ADAPTER_T prAdapter, P_BSS_INFO_T prBssInf
 				ucChannelAnnouncePri =
 					prChannelSwitchAnnounceIE->
 					ucNewChannelNum;
-				fgNeedSwitchChannel = TRUE;
+#if CFG_DFS_NEWCH_DFS_FORCE_DISCONNECT
+				Channel = ieee80211_get_channel(
+						priv_to_wiphy(prAdapter->prGlueInfo),
+						ieee80211_channel_to_frequency(ucChannelAnnouncePri, KAL_BAND_5GHZ));
+				DBGLOG(RLM, INFO, "[DFS][CSA][CLIENT] Switch to DFS channel: new ChNum = [%d]\n",ucChannelAnnouncePri);
+				if (Channel &&
+				(Channel->flags & IEEE80211_CHAN_RADAR)) {
+					DBGLOG(RLM, INFO, "[DFS][CSA][CLIENT] New channel is DFS channel!");
+					aisBssLinkDown(prAdapter);
+				}
+				else
+#endif
+                          	fgNeedSwitchChannel = TRUE;
 			}
 
 			break;
@@ -2367,8 +2336,6 @@ static UINT_8 rlmRecIeInfoForClient(P_ADAPTER_T prAdapter, P_BSS_INFO_T prBssInf
 		&prBssInfo->ucVhtChannelFrequencyS1, &prBssInfo->ucPrimaryChannel);
 
 	rlmRevisePreferBandwidthNss(prAdapter, prBssInfo->ucBssIndex, prStaRec);
-
-	/*printk("Modify ChannelWidth (%d) and Extend (%d)\n",prBssInfo->eBssSCO,prBssInfo->ucVhtChannelWidth);*/
 
 	if (!rlmDomainIsValidRfSetting(prAdapter, prBssInfo->eBand,
 				       prBssInfo->ucPrimaryChannel, prBssInfo->eBssSCO,
@@ -3710,6 +3677,9 @@ VOID rlmProcessSpecMgtAction(P_ADAPTER_T prAdapter, P_SW_RFB_T prSwRfb)
 	BOOLEAN fgHasSCOIE = FALSE;
 	BOOLEAN fgHasChannelSwitchIE = FALSE;
 	BOOLEAN fgNeedSwitchChannel = FALSE;
+#if CFG_DFS_NEWCH_DFS_FORCE_DISCONNECT
+	struct ieee80211_channel *Channel = NULL;
+#endif
 
 	DBGLOG(RLM, INFO, "[Mgt Action]rlmProcessSpecMgtAction\n");
 	ASSERT(prAdapter);
@@ -3738,9 +3708,17 @@ VOID rlmProcessSpecMgtAction(P_ADAPTER_T prAdapter, P_SW_RFB_T prSwRfb)
 		DBGLOG(RLM, INFO, "[Mgt Action] Measure Request\n");
 		prMeasurementReqIE = SM_MEASUREMENT_REQ_IE(pucIE);
 		if (prMeasurementReqIE->ucId == ELEM_ID_MEASUREMENT_REQ) {
-			prStaRec->ucSmMsmtRequestMode = prMeasurementReqIE->ucRequestMode;
-			prStaRec->ucSmMsmtToken = prMeasurementReqIE->ucToken;
-			msmtComposeReportFrame(prAdapter, prStaRec, NULL);
+			/* Check IE length is valid */
+			if (prMeasurementReqIE->ucLength != 0 &&
+				(prMeasurementReqIE->ucLength >=
+				sizeof(IE_MEASUREMENT_REQ_T) - 2)) {
+				prStaRec->ucSmMsmtRequestMode =
+					prMeasurementReqIE->ucRequestMode;
+				prStaRec->ucSmMsmtToken =
+					prMeasurementReqIE->ucToken;
+				msmtComposeReportFrame(prAdapter, prStaRec,
+							NULL);
+			}
 		}
 
 		break;
@@ -3823,6 +3801,19 @@ VOID rlmProcessSpecMgtAction(P_ADAPTER_T prAdapter, P_SW_RFB_T prSwRfb)
 				}
 
 				fgHasChannelSwitchIE = TRUE;
+#if CFG_DFS_NEWCH_DFS_FORCE_DISCONNECT
+				Channel = ieee80211_get_channel(
+				priv_to_wiphy(prAdapter->prGlueInfo),
+					ieee80211_channel_to_frequency(prChannelSwitchAnnounceIE->ucNewChannelNum,
+					KAL_BAND_5GHZ));
+				DBGLOG(RLM, INFO, "[DFS][CSA][CLIENT] Switch to DFS channel: new ChNum = [%d]\n",prChannelSwitchAnnounceIE->ucNewChannelNum);
+				if (Channel && (Channel->flags &
+						IEEE80211_CHAN_RADAR)) {
+					DBGLOG(RLM, INFO, "[DFS][CSA][CLIENT] New channel is DFS channel!");
+					fgNeedSwitchChannel = FALSE;
+					fgHasChannelSwitchIE = FALSE;
+				}
+#endif
 				break;
 			case ELEM_ID_SCO:
 				if (IE_LEN(pucIE) != (sizeof(IE_SECONDARY_OFFSET_T) - 2)) {

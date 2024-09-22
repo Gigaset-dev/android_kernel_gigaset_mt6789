@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+/* SPDX-License-Identifier: BSD-2-Clause */
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
 ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/include/nic/mac.h#1
 */
@@ -278,9 +232,13 @@
 #define RATE_48M                                96	/* 48M */
 #define RATE_54M                                108	/* 54M */
 /* 7.3.2.14 BSS membership selector */
+/* BSS Selector - Hash To Element only */
+#define RATE_H2E_ONLY                           123
+/* BSS Selector - Clause 22. HT PHY */
+#define RATE_VHT_PHY                            126
+/* BSS Selector - Clause 20. HT PHY */
+#define RATE_HT_PHY                             127
 
-#define RATE_VHT_PHY                            126	/* BSS Selector - Clause 22. HT PHY */
-#define RATE_HT_PHY                             127	/* BSS Selector - Clause 20. HT PHY */
 #define RATE_MASK                               BITS(0, 6)	/* mask bits for the rate */
 #define RATE_BASIC_BIT                          BIT(7)	/* mask bit for the rate belonging to the BSSBasicRateSet */
 
@@ -566,6 +524,8 @@
 #define AUTH_TRANSACTION_SEQ_3                      3
 #define AUTH_TRANSACTION_SEQ_4                      4
 
+#define AUTH_STATUS_CODE_FIELD_LEN                  2
+
 /* 7.3.1.3 Beacon Interval field */
 #define BEACON_INTERVAL_FIELD_LEN                   2
 
@@ -732,6 +692,8 @@
 #define STATUS_CODE_DESTINATION_STA_NOT_PRESENT     49	/* Destination STA is not present within this QBSS */
 #define STATUS_CODE_DESTINATION_STA_NOT_QSTA        50	/* Destination STA is not a QSTA */
 #define STATUS_CODE_ASSOC_DENIED_LARGE_LIS_INTERVAL 51	/* Association denied because the ListenInterval is too large */
+
+#define WLAN_STATUS_SAE_HASH_TO_ELEMENT             126
 
 /* proprietary definition of reserved field of Status Code */
 #define STATUS_CODE_JOIN_FAILURE                    0xFFF0	/* Join failure */
@@ -1316,7 +1278,10 @@
 #define ACTION_NEIGHBOR_REPORT_RSP                  5	/* Neighbor report response */
 
 /* 7.4.7 Public Action frame details */
-#define ACTION_PUBLIC_20_40_COEXIST                 0	/* 20/40 BSS coexistence */
+/* 20/40 BSS coexistence */
+#define ACTION_PUBLIC_20_40_COEXIST                 0
+/* 20/40 BSS coexistence */
+#define ACTION_PUBLIC_VENDOR_SPECIFIC               9
 
 #if CFG_SUPPORT_802_11W
 /* SA Query Action frame (IEEE 802.11w/D8.0, 7.4.9) */

@@ -261,8 +261,10 @@ static int btmtk_pm_notifier_callback(struct notifier_block *nb,
 
 	switch (event) {
 		case PM_SUSPEND_PREPARE:
-			BTMTK_INFO("%s: bt_state[%d], event[%ld]",
-					__func__, cif_dev->bt_state, event);
+			if(cif_dev->bt_state != FUNC_ON) {
+				BTMTK_INFO("%s: bt_state[%d], event[%ld]",
+						__func__, cif_dev->bt_state, event);
+			}
 		case PM_POST_SUSPEND:
 			if(cif_dev->bt_state == FUNC_ON) {
 				bt_dump_bgfsys_suspend_wakeup_debug();
@@ -1576,7 +1578,9 @@ static int btmtk_cif_probe(struct platform_device *pdev)
 	/* 8. Register screen on/off & suspend/wakup notify callback */
 	cif_dev->blank_state = WMT_PARA_SCREEN_ON;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	mtk_disp_notifier_register("btmtk_disp_notifier", &btmtk_disp_notifier);
+	if (mtk_disp_notifier_register("btmtk_disp_notifier", &btmtk_disp_notifier)) {
+		BTMTK_ERR("Register mtk_disp_notifier failed\n");
+	}
 #else
 	btmtk_fb_notify_register();
 #endif
@@ -1946,12 +1950,10 @@ int32_t btmtk_tx_thread(void * arg)
 						break;
 					else
 						usleep_range(USLEEP_1MS_L, USLEEP_1MS_H);
-					if (ii == 4)
-						BTMTK_INFO("%s mtk_btif_is_tx_complete run 5 times", state_tag);
 				}
 				// re-run while loop
-				if (ii == 4) {
-					BTMTK_INFO("%s mtk_btif_is_tx_complete run 5 times", state_tag);
+				if (ii == 5) {
+					BTMTK_INFO("%s mtk_btif_is_tx_complete run 5 times, Exit while", state_tag);
 					break;
 				}
 

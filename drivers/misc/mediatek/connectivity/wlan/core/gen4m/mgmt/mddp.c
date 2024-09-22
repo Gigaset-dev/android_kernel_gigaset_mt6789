@@ -434,6 +434,7 @@ int32_t mddpNotifyDrvTxd(IN struct ADAPTER *prAdapter,
 #endif
 
 	if (!prNetDevPrivate->ucMddpSupport) {
+		DBGLOG(NIC, ERROR, "mddp not support\n");
 		goto exit;
 	}
 
@@ -583,6 +584,52 @@ int32_t mddpNotifyWifiStatus(IN enum ENUM_MDDPW_DRV_INFO_STATUS status)
 
 	return ret;
 }
+
+#ifdef SOC3_0
+static bool mddpNotifyBeforeWifiOnEnd(void)
+{
+	struct mddpw_drv_notify_info_t *prNotifyInfo;
+	struct mddpw_drv_info_t *prDrvInfo;
+	uint32_t u32BufSize = 0;
+	uint8_t *buff = NULL;
+	int32_t ret = 0, feature = 0;
+
+	if (gMddpWFunc.get_mddp_feature)
+		feature = gMddpWFunc.get_mddp_feature();
+
+	DBGLOG(INIT, INFO, "Start notify MD\n");
+
+	if (gMddpWFunc.notify_drv_info) {
+		int32_t ret;
+
+		u32BufSize = (sizeof(struct mddpw_drv_notify_info_t) +
+			sizeof(struct mddpw_drv_info_t) + sizeof(bool));
+		buff = kalMemAlloc(u32BufSize, VIR_MEM_TYPE);
+
+		if (buff == NULL) {
+			DBGLOG(NIC, ERROR, "Can't allocate buffer.\n");
+			return -1;
+		}
+		prNotifyInfo = (struct mddpw_drv_notify_info_t *) buff;
+		prNotifyInfo->version = 0;
+		prNotifyInfo->buf_len = sizeof(struct mddpw_drv_info_t) +
+				sizeof(bool);
+		prNotifyInfo->info_num = 1;
+		prDrvInfo = (struct mddpw_drv_info_t *) &(prNotifyInfo->buf[0]);
+		prDrvInfo->info_id = 7;
+
+		ret = gMddpWFunc.notify_drv_info(prNotifyInfo);
+		DBGLOG(INIT, INFO, "info_id=7, ret: %d, feature:%d.\n",
+		       ret, feature);
+		kalMemFree(buff, VIR_MEM_TYPE, u32BufSize);
+	} else {
+		DBGLOG(INIT, ERROR, "notify_drv_info is NULL.\n");
+		ret = -1;
+	}
+
+	return ret;
+}
+#endif
 
 static bool mddpIsCasanFWload(void)
 {
@@ -739,7 +786,12 @@ int32_t mddpNotifyWifiOnEnd(void)
 #if (CFG_SUPPORT_CONNAC2X == 0 || CFG_TRI_TX_RING == 1)
 	ret = mddpNotifyWifiStatus(MDDPW_DRV_INFO_STATUS_ON_END);
 #else
+#ifdef SOC3_0
+	ret = mddpNotifyBeforeWifiOnEnd();
+	ret = mddpNotifyWifiStatus(MDDPW_DRV_INFO_STATUS_ON_END);
+#else
 	ret = mddpNotifyWifiStatus(MDDPW_DRV_INFO_STATUS_ON_END_QOS);
+#endif
 #endif
 	if (ret == 0)
 		ret = wait_for_md_on_complete() ?

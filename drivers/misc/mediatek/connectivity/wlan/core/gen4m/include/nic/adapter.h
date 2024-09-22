@@ -420,6 +420,10 @@ struct BSS_INFO {
 	u_int8_t fgIsQBSS;
 	u_int8_t fgIsNetAbsent;	/* TRUE: BSS is absent, FALSE: BSS is present */
 
+	/* Stop/Start Subqueue threshold */
+	uint32_t u4NetifStopTh;
+	uint32_t u4NetifStartTh;
+
 	uint32_t u4RsnSelectedGroupCipher;
 	uint32_t u4RsnSelectedPairwiseCipher;
 	uint32_t u4RsnSelectedAKMSuite;
@@ -1069,8 +1073,6 @@ struct WIFI_VAR {
 
 	uint32_t u4NetifStopTh;
 	uint32_t u4NetifStartTh;
-	uint32_t u4NetifStopThBackup;
-	uint32_t u4NetifStartThBackup;
 	struct PARAM_GET_CHN_INFO rChnLoadInfo;
 
 #if CFG_SUPPORT_MTK_SYNERGY
@@ -1218,6 +1220,7 @@ struct WIFI_VAR {
 #if CFG_SUPPORT_RX_GRO
 	uint32_t ucGROFlushTimeout; /* Flush packet timeout (ms) */
 	uint32_t ucGROEnableTput; /* Threshold of enable GRO Tput */
+	uint32_t u4UdpEnableGroTputTh; /* Threshold to enable udp GRO */
 #endif
 
 #if CFG_SUPPORT_IOT_AP_BLACKLIST
@@ -1347,6 +1350,16 @@ struct WIFI_VAR {
 #if (CFG_SUPPORT_WIFI_6G == 1)
 	/* Only scan all 6g channels, including PSC and non-PSC */
 	u_int8_t fgEnOnlyScan6g;
+#endif
+#if CFG_SUPPORT_802_11V_BTM_OFFLOAD
+	uint8_t fgAggressiveLoadBanalancing;
+	uint16_t u2DisallowBtmTimeout;
+	uint16_t u2ConsecutiveBtmReqTimeout;
+	uint8_t ucConsecutiveBtmReqNum;
+	uint16_t u2DisallowPerTimeout;
+	uint16_t u2ConsecutivePerReqTimeout;
+	uint8_t ucConsecutivePerReqNum;
+	uint8_t ucBTMOffloadEnabled;
 #endif
 };
 
@@ -1646,6 +1659,9 @@ struct ADAPTER {
 
 	/* Element for RX PATH */
 	struct RX_CTRL rRxCtrl;
+
+	/* bitmap for hif adjust control */
+	uint32_t u4AdjustCtrlBitmap;
 
 	/* Timer for restarting RFB setup procedure */
 	struct TIMER rPacketDelaySetupTimer;

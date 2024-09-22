@@ -178,7 +178,12 @@ struct MSDU_INFO *cnmPktAllocWrapper(struct ADAPTER *prAdapter,
 {
 	struct MSDU_INFO *prMsduInfo;
 
+#if CFG_DBG_MGT_BUF
+	prMsduInfo = cnmPktAllocX(prAdapter, u4Length, pucStr);
+#else
 	prMsduInfo = cnmPktAlloc(prAdapter, u4Length);
+#endif
+
 	log_dbg(MEM, LOUD, "Alloc MSDU_INFO[0x%p] by [%s]\n",
 		prMsduInfo, pucStr);
 
@@ -212,7 +217,12 @@ void cnmPktFreeWrapper(struct ADAPTER *prAdapter, struct MSDU_INFO *prMsduInfo,
  * \return none
  */
 /*----------------------------------------------------------------------------*/
+#if CFG_DBG_MGT_BUF
+struct MSDU_INFO *cnmPktAllocX(struct ADAPTER *prAdapter, uint32_t u4Length,
+	uint8_t *fileAndLine)
+#else
 struct MSDU_INFO *cnmPktAlloc(struct ADAPTER *prAdapter, uint32_t u4Length)
+#endif
 {
 	struct MSDU_INFO *prMsduInfo;
 	struct QUE *prQueList;
@@ -229,9 +239,15 @@ struct MSDU_INFO *cnmPktAlloc(struct ADAPTER *prAdapter, uint32_t u4Length)
 
 	if (prMsduInfo) {
 		if (u4Length) {
+#if CFG_DBG_MGT_BUF
+			prMsduInfo->prPacket = cnmMemAllocX(prAdapter,
+				RAM_TYPE_BUF, u4Length, fileAndLine);
+#else
 			prMsduInfo->prPacket = cnmMemAlloc(prAdapter,
 				RAM_TYPE_BUF, u4Length);
+#endif
 			prMsduInfo->eSrc = TX_PACKET_MGMT;
+			prMsduInfo->ucControlFlag = 0;
 
 			if (prMsduInfo->prPacket == NULL) {
 				KAL_ACQUIRE_SPIN_LOCK(prAdapter,

@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
 ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/nic/que_mgt.c#3
 */
@@ -2550,22 +2504,14 @@ P_SW_RFB_T qmHandleRxPackets(IN P_ADAPTER_T prAdapter, IN P_SW_RFB_T prSwRfbList
 		}
 #endif /* CFG_SUPPORT_FAKE_EAPOL_DETECTION */
 
-		if (prCurrSwRfb->fgReorderBuffer && !fgIsBMC && fgIsHTran) {
-			/* If this packet should dropped or indicated to the host immediately,
-			 *  it should be enqueued into the rReturnedQue with specific flags. If
-			 *  this packet should be buffered for reordering, it should be enqueued
-			 *  into the reordering queue in the STA_REC rather than into the
-			 *  rReturnedQue.
-			 */
-			qmProcessPktWithReordering(prAdapter, prCurrSwRfb, prReturnedQue);
-
-		} else if (prCurrSwRfb->fgDataFrame) {
+		if (prCurrSwRfb->fgDataFrame) {
 			/* Check Class Error */
 			if (secCheckClassError(prAdapter, prCurrSwRfb, prCurrSwRfb->prStaRec) == TRUE) {
 				P_RX_BA_ENTRY_T prReorderQueParm = NULL;
+				P_HW_MAC_RX_DESC_T prRS = NULL;
 
 				/* Invalid BA aggrement */
-				if (fgIsHTran) {
+				if (fgIsHTran && !prCurrSwRfb->fgReorderBuffer) {
 					UINT_16 u2FrameCtrl = 0;
 
 					u2FrameCtrl = HAL_RX_STATUS_GET_FRAME_CTL_FIELD(prCurrSwRfb->prRxStatusGroup4);
@@ -2576,13 +2522,31 @@ P_SW_RFB_T qmHandleRxPackets(IN P_ADAPTER_T prAdapter, IN P_SW_RFB_T prSwRfbList
 						>= CFG_RX_MAX_BA_TID_NUM)) {
 						DBGLOG(QM, TRACE, "FC [0x%04X], no-reordering...\n", u2FrameCtrl);
 					} else {
+						/* Get TID for BA entry */
+						prRS = prCurrSwRfb->prRxStatus;
+						prCurrSwRfb->ucTid = HAL_RX_STATUS_GET_TID(prRS);
 						prReorderQueParm =
 						    ((prCurrSwRfb->prStaRec->
 						      aprRxReorderParamRefTbl)[prCurrSwRfb->ucTid]);
 					}
+				} else {
+					if (fgIsHTran &&
+						(prCurrSwRfb->ucTid
+						< CFG_RX_MAX_BA_TID_NUM)) {
+					/* Get TID for BA entry */
+					prRS = prCurrSwRfb->prRxStatus;
+					prCurrSwRfb->ucTid =
+						 HAL_RX_STATUS_GET_TID(prRS);
+					prReorderQueParm =
+						((prCurrSwRfb->prStaRec->
+						aprRxReorderParamRefTbl)
+						[prCurrSwRfb->ucTid]);
+					}
 				}
-
-				if (prReorderQueParm && prReorderQueParm->fgIsValid && !fgIsBMC)
+				/* Only UC with valid BA entry */
+				/* pass to reordering */
+				if (prReorderQueParm && !fgIsBMC &&
+					prReorderQueParm->fgIsValid)
 					qmProcessPktWithReordering(prAdapter, prCurrSwRfb, prReturnedQue);
 				else
 					qmHandleRxPackets_AOSP_1;
@@ -2870,7 +2834,7 @@ u_int8_t qmAmsduAttackDetection(IN P_ADAPTER_T prAdapter,
 	}
 
 	/* 802.11 header RA */
-	ucBssIndex = secGetBssIdxByWlanIdx(prAdapter, prSwRfb->ucWlanIdx);
+	ucBssIndex = prStaRec->ucBssIndex;
 	/* Handle if  out of bss index range*/
 	if (ucBssIndex > HW_BSSID_NUM) {
 		DBGLOG(QM, INFO,

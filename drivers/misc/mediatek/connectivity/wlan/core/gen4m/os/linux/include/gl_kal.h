@@ -140,7 +140,7 @@ extern bool fgIsTxPowerDecreased;
 	(GLUE_FLAG_HALT | GLUE_FLAG_SUB_MOD_MULTICAST | \
 	GLUE_FLAG_TX_CMD_DONE | GLUE_FLAG_TXREQ | GLUE_FLAG_TIMEOUT | \
 	GLUE_FLAG_FRAME_FILTER | GLUE_FLAG_OID | GLUE_FLAG_RX | \
-	GLUE_FLAG_SER_TIMEOUT)
+	GLUE_FLAG_SER_TIMEOUT | GLUE_FLAG_DISABLE_PERF)
 
 #define GLUE_FLAG_HIF_PROCESS \
 	(GLUE_FLAG_HALT | GLUE_FLAG_INT | GLUE_FLAG_HIF_TX | \
@@ -155,54 +155,6 @@ extern bool fgIsTxPowerDecreased;
 #else
 /* All flags for single thread driver */
 #define GLUE_FLAG_TX_PROCESS  0xFFFFFFFF
-#endif
-
-#if CFG_SUPPORT_SNIFFER
-#define RADIOTAP_FIELD_TSFT			BIT(0)
-#define RADIOTAP_FIELD_FLAGS		BIT(1)
-#define RADIOTAP_FIELD_RATE			BIT(2)
-#define RADIOTAP_FIELD_CHANNEL		BIT(3)
-#define RADIOTAP_FIELD_ANT_SIGNAL	BIT(5)
-#define RADIOTAP_FIELD_ANT_NOISE	BIT(6)
-#define RADIOTAP_FIELD_ANT			BIT(11)
-#define RADIOTAP_FIELD_MCS			BIT(19)
-#define RADIOTAP_FIELD_AMPDU		BIT(20)
-#define RADIOTAP_FIELD_VHT			BIT(21)
-#define RADIOTAP_FIELD_VENDOR       BIT(30)
-
-#define RADIOTAP_LEN_VHT			48
-#define RADIOTAP_FIELDS_VHT (RADIOTAP_FIELD_TSFT | \
-				    RADIOTAP_FIELD_FLAGS | \
-				    RADIOTAP_FIELD_RATE | \
-				    RADIOTAP_FIELD_CHANNEL | \
-				    RADIOTAP_FIELD_ANT_SIGNAL | \
-				    RADIOTAP_FIELD_ANT_NOISE | \
-				    RADIOTAP_FIELD_ANT | \
-				    RADIOTAP_FIELD_AMPDU | \
-				    RADIOTAP_FIELD_VHT | \
-				    RADIOTAP_FIELD_VENDOR)
-
-#define RADIOTAP_LEN_HT				36
-#define RADIOTAP_FIELDS_HT (RADIOTAP_FIELD_TSFT | \
-				    RADIOTAP_FIELD_FLAGS | \
-				    RADIOTAP_FIELD_RATE | \
-				    RADIOTAP_FIELD_CHANNEL | \
-				    RADIOTAP_FIELD_ANT_SIGNAL | \
-				    RADIOTAP_FIELD_ANT_NOISE | \
-				    RADIOTAP_FIELD_ANT | \
-				    RADIOTAP_FIELD_MCS | \
-				    RADIOTAP_FIELD_AMPDU | \
-				    RADIOTAP_FIELD_VENDOR)
-
-#define RADIOTAP_LEN_LEGACY			26
-#define RADIOTAP_FIELDS_LEGACY (RADIOTAP_FIELD_TSFT | \
-				    RADIOTAP_FIELD_FLAGS | \
-				    RADIOTAP_FIELD_RATE | \
-				    RADIOTAP_FIELD_CHANNEL | \
-				    RADIOTAP_FIELD_ANT_SIGNAL | \
-				    RADIOTAP_FIELD_ANT_NOISE | \
-				    RADIOTAP_FIELD_ANT | \
-				    RADIOTAP_FIELD_VENDOR)
 #endif
 
 #define PERF_MON_INIT_BIT       (0)
@@ -252,7 +204,11 @@ extern bool fgIsTxPowerDecreased;
 #endif
 
 #define WIFI_LOG_MSG_MAX	(512)
+#if IS_ENABLED(CONFIG_ARM64)
 #define WIFI_LOG_MSG_BUFFER	(WIFI_LOG_MSG_MAX * 2)
+#else
+#define WIFI_LOG_MSG_BUFFER	(768)
+#endif
 
 #if (CFG_SUPPORT_POWER_THROTTLING == 1)
 #define PWR_LEVEL_STAT_UPDATE_INTERVAL	60	/* sec */
@@ -319,6 +275,7 @@ enum ENUM_SPIN_LOCK_CATEGORY_E {
 #if CFG_SUPPORT_NAN
 	SPIN_LOCK_NAN_NEGO_CRB,
 #endif
+	SPIN_LOCK_PMKID,
 	SPIN_LOCK_NUM
 };
 
@@ -388,102 +345,6 @@ u_int8_t kalIndicateAgpsNotify(struct ADAPTER *prAdapter,
 			       uint8_t cmd,
 			       uint8_t *data, uint16_t dataLen);
 #endif /* CFG_SUPPORT_AGPS_ASSIST */
-
-#if CFG_SUPPORT_SNIFFER
-/* Vendor Namespace
- * Bit Number 30
- * Required Alignment 2 bytes
- */
-struct RADIOTAP_FIELD_VENDOR_ {
-	uint8_t aucOUI[3];
-	uint8_t ucSubNamespace;
-	uint16_t u2DataLen;
-	uint8_t ucData;
-} __KAL_ATTRIB_PACKED__;
-
-struct MONITOR_RADIOTAP {
-	/* radiotap header */
-	uint8_t ucItVersion;	/* set to 0 */
-	uint8_t ucItPad;
-	uint16_t u2ItLen;	/* entire length */
-	uint32_t u4ItPresent;	/* fields present */
-
-	/* TSFT
-	 * Bit Number 0
-	 * Required Alignment 8 bytes
-	 * Unit microseconds
-	 */
-	uint64_t u8MacTime;
-
-	/* Flags
-	 * Bit Number 1
-	 */
-	uint8_t ucFlags;
-
-	/* Rate
-	 * Bit Number 2
-	 * Unit 500 Kbps
-	 */
-	uint8_t ucRate;
-
-	/* Channel
-	 * Bit Number 3
-	 * Required Alignment 2 bytes
-	 */
-	uint16_t u2ChFrequency;
-	uint16_t u2ChFlags;
-
-	/* Antenna signal
-	 * Bit Number 5
-	 * Unit dBm
-	 */
-	uint8_t ucAntennaSignal;
-
-	/* Antenna noise
-	 * Bit Number 6
-	 * Unit dBm
-	 */
-	uint8_t ucAntennaNoise;
-
-	/* Antenna
-	 * Bit Number 11
-	 * Unit antenna index
-	 */
-	uint8_t ucAntenna;
-
-	/* MCS
-	 * Bit Number 19
-	 * Required Alignment 1 byte
-	 */
-	uint8_t ucMcsKnown;
-	uint8_t ucMcsFlags;
-	uint8_t ucMcsMcs;
-
-	/* A-MPDU status
-	 * Bit Number 20
-	 * Required Alignment 4 bytes
-	 */
-	uint32_t u4AmpduRefNum;
-	uint16_t u2AmpduFlags;
-	uint8_t ucAmpduDelimiterCRC;
-	uint8_t ucAmpduReserved;
-
-	/* VHT
-	 * Bit Number 21
-	 * Required Alignment 2 bytes
-	 */
-	uint16_t u2VhtKnown;
-	uint8_t ucVhtFlags;
-	uint8_t ucVhtBandwidth;
-	uint8_t aucVhtMcsNss[4];
-	uint8_t ucVhtCoding;
-	uint8_t ucVhtGroupId;
-	uint16_t u2VhtPartialAid;
-
-	/* extension space */
-	uint8_t aucReserve[12];
-} __KAL_ATTRIB_PACKED__;
-#endif
 
 struct KAL_HALT_CTRL_T {
 	struct semaphore lock;
@@ -853,6 +714,14 @@ static inline void kalCfg80211ScanDone(struct cfg80211_scan_request *request,
 })
 #endif
 
+#define kalMemZAlloc(u4Size, eMemType) ({    \
+	void *pvAddr; \
+	pvAddr = kalMemAlloc(u4Size, eMemType); \
+	if (pvAddr) \
+		kalMemSet(pvAddr, 0, u4Size); \
+	pvAddr; \
+})
+
 /*----------------------------------------------------------------------------*/
 /*!
  * \brief Free allocated cache memory
@@ -1162,8 +1031,8 @@ do { \
 /*----------------------------------------------------------------------------*/
 /* Macros of systrace operations for using in Driver Layer                    */
 /*----------------------------------------------------------------------------*/
-#if !CONFIG_WLAN_DRV_BUILD_IN
-
+/* Not build-in project and not userload */
+#if (CONFIG_WLAN_DRV_BUILD_IN == 0) && (BUILD_QA_DBG == 1)
 #define kalTraceBegin(_fmt, ...) \
 	tracing_mark_write("B|%d|" _fmt "\n", current->tgid, ##__VA_ARGS__)
 
@@ -1213,12 +1082,16 @@ do { \
 #define TRACE(_expr, _fmt, ...) _expr
 
 #endif
-
 /*----------------------------------------------------------------------------*/
 /* Macros of wiphy operations for using in Driver Layer                       */
 /*----------------------------------------------------------------------------*/
 #define WIPHY_PRIV(_wiphy, _priv) \
 	(_priv = *((struct GLUE_INFO **) wiphy_priv(_wiphy)))
+
+/******************************************************************************
+ * 64 bit operand
+ ******************************************************************************/
+#define kal_div64_u64(_a, _b) div64_u64(_a, _b)
 
 /*******************************************************************************
  *                  F U N C T I O N   D E C L A R A T I O N S
@@ -1941,7 +1814,7 @@ int _kalSnprintf(char *buf, size_t size, const char *fmt, ...);
 int _kalSprintf(char *buf, const char *fmt, ...);
 
 /* systrace utilities */
-#if !CONFIG_WLAN_DRV_BUILD_IN
+#if (CONFIG_WLAN_DRV_BUILD_IN == 0) && (BUILD_QA_DBG == 1)
 void tracing_mark_write(const char *fmt, ...);
 #endif
 

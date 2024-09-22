@@ -1474,6 +1474,71 @@ wlanoidSetConnect(IN struct ADAPTER *prAdapter,
 
 /*----------------------------------------------------------------------------*/
 /*!
+ * \brief This interface aim to update the connect params.
+ *
+ * \param[in] prAdapter Pointer to the Adapter structure.
+ * \param[in] pvSetBuffer Pointer to the buffer that holds the data to be set.
+ * \param[in] u4SetBufferLen The length of the set buffer.
+ * \param[out] pu4SetInfoLen If the call is successful, returns the number of
+ *                           bytes read from the set buffer. If the call failed
+ *                           due to invalid length of the set buffer, returns
+ *                           the amount of storage needed.
+ *
+ * \retval WLAN_STATUS_SUCCESS
+ * \retval WLAN_STATUS_INVALID_DATA
+ * \retval WLAN_STATUS_ADAPTER_NOT_READY
+ * \retval WLAN_STATUS_INVALID_LENGTH
+ */
+/*----------------------------------------------------------------------------*/
+uint32_t
+wlanoidUpdateConnect(IN struct ADAPTER *prAdapter,
+		IN void *pvSetBuffer, IN uint32_t u4SetBufferLen,
+		OUT uint32_t *pu4SetInfoLen)
+{
+	struct CONNECTION_SETTINGS *prConnSettings;
+	uint8_t ucBssIndex = 0;
+	struct PARAM_CONNECT *pParamConn;
+
+	ucBssIndex = GET_IOCTL_BSSIDX(prAdapter);
+	prConnSettings = aisGetConnSettings(prAdapter, ucBssIndex);
+	pParamConn = (struct PARAM_CONNECT *) pvSetBuffer;
+
+	switch (prConnSettings->eAuthMode) {
+	case AUTH_MODE_WPA3_OWE:
+		/*Should update Diffie-Hallmen params*/
+		if (prConnSettings->assocIeLen > 0) {
+			kalMemFree(prConnSettings->pucAssocIEs, VIR_MEM_TYPE,
+				prConnSettings->assocIeLen);
+			prConnSettings->assocIeLen = 0;
+		}
+
+		if (pParamConn->u4IesLen > 0) {
+			prConnSettings->assocIeLen = pParamConn->u4IesLen;
+			prConnSettings->pucAssocIEs =
+				kalMemAlloc(prConnSettings->assocIeLen,
+					    VIR_MEM_TYPE);
+			/* skip memory leak checking */
+			kmemleak_ignore(prConnSettings->pucAssocIEs);
+
+			if (prConnSettings->pucAssocIEs) {
+				kalMemCopy(prConnSettings->pucAssocIEs,
+					    pParamConn->pucIEs,
+					    prConnSettings->assocIeLen);
+			} else {
+				DBGLOG(INIT, INFO,
+					"allocate mem for prConnSettings->pucAssocIEs failed\n");
+					prConnSettings->assocIeLen = 0;
+			}
+		}
+		break;
+	default:
+		break;
+	}
+	return WLAN_STATUS_SUCCESS;
+}
+
+/*----------------------------------------------------------------------------*/
+/*!
  * \brief This routine is called to query the currently associated SSID.
  *
  * \param[in] prAdapter Pointer to the Adapter structure.
@@ -7166,6 +7231,12 @@ wlanoidSetSwCtrlWrite(IN struct ADAPTER *prAdapter,
 		ucOpTxNss = (uint8_t)((u4Data & BITS(4, 7)) >> 4);
 		ucChannelWidth = (uint8_t)((u4Data & BITS(8, 11)) >> 8);
 		ucBssIndex = (uint8_t) u2SubId;
+
+		if (!IS_BSS_INDEX_VALID(ucBssIndex)) {
+			DBGLOG(RLM, ERROR,
+				"Invalid bssidx:%d\n", ucBssIndex);
+			break;
+		}
 
 		if ((u2SubId & BITS(8, 15)) != 0) { /* Debug OP change
 						     * parameters
@@ -13605,61 +13676,6 @@ wlanoidSetHS20Info(IN struct ADAPTER *prAdapter,
 }
 #endif /* CFG_SUPPORT_PASSPOINT */
 
-#if CFG_SUPPORT_SNIFFER
-uint32_t
-wlanoidSetMonitor(IN struct ADAPTER *prAdapter,
-		  IN void *pvSetBuffer, IN uint32_t u4SetBufferLen,
-		  OUT uint32_t *pu4SetInfoLen) {
-	struct PARAM_CUSTOM_MONITOR_SET_STRUCT *prMonitorSetInfo;
-	struct CMD_MONITOR_SET_INFO rCmdMonitorSetInfo;
-	uint32_t rWlanStatus = WLAN_STATUS_SUCCESS;
-
-	DEBUGFUNC("wlanoidSetMonitor");
-
-	ASSERT(prAdapter);
-	ASSERT(pu4SetInfoLen);
-
-	*pu4SetInfoLen = sizeof(struct
-				PARAM_CUSTOM_MONITOR_SET_STRUCT);
-
-	if (u4SetBufferLen < sizeof(struct
-				    PARAM_CUSTOM_MONITOR_SET_STRUCT))
-		return WLAN_STATUS_INVALID_LENGTH;
-
-	ASSERT(pvSetBuffer);
-
-	prMonitorSetInfo = (struct PARAM_CUSTOM_MONITOR_SET_STRUCT
-			    *) pvSetBuffer;
-
-	kalMemSet(&rCmdMonitorSetInfo, 0, sizeof(struct CMD_MONITOR_SET_INFO));
-	rCmdMonitorSetInfo.ucEnable = prMonitorSetInfo->ucEnable;
-	rCmdMonitorSetInfo.ucBand = prMonitorSetInfo->ucBand;
-	rCmdMonitorSetInfo.ucPriChannel =
-		prMonitorSetInfo->ucPriChannel;
-	rCmdMonitorSetInfo.ucSco = prMonitorSetInfo->ucSco;
-	rCmdMonitorSetInfo.ucChannelWidth =
-		prMonitorSetInfo->ucChannelWidth;
-	rCmdMonitorSetInfo.ucChannelS1 =
-		prMonitorSetInfo->ucChannelS1;
-	rCmdMonitorSetInfo.ucChannelS2 =
-		prMonitorSetInfo->ucChannelS2;
-
-	rWlanStatus = wlanSendSetQueryCmd(prAdapter,
-					  CMD_ID_SET_MONITOR,
-					  TRUE,
-					  FALSE,
-					  TRUE,
-					  nicCmdEventSetCommon,
-					  nicOidCmdTimeoutCommon,
-					  sizeof(struct CMD_MONITOR_SET_INFO),
-					  (uint8_t *) &rCmdMonitorSetInfo,
-					  pvSetBuffer,
-					  u4SetBufferLen);
-
-	return rWlanStatus;
-}
-#endif
-
 #if CFG_SUPPORT_MSP
 uint32_t
 wlanoidQueryWlanInfo(IN struct ADAPTER *prAdapter,
@@ -15984,19 +16000,71 @@ uint32_t wlanoidUpdateFtIes(struct ADAPTER *prAdapter, void *pvSetBuffer,
 	}
 	prFtContinueMsg->rMsgHdr.eMsgId = MID_OID_SAA_FSM_CONTINUE;
 	prFtContinueMsg->prStaRec = prStaRec;
-	/* ToDo: for Resource Request Protocol, we need to check if RIC request
-	** is included.
-	*/
-	if (prFtIes->prMDIE && (prFtIes->prMDIE->ucBitMap & BIT(1)))
-		prFtContinueMsg->fgFTRicRequest = TRUE;
-	else
-		prFtContinueMsg->fgFTRicRequest = FALSE;
-	DBGLOG(OID, INFO, "FT: continue to do auth/assoc, Ft Request %d\n",
-	       prFtContinueMsg->fgFTRicRequest);
+	/* We don't support resource request protocol */
+	prFtContinueMsg->fgFTRicRequest = FALSE;
+	DBGLOG(OID, INFO, "FT: continue to do auth/assoc\n");
 	mboxSendMsg(prAdapter, MBOX_ID_0, (struct MSG_HDR *)prFtContinueMsg,
 		    MSG_SEND_METHOD_BUF);
 	return WLAN_STATUS_SUCCESS;
 }
+
+#ifdef CFG_SUPPORT_SNIFFER_RADIOTAP
+uint32_t wlanoidSetMonitor(IN struct ADAPTER *prAdapter,
+		  IN void *pvSetBuffer, IN uint32_t u4SetBufferLen,
+		  OUT uint32_t *pu4SetInfoLen)
+{
+	struct GLUE_INFO *prGlueInfo;
+	struct CMD_MONITOR_SET_INFO *prCmdMonitor;
+
+	prCmdMonitor = kalMemAlloc(
+		sizeof(struct CMD_MONITOR_SET_INFO), VIR_MEM_TYPE);
+	if (!prCmdMonitor) {
+		log_dbg(OID, ERROR, "alloc CmdMonitor fail\n");
+		return WLAN_STATUS_FAILURE;
+	}
+
+	ASSERT(prAdapter);
+
+	prGlueInfo = prAdapter->prGlueInfo;
+
+	DBGLOG(REQ, INFO,
+		"en[%d],bn[%d],pc[%d],sco[%d],bw[%d],cc1[%d],cc2[%d],bidx[%d],aid[%d],fcs[%d]\n",
+		prGlueInfo->fgIsEnableMon,
+		prGlueInfo->ucBand,
+		prGlueInfo->ucPriChannel,
+		prGlueInfo->ucSco,
+		prGlueInfo->ucChannelWidth,
+		prGlueInfo->ucChannelS1,
+		prGlueInfo->ucChannelS2,
+		prGlueInfo->ucBandIdx,
+		prGlueInfo->u2Aid,
+		prGlueInfo->fgDropFcsErrorFrame);
+
+	prCmdMonitor->ucEnable = prGlueInfo->fgIsEnableMon;
+	prCmdMonitor->ucBand = prGlueInfo->ucBand;
+	prCmdMonitor->ucPriChannel = prGlueInfo->ucPriChannel;
+	prCmdMonitor->ucSco = prGlueInfo->ucSco;
+	prCmdMonitor->ucChannelWidth = prGlueInfo->ucChannelWidth;
+	prCmdMonitor->ucChannelS1 = prGlueInfo->ucChannelS1;
+	prCmdMonitor->ucChannelS2 = prGlueInfo->ucChannelS2;
+	prCmdMonitor->ucBandIdx = prGlueInfo->ucBandIdx;
+	prCmdMonitor->u2Aid = prGlueInfo->u2Aid;
+	prCmdMonitor->fgDropFcsErrorFrame = prGlueInfo->fgDropFcsErrorFrame;
+
+	return wlanSendSetQueryCmd(prAdapter,
+		CMD_ID_SET_MONITOR,
+		TRUE,
+		FALSE,
+		TRUE,
+		nicCmdEventSetCommon,
+		nicOidCmdTimeoutCommon,
+		sizeof(struct CMD_MONITOR_SET_INFO),
+		(uint8_t *)prCmdMonitor, pvSetBuffer, u4SetBufferLen);
+
+	kalMemFree(prCmdMonitor, VIR_MEM_TYPE,
+		sizeof(struct CMD_MONITOR_SET_INFO));
+}
+#endif
 
 uint32_t wlanoidSendNeighborRequest(struct ADAPTER *prAdapter,
 				    void *pvSetBuffer, uint32_t u4SetBufferLen,
@@ -16963,6 +17031,7 @@ wlanoidExternalAuthDone(IN struct ADAPTER *prAdapter,
 	if (!prStaRec) {
 		DBGLOG(REQ, WARN, "SAE-confirm failed with bssid:" MACSTR "\n",
 		       MAC2STR(params->bssid));
+		cnmMemFree(prAdapter, prExternalAuthMsg);
 		return WLAN_STATUS_INVALID_DATA;
 	}
 

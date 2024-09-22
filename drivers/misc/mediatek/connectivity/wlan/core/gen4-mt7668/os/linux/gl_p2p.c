@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
 ** Id: @(#) gl_p2p.c@@
 */
@@ -236,11 +190,11 @@ mtk_cfg80211_default_mgmt_stypes[NUM_NL80211_IFTYPES] = {
 
 #endif
 
-
+#ifdef CONFIG_WEXT_PRIV
 static const iw_handler rP2PIwPrivHandler[] = {
 	[IOCTL_GET_DRIVER - SIOCIWFIRSTPRIV] = priv_set_driver
 };
-
+#endif
 
 static const struct iw_priv_args rP2PIwPrivTable[] = {
 #if 0
@@ -319,12 +273,10 @@ static const struct iw_priv_args rP2PIwPrivTable[] = {
 
 const struct iw_handler_def mtk_p2p_wext_handler_def = {
 	.num_standard = 0,
-#if defined(CONFIG_WEXT_PRIV) || LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 32)
+	.standard = NULL,
+#ifdef CONFIG_WEXT_PRIV
 	.num_private = (__u16)sizeof(rP2PIwPrivHandler)/sizeof(iw_handler),
 	.num_private_args = (__u16) sizeof(rP2PIwPrivTable) / sizeof(struct iw_priv_args),
-#endif
-	.standard = NULL,
-#if defined(CONFIG_WEXT_PRIV) || LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 32)
 	.private = rP2PIwPrivHandler,
 	.private_args = rP2PIwPrivTable,
 #endif
@@ -333,9 +285,11 @@ const struct iw_handler_def mtk_p2p_wext_handler_def = {
 
 
 #ifdef CONFIG_PM
+#if KERNEL_VERSION(3, 9, 0) > CFG80211_VERSION_CODE
 static const struct wiphy_wowlan_support mtk_p2p_wowlan_support = {
 	.flags = WIPHY_WOWLAN_DISCONNECT | WIPHY_WOWLAN_ANY,
 };
+#endif
 #endif
 
 static const struct ieee80211_iface_limit mtk_p2p_sta_go_limits[] = {
@@ -429,12 +383,17 @@ static struct net_device_stats *p2pGetStats(IN struct net_device *prDev);
 
 static void p2pSetMulticastList(IN struct net_device *prDev);
 
-static int p2pHardStartXmit(IN struct sk_buff *prSkb, IN struct net_device *prDev);
+static netdev_tx_t p2pHardStartXmit(IN struct sk_buff *prSkb,
+		IN struct net_device *prDev);
 
 static int p2pSetMACAddress(IN struct net_device *prDev, void *addr);
 
 static int p2pDoIOCTL(struct net_device *prDev, struct ifreq *prIFReq, int i4Cmd);
 
+#if KERNEL_VERSION(5, 15, 0) <= CFG80211_VERSION_CODE
+static int p2pDoPrivIOCTL(struct net_device *prDev, struct ifreq *prIfReq,
+			void __user *prData, int i4Cmd);
+#endif
 
 /*----------------------------------------------------------------------------*/
 /*!
@@ -474,6 +433,9 @@ const struct net_device_ops p2p_netdev_ops = {
 	.ndo_set_rx_mode = p2pSetMulticastList,
 	.ndo_get_stats = p2pGetStats,
 	.ndo_do_ioctl = p2pDoIOCTL,
+#if KERNEL_VERSION(5, 15, 0) <= CFG80211_VERSION_CODE
+	.ndo_siocdevprivate = p2pDoPrivIOCTL,
+#endif
 	.ndo_start_xmit = p2pHardStartXmit,
 	/* .ndo_select_queue       = p2pSelectQueue, */
 	.ndo_select_queue = wlanSelectQueue,
@@ -521,7 +483,7 @@ BOOLEAN p2PAllocInfo(IN P_GLUE_INFO_T prGlueInfo, IN UINT_8 ucIdex)
 			prGlueInfo->prP2PInfo[ucIdex] = kalMemAlloc(sizeof(GL_P2P_INFO_T), VIR_MEM_TYPE);
 
 			if (ucIdex == 0) {
-				/*printk("[CHECK!]p2PAllocInfo : Alloc Common part only first interface\n");*/
+
 				prGlueInfo->prP2PDevInfo = kalMemAlloc(sizeof(GL_P2P_DEV_INFO_T), VIR_MEM_TYPE);
 				prAdapter->prP2pInfo = kalMemAlloc(sizeof(P2P_INFO_T), VIR_MEM_TYPE);
 				prWifiVar->prP2pDevFsmInfo = kalMemAlloc(sizeof(P2P_DEV_FSM_INFO_T), VIR_MEM_TYPE);
@@ -1524,7 +1486,7 @@ static void p2pSetMulticastList(IN struct net_device *prDev)
 	}
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (g_u4HaltFlag || checkResetState()) {
+	if (g_u4HaltFlag || kalIsResetting()) {
 		DBGLOG(INIT, WARN, "wlan is halt, skip p2pSetMulticastList\n");
 		return;
 	}
@@ -1620,7 +1582,8 @@ void mtk_p2p_wext_set_Multicastlist(P_GLUE_INFO_T prGlueInfo)
  * * \retval NETDEV_TX_BUSY - on failure, packet will be discarded by upper layer.
  */
 /*----------------------------------------------------------------------------*/
-int p2pHardStartXmit(IN struct sk_buff *prSkb, IN struct net_device *prDev)
+netdev_tx_t p2pHardStartXmit(IN struct sk_buff *prSkb,
+			IN struct net_device *prDev)
 {
 	P_NETDEV_PRIVATE_GLUE_INFO prNetDevPrivate = (P_NETDEV_PRIVATE_GLUE_INFO) NULL;
 	P_GLUE_INFO_T prGlueInfo = NULL;
@@ -1630,7 +1593,7 @@ int p2pHardStartXmit(IN struct sk_buff *prSkb, IN struct net_device *prDev)
 	ASSERT(prDev);
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (g_u4HaltFlag || checkResetState()) {
+	if (g_u4HaltFlag || kalIsResetting()) {
 		DBGLOG(INIT, WARN, "wlan is halt, skip p2pHardStartXmit\n");
 		return NETDEV_TX_BUSY;
 	}
@@ -1681,7 +1644,7 @@ int p2pDoIOCTL(struct net_device *prDev, struct ifreq *prIfReq, int i4Cmd)
 	ASSERT(prDev && prIfReq);
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (g_u4HaltFlag || checkResetState()) {
+	if (g_u4HaltFlag || kalIsResetting()) {
 		DBGLOG(INIT, WARN, "wlan is halt, skip p2pDoIOCTL\n");
 		return -EFAULT;
 	}
@@ -1819,6 +1782,13 @@ int p2pDoIOCTL(struct net_device *prDev, struct ifreq *prIfReq, int i4Cmd)
 	return ret;
 }				/* end of p2pDoIOCTL() */
 
+#if KERNEL_VERSION(5, 15, 0) <= CFG80211_VERSION_CODE
+int p2pDoPrivIOCTL(struct net_device *prDev, struct ifreq *prIfReq,
+		void __user *prData, int i4Cmd)
+{
+	return p2pDoIOCTL(prDev, prIfReq, i4Cmd);
+}
+#endif
 
 /*----------------------------------------------------------------------------*/
 /*!

@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
 ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/os/linux/gl_wext_priv.c#8
 */
@@ -767,7 +721,6 @@ priv_set_int(IN struct net_device *prNetDev,
 
 	switch (u4SubCmd) {
 	case PRIV_CMD_TEST_MODE:
-		/* printk("TestMode=%ld\n", pu4IntBuf[1]); */
 		prNdisReq = (P_NDIS_TRANSPORT_STRUCT) &aucOidBuf[0];
 
 		if (pu4IntBuf[1] == PRIV_CMD_TEST_MAGIC_KEY) {
@@ -788,7 +741,6 @@ priv_set_int(IN struct net_device *prNetDev,
 		break;
 
 	case PRIV_CMD_TEST_CMD:
-		/* printk("CMD=0x%08lx, data=0x%08lx\n", pu4IntBuf[1], pu4IntBuf[2]); */
 		prNdisReq = (P_NDIS_TRANSPORT_STRUCT) &aucOidBuf[0];
 
 		kalMemCopy(&prNdisReq->ndisOidContent[0], &pu4IntBuf[1], 8);
@@ -803,7 +755,6 @@ priv_set_int(IN struct net_device *prNetDev,
 
 #if CFG_SUPPORT_PRIV_MCR_RW
 	case PRIV_CMD_ACCESS_MCR:
-		/* printk("addr=0x%08lx, data=0x%08lx\n", pu4IntBuf[1], pu4IntBuf[2]); */
 		prNdisReq = (P_NDIS_TRANSPORT_STRUCT) &aucOidBuf[0];
 
 		if (!prGlueInfo->fgMcrAccessAllowed) {
@@ -830,7 +781,6 @@ priv_set_int(IN struct net_device *prNetDev,
 #endif
 
 	case PRIV_CMD_SW_CTRL:
-		/* printk("addr=0x%08lx, data=0x%08lx\n", pu4IntBuf[1], pu4IntBuf[2]); */
 		prNdisReq = (P_NDIS_TRANSPORT_STRUCT) &aucOidBuf[0];
 
 		kalMemCopy(&prNdisReq->ndisOidContent[0], &pu4IntBuf[1], 8);
@@ -1053,7 +1003,6 @@ priv_get_int(IN struct net_device *prNetDev,
 
 	switch (u4SubCmd) {
 	case PRIV_CMD_TEST_CMD:
-		/* printk("CMD=0x%08lx, data=0x%08lx\n", pu4IntBuf[1], pu4IntBuf[2]); */
 		prNdisReq = (P_NDIS_TRANSPORT_STRUCT) &aucOidBuf[0];
 
 		kalMemCopy(&prNdisReq->ndisOidContent[0], &pu4IntBuf[1], 8);
@@ -1064,21 +1013,12 @@ priv_get_int(IN struct net_device *prNetDev,
 
 		status = priv_get_ndis(prNetDev, prNdisReq, &u4BufLen);
 		if (status == 0) {
-			/* printk("Result=%ld\n", *(PUINT_32)&prNdisReq->ndisOidContent[4]); */
 			prIwReqData->mode = *(PUINT_32) &prNdisReq->ndisOidContent[4];
-			/*
-			 *  if (copy_to_user(prIwReqData->data.pointer,
-			 *  &prNdisReq->ndisOidContent[4], 4)) {
-			 *  printk(KERN_NOTICE "priv_get_int() copy_to_user oidBuf fail(3)\n");
-			 *  return -EFAULT;
-			 *  }
-			 */
 		}
 		return status;
 
 #if CFG_SUPPORT_PRIV_MCR_RW
 	case PRIV_CMD_ACCESS_MCR:
-		/* printk("addr=0x%08lx\n", pu4IntBuf[1]); */
 		prNdisReq = (P_NDIS_TRANSPORT_STRUCT) &aucOidBuf[0];
 
 		if (!prGlueInfo->fgMcrAccessAllowed) {
@@ -1094,7 +1034,6 @@ priv_get_int(IN struct net_device *prNetDev,
 
 		status = priv_get_ndis(prNetDev, prNdisReq, &u4BufLen);
 		if (status == 0) {
-			/* printk("Result=%ld\n", *(PUINT_32)&prNdisReq->ndisOidContent[4]); */
 			prIwReqData->mode = *(PUINT_32) &prNdisReq->ndisOidContent[4];
 		}
 		return status;
@@ -1121,7 +1060,6 @@ priv_get_int(IN struct net_device *prNetDev,
 		return status;
 
 	case PRIV_CMD_SW_CTRL:
-		/* printk(" addr=0x%08lx\n", pu4IntBuf[1]); */
 
 		prNdisReq = (P_NDIS_TRANSPORT_STRUCT) &aucOidBuf[0];
 
@@ -1133,7 +1071,6 @@ priv_get_int(IN struct net_device *prNetDev,
 
 		status = priv_get_ndis(prNetDev, prNdisReq, &u4BufLen);
 		if (status == 0) {
-			/* printk("Result=%ld\n", *(PUINT_32)&prNdisReq->ndisOidContent[4]); */
 			prIwReqData->mode = *(PUINT_32) &prNdisReq->ndisOidContent[4];
 		}
 		return status;
@@ -1708,7 +1645,6 @@ priv_get_struct(IN struct net_device *prNetDev,
 		status = priv_get_ndis(prNetDev, prNdisReq, &u4BufLen);
 		if (status == 0) {
 			prNdisReq->outNdisOidLength = u4BufLen;
-			/* printk("len=%d Result=%08lx\n", u4BufLen, *(PUINT_32)&prNdisReq->ndisOidContent[4]); */
 
 			if (copy_to_user(prIwReqData->data.pointer, &prNdisReq->ndisOidContent[4], 4))
 				DBGLOG(REQ, INFO, "priv_get_struct() copy_to_user oidBuf fail(2)\n");
@@ -1725,11 +1661,10 @@ priv_get_struct(IN struct net_device *prNetDev,
 * \brief The routine handles a set operation for a single OID.
 *
 * \param[in] pDev Net device requested.
-* \param[in] ndisReq Ndis request OID information copy from user.
-* \param[out] outputLen_p If the call is successful, returns the number of
-*                         bytes written into the query buffer. If the
-*                         call failed due to invalid length of the query
-*                         buffer, returns the amount of storage needed..
+* \param[in] prIwReqInfo Pointer to iwreq structure.
+* \param[in] prIwReqData The ioctl data structure, use the field of
+*            sub-command.
+* \param[in] pcExtra The buffer with input value
 *
 * \retval 0 On success.
 * \retval -EOPNOTSUPP If cmd is not supported.
@@ -2446,6 +2381,12 @@ reqExtSetAcpiDevicePowerState(IN P_GLUE_INFO_T prGlueInfo,
 #if CFG_AUTO_CHANNEL_SEL_SUPPORT
 #define CMD_GET_CH_RANK_LIST "GET_CH_RANK_LIST"
 #define CMD_GET_CH_DIRTINESS "GET_CH_DIRTINESS"
+#endif
+
+#if CFG_CHIP_RESET_HANG
+#define CMD_SET_RST_HANG                "RST_HANG_SET"
+
+#define CMD_SET_RST_HANG_ARG_NUM		2
 #endif
 
 #define CMD_EFUSE		"EFUSE"
@@ -4440,7 +4381,7 @@ INT_32 priv_driver_last_sec_mcs_info(IN P_ADAPTER_T prAdapter, IN char *pcComman
 				"%s, ", priv_driver_get_sgi_info(&prHwWlanInfo->rWtblPeerCap) == 0 ? "LGI" : "SGI");
 
 		i4BytesWritten += kalScnprintf(pcCommand + i4BytesWritten, i4TotalLen - i4BytesWritten,
-			"%s%s%s [PER: %02d%]\t", txmode < 5 ? HW_TX_MODE_STR[txmode] : HW_TX_MODE_STR[5],
+			"%s%s%s [PER: %02d%%]\t", txmode < 5 ? HW_TX_MODE_STR[txmode] : HW_TX_MODE_STR[5],
 			stbc ? ", STBC, " : ", ",
 			((priv_driver_get_ldpc_info(&prHwWlanInfo->rWtblTxConfig) == 0) ||
 			(txmode == TX_RATE_MODE_CCK) || (txmode == TX_RATE_MODE_OFDM)) ? "BCC" : "LDPC",
@@ -7508,7 +7449,6 @@ int priv_driver_set_txpower(IN struct net_device *prNetDev, IN char *pcCommand, 
 			u4Ret = kalkStrtos32(apcArgv[i + 1], 0, &(ai4Setting[i]));
 			if (u4Ret)
 				DBGLOG(REQ, LOUD, "parse apcArgv error u4Ret=%d\n", u4Ret);
-			/* printk("PeiHsuan setting[%d] = %d\n", i, setting[i]); */
 		}
 	} else {
 		DBGLOG(REQ, INFO, "set_txpower wrong argc : %d\n", i4Argc);
@@ -9604,6 +9544,62 @@ static int priv_driver_get_deep_sleep_cnt(IN struct net_device *prNetDev, IN cha
 
 	return i4BytesWritten;
 }
+
+#if CFG_CHIP_RESET_HANG
+static int priv_driver_set_rst_hang(IN struct net_device *prNetDev,
+				IN char *pcCommand, IN int i4TotalLen)
+{
+	struct GLUE_INFO *prGlueInfo = NULL;
+	int32_t i4Argc = 0;
+	int8_t *apcArgv[WLAN_CFG_ARGV_MAX];
+	uint32_t u4Ret;
+
+
+	ASSERT(prNetDev);
+	prGlueInfo = *((struct GLUE_INFO **) netdev_priv(prNetDev));
+	DBGLOG(REQ, LOUD, "command is %s\n", pcCommand);
+	wlanCfgParseArgument(pcCommand, &i4Argc, apcArgv);
+	DBGLOG(REQ, LOUD, "argc is %i\n", i4Argc);
+
+	if (i4Argc == 0) {
+		DBGLOG(REQ, INFO, "set_rst_hang Argc = %d\n", i4Argc);
+		return -EFAULT;
+	}
+
+	if (strnicmp(apcArgv[0], CMD_SET_RST_HANG,
+				strlen(CMD_SET_RST_HANG)) == 0) {
+		if (i4Argc < CMD_SET_RST_HANG_ARG_NUM) {
+			DBGLOG(REQ, STATE,
+				"[SER][L0] RST_HANG_SET arg num=%d,must be %d\n",
+				i4Argc, CMD_SET_RST_HANG_ARG_NUM);
+			return -EFAULT;
+		}
+		u4Ret = kalkStrtou8(apcArgv[1], 0, &fgIsResetHangState);
+		if (u4Ret)
+			DBGLOG(REQ, ERROR, "u4Ret=%d\n", u4Ret);
+
+		DBGLOG(REQ, STATE, "[SER][L0] set fgIsResetHangState=%d\n",
+							fgIsResetHangState);
+
+		if (fgIsResetHangState == SER_L0_HANG_RST_CMD_TRG) {
+			DBGLOG(REQ, STATE, "[SER][L0] cmd trigger\n");
+			glGetRstReason(RST_CMD_TRIGGER);
+			GL_RESET_TRIGGER(NULL, RST_FLAG_CHIP_RESET);
+		}
+
+	} else {
+		DBGLOG(REQ, STATE, "[SER][L0] get fgIsResetSqcState=%d\n",
+							fgIsResetHangState);
+		DBGLOG(REQ, ERROR, "[SER][L0] RST HANG subcmd(%s) error !\n",
+								apcArgv[0]);
+
+		return -EFAULT;
+	}
+
+	return 0;
+
+}
+#endif
 
 static int priv_driver_get_cnm_info(IN struct net_device *prNetDev, IN char *pcCommand, IN int i4TotalLen)
 {
@@ -11961,6 +11957,14 @@ INT_32 priv_driver_cmds(IN struct net_device *prNetDev, IN PCHAR pcCommand, IN I
 			i4BytesWritten = priv_driver_cccr_ops(prNetDev,
 							pcCommand,
 							i4TotalLen);
+
+#if CFG_CHIP_RESET_HANG
+		else if (strnicmp(pcCommand, CMD_SET_RST_HANG,
+				strlen(CMD_SET_RST_HANG)) == 0)
+			i4BytesWritten = priv_driver_set_rst_hang(
+				prNetDev, pcCommand, i4TotalLen);
+#endif
+
 #if CFG_SUPPORT_ADVANCE_CONTROL
 		else if (strnicmp(pcCommand, CMD_SET_NOISE, strlen(CMD_SET_NOISE)) == 0)
 			i4BytesWritten = priv_driver_set_noise(prNetDev, pcCommand, i4TotalLen);

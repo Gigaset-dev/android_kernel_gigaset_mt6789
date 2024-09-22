@@ -3852,6 +3852,7 @@ static u_int8_t rlmRecBcnInfoForClient(struct ADAPTER *prAdapter,
 	 * last syncing and need to sync again
 	 */
 	struct CMD_SET_BSS_RLM_PARAM rBssRlmParam;
+	struct CMD_SET_BSS_INFO rBssInfo;
 	u_int8_t fgNewParameter = FALSE;
 
 	ASSERT(prAdapter);
@@ -3907,6 +3908,12 @@ static u_int8_t rlmRecBcnInfoForClient(struct ADAPTER *prAdapter,
 	rBssRlmParam.ucRxNss = prBssInfo->ucOpRxNss;
 	rBssRlmParam.ucTxNss = prBssInfo->ucOpTxNss;
 
+	kalMemZero(&rBssInfo, sizeof(struct CMD_SET_BSS_INFO));
+#if (CFG_SUPPORT_802_11AX == 1)
+	if (fgEfuseCtrlAxOn == 1)
+		rBssInfo.ucBssColorInfo = prBssInfo->ucBssColorInfo;
+#endif
+
 	rlmRecIeInfoForClient(prAdapter, prBssInfo, pucIE, u2IELength);
 
 	if (rBssRlmParam.ucRfBand != prBssInfo->eBand ||
@@ -3938,6 +3945,18 @@ static u_int8_t rlmRecBcnInfoForClient(struct ADAPTER *prAdapter,
 		       "prBssInfo's params are all the same! not to sync!\n");
 		fgNewParameter = FALSE;
 	}
+
+#if (CFG_SUPPORT_802_11AX == 1)
+		if (fgEfuseCtrlAxOn == 1)
+			if (rBssInfo.ucBssColorInfo
+					!= prBssInfo->ucBssColorInfo) {
+				fgNewParameter = TRUE;
+				DBGLOG(RLM, INFO,
+					"BssColorInfo is changed from %x to %x. Update BSSInfo to FW\n",
+					rBssInfo.ucBssColorInfo,
+					prBssInfo->ucBssColorInfo);
+			}
+#endif
 
 	return fgNewParameter;
 }
@@ -4041,6 +4060,7 @@ void rlmProcessBcn(struct ADAPTER *prAdapter, struct SW_RFB *prSwRfb,
 
 			/* Appy new parameters if necessary */
 			if (fgNewParameter) {
+				nicUpdateBss(prAdapter, prBssInfo->ucBssIndex);
 				rlmSyncOperationParams(prAdapter, prBssInfo);
 				fgNewParameter = FALSE;
 			}
@@ -6173,6 +6193,7 @@ uint32_t rlmSendSmPowerSaveFrame(struct ADAPTER *prAdapter,
 		DBGLOG(RLM, WARN,
 		       "Can't switch to RxNss = %d since we don't support.\n",
 		       ucOpRxNss);
+		cnmMgtPktFree(prAdapter, prMsduInfo);
 		return WLAN_STATUS_FAILURE;
 	}
 

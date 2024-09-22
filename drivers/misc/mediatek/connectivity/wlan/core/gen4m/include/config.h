@@ -517,6 +517,15 @@
 /* TODO: it should be 4096 under emulation mode */
 #define CFG_RX_MAX_PKT_SIZE	(28 + 2312 + 12 /*HIF_RX_HEADER_T*/)
 
+#define CFG_SUPPORT_SNIFFER_RADIOTAP_13K	0
+#ifdef CFG_SUPPORT_SNIFFER_RADIOTAP
+#define CFG_RADIOTAP_HEADROOM	72
+#endif
+#if CFG_SUPPORT_SNIFFER_RADIOTAP_13K
+#define CFG_RX_MAX_MPDU_SIZE	13312 /* support amsdu 7 */
+#else
+#define CFG_RX_MAX_MPDU_SIZE	CFG_RX_MAX_PKT_SIZE
+#endif
 /*! Minimum RX packet size, if lower than this value, drop incoming packet */
 #define CFG_RX_MIN_PKT_SIZE	10 /*!< 802.11 Control Frame is 10 bytes */
 
@@ -746,6 +755,10 @@
 /* Allow setting max P2P GO client count */
 #ifndef CFG_P2P_DEFAULT_CLIENT_COUNT
 #define CFG_P2P_DEFAULT_CLIENT_COUNT 0
+#endif
+
+#ifndef CFG_P2P_FORCE_ROC_CSA
+#define CFG_P2P_FORCE_ROC_CSA 1
 #endif
 
 /*------------------------------------------------------------------------------
@@ -987,8 +1000,8 @@
 #define CFG_SUPPORT_802_11V_BSS_TRANSITION_MGT  0
 #endif
 
-#if (CFG_SUPPORT_802_11V_BSS_TRANSITION_MGT == 1) && (CFG_TC10_FEATURE == 1)
-#define CFG_SUPPORT_802_11V_BTM_OFFLOAD 1
+#if (CFG_SUPPORT_802_11V_BSS_TRANSITION_MGT == 1)
+#define CFG_SUPPORT_802_11V_BTM_OFFLOAD 0
 #else
 #define CFG_SUPPORT_802_11V_BTM_OFFLOAD 0
 #endif
@@ -1063,7 +1076,7 @@
  * Flags of SDIO test pattern support
  *------------------------------------------------------------------------------
  */
-#define CFG_SUPPORT_SDIO_READ_WRITE_PATTERN 1
+#define CFG_SUPPORT_SDIO_READ_WRITE_PATTERN 0
 
 /*------------------------------------------------------------------------------
  * Flags of Workaround
@@ -1089,6 +1102,7 @@
 
 #define CFG_SUPPORT_LLS 1
 
+#define CFG_REPORT_TX_RATE_FROM_LLS 0
 /*------------------------------------------------------------------------------
  * Flags for prepare the FW compile flag
  *------------------------------------------------------------------------------
@@ -1153,12 +1167,6 @@
  *------------------------------------------------------------------------------
  */
 #define CFG_SUPPORT_SCAN_RANDOM_MAC        (1)
-
-/*------------------------------------------------------------------------------
- * Flags of Sniffer SUPPORT
- *------------------------------------------------------------------------------
- */
-#define CFG_SUPPORT_SNIFFER                 1
 
 #define WLAN_INCLUDE_PROC                   1
 

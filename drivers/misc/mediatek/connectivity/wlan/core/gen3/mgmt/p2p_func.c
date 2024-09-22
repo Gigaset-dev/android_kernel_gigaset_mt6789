@@ -1064,7 +1064,14 @@ VOID p2pFuncStopGO(IN P_ADAPTER_T prAdapter, IN P_BSS_INFO_T prP2pBssInfo)
 		DBGLOG(P2P, INFO, "Re activate P2P Network.\n");
 		nicDeactivateNetwork(prAdapter, prP2pBssInfo->ucBssIndex);
 
-		nicActivateNetwork(prAdapter, prP2pBssInfo->ucBssIndex);
+		if ((prP2pBssInfo->eCurrentOPMode != OP_MODE_ACCESS_POINT) ||
+			(bssGetClientCount(prAdapter, prP2pBssInfo) == 0)) {
+			/* If not calling nicUpdateBss, for no client connected SAP */
+			/* it can not update channel information */
+			DBGLOG(P2P, INFO, "No More Client, directly update BSS INFO\n");
+			nicUpdateBss(prAdapter, prP2pBssInfo->ucBssIndex);
+		} else
+			nicActivateNetwork(prAdapter, prP2pBssInfo->ucBssIndex);
 
 	} while (FALSE);
 
@@ -1098,6 +1105,7 @@ p2pFuncSwitchOPMode(IN P_ADAPTER_T prAdapter,
 		    IN BOOLEAN fgSyncToFW)
 {
 	P2P_DISCONNECT_INFO rP2PDisInfo;
+	kalMemZero(&rP2PDisInfo, sizeof(rP2PDisInfo));
 
 	do {
 		ASSERT_BREAK((prAdapter != NULL) && (prP2pBssInfo != NULL) && (eOpMode < OP_MODE_NUM));
@@ -2234,6 +2242,7 @@ p2pFuncParseBeaconIEs(IN P_ADAPTER_T prAdapter,
 			case ELEM_ID_RSN:	/* 48 *//* V */
 				{
 					RSN_INFO_T rRsnIe;
+					kalMemZero(&rRsnIe, sizeof(rRsnIe));
 #if CFG_SUPPORT_802_11W
 					UINT_8 i;
 #endif

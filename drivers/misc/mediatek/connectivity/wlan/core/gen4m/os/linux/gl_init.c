@@ -158,10 +158,6 @@ module_param_named(ap, gprifnameap, charp, 0000);
 #define CUSTOM_IFNAMESIZ 5
 #endif /* CFG_DRIVER_INF_NAME_CHANGE */
 
-#if CFG_SUPPORT_SNIFFER
-#define NIC_MONITOR_INF_NAME	"radiotap%d"
-#endif
-
 uint8_t aucDebugModule[DBG_MODULE_NUM];
 uint32_t au4LogLevel[ENUM_WIFI_LOG_MODULE_NUM] = {ENUM_WIFI_LOG_LEVEL_DEFAULT};
 
@@ -467,7 +463,7 @@ static struct ieee80211_rate mtk_rates[] = {
 {									\
 	.vht_supported  = true,						\
 	.cap            = IEEE80211_VHT_CAP_RXLDPC			\
-			| IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_MASK	\
+		| IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_160_80PLUS80MHZ	\
 			| IEEE80211_VHT_CAP_MAX_MPDU_LENGTH_11454	\
 			| IEEE80211_VHT_CAP_RXLDPC			\
 			| IEEE80211_VHT_CAP_SHORT_GI_80			\
@@ -722,7 +718,9 @@ static struct cfg80211_ops mtk_wlan_ops = {
 	.tdls_mgmt = mtk_cfg80211_tdls_mgmt,
 #endif
 	.update_ft_ies = mtk_cfg80211_update_ft_ies,
-
+#ifdef CFG_SUPPORT_SNIFFER_RADIOTAP
+	.set_monitor_channel = mtk_cfg80211_set_monitor_channel,
+#endif
 #if CFG_SUPPORT_WPA3
 	.external_auth = mtk_cfg80211_external_auth,
 #endif
@@ -755,6 +753,7 @@ static struct cfg80211_ops mtk_cfg_ops = {
 #endif /* CFG_SUPPORT_SCHED_SCAN */
 
 	.connect = mtk_cfg_connect,
+	.update_connect_params = mtk_cfg_update_connect_params,
 	.disconnect = mtk_cfg_disconnect,
 	.join_ibss = mtk_cfg_join_ibss,
 	.leave_ibss = mtk_cfg_leave_ibss,
@@ -807,6 +806,9 @@ static struct cfg80211_ops mtk_cfg_ops = {
 	.get_tx_power = mtk_cfg_get_txpower,
 #endif
 	.update_ft_ies = mtk_cfg80211_update_ft_ies,
+#ifdef CFG_SUPPORT_SNIFFER_RADIOTAP
+	.set_monitor_channel = mtk_cfg80211_set_monitor_channel,
+#endif
 #if CFG_SUPPORT_WPA3
 	.external_auth = mtk_cfg80211_external_auth,
 #endif
@@ -2345,6 +2347,7 @@ static int wlanOpen(struct net_device *prDev)
 static int wlanStop(struct net_device *prDev)
 {
 	struct GLUE_INFO *prGlueInfo = NULL;
+	uint8_t fgNeedAbortScan = FALSE;
 
 	GLUE_SPIN_LOCK_DECLARATION();
 
@@ -2352,8 +2355,11 @@ static int wlanStop(struct net_device *prDev)
 
 	prGlueInfo = *((struct GLUE_INFO **) netdev_priv(prDev));
 
-	if ((!prGlueInfo) || (prGlueInfo->u4ReadyFlag == 0)) {
-		DBGLOG(INIT, WARN, "driver is not ready\n");
+	if (!prGlueInfo) {
+		DBGLOG(INIT, WARN, "driver is not ready, prGlueInfo is NULL\n");
+	} else if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(INIT, WARN, "driver is not ready, u4ReadyFlag = 0\n");
+		prGlueInfo->prScanRequest = NULL;
 	} else {
 		/* CFG80211 down, report to kernel directly and run normal
 		*  scan abort procedure
@@ -2362,97 +2368,19 @@ static int wlanStop(struct net_device *prDev)
 		if (prGlueInfo->prScanRequest) {
 			DBGLOG(INIT, INFO, "wlanStop abort scan!\n");
 			kalCfg80211ScanDone(prGlueInfo->prScanRequest, TRUE);
-			aisFsmStateAbort_SCAN(prGlueInfo->prAdapter,
-						wlanGetBssIdx(prDev));
 			prGlueInfo->prScanRequest = NULL;
+			fgNeedAbortScan = TRUE;
 		}
 		GLUE_RELEASE_SPIN_LOCK(prGlueInfo, SPIN_LOCK_NET_DEV);
+		if (fgNeedAbortScan)
+			aisFsmStateAbort_SCAN(prGlueInfo->prAdapter,
+							wlanGetBssIdx(prDev));
 	}
 
 	netif_tx_stop_all_queues(prDev);
 
 	return 0;		/* success */
 }				/* end of wlanStop() */
-
-#if CFG_SUPPORT_SNIFFER
-static int wlanMonOpen(struct net_device *prDev)
-{
-	ASSERT(prDev);
-
-	netif_tx_start_all_queues(prDev);
-
-	return 0;		/* success */
-}
-
-static int wlanMonStop(struct net_device *prDev)
-{
-	ASSERT(prDev);
-
-	netif_tx_stop_all_queues(prDev);
-
-	return 0;		/* success */
-}
-
-static const struct net_device_ops wlan_mon_netdev_ops = {
-	.ndo_open = wlanMonOpen,
-	.ndo_stop = wlanMonStop,
-};
-
-void wlanMonWorkHandler(struct work_struct *work)
-{
-	struct GLUE_INFO *prGlueInfo;
-
-	prGlueInfo = container_of(work, struct GLUE_INFO, monWork);
-
-	if (prGlueInfo->fgIsEnableMon) {
-		if (prGlueInfo->prMonDevHandler)
-			return;
-#if KERNEL_VERSION(3, 18, 0) <= LINUX_VERSION_CODE
-		prGlueInfo->prMonDevHandler =
-			alloc_netdev_mq(sizeof(struct NETDEV_PRIVATE_GLUE_INFO),
-					NIC_MONITOR_INF_NAME,
-					NET_NAME_PREDICTABLE, ether_setup,
-					CFG_MAX_TXQ_NUM);
-#else
-		prGlueInfo->prMonDevHandler =
-			alloc_netdev_mq(sizeof(struct NETDEV_PRIVATE_GLUE_INFO),
-					NIC_MONITOR_INF_NAME,
-					ether_setup, CFG_MAX_TXQ_NUM);
-#endif
-		if (prGlueInfo->prMonDevHandler == NULL) {
-			DBGLOG(INIT, ERROR,
-			       "wlanMonWorkHandler: Allocated prMonDevHandler context FAIL.\n");
-			return;
-		}
-
-		((struct NETDEV_PRIVATE_GLUE_INFO *) netdev_priv(
-			 prGlueInfo->prMonDevHandler))->prGlueInfo = prGlueInfo;
-		prGlueInfo->prMonDevHandler->type =
-			ARPHRD_IEEE80211_RADIOTAP;
-		prGlueInfo->prMonDevHandler->netdev_ops =
-			&wlan_mon_netdev_ops;
-		netif_carrier_off(prGlueInfo->prMonDevHandler);
-		netif_tx_stop_all_queues(prGlueInfo->prMonDevHandler);
-		kalResetStats(prGlueInfo->prMonDevHandler);
-
-		if (register_netdev(prGlueInfo->prMonDevHandler) < 0) {
-			DBGLOG(INIT, ERROR,
-			       "wlanMonWorkHandler: Registered prMonDevHandler context FAIL.\n");
-			free_netdev(prGlueInfo->prMonDevHandler);
-			prGlueInfo->prMonDevHandler = NULL;
-		}
-		DBGLOG(INIT, INFO,
-		       "wlanMonWorkHandler: Registered prMonDevHandler context DONE.\n");
-	} else {
-		if (prGlueInfo->prMonDevHandler) {
-			unregister_netdev(prGlueInfo->prMonDevHandler);
-			prGlueInfo->prMonDevHandler = NULL;
-			DBGLOG(INIT, INFO,
-			       "wlanMonWorkHandler: unRegistered prMonDevHandler context DONE.\n");
-		}
-	}
-}
-#endif
 
 void wlanUpdateChannelFlagByBand(struct GLUE_INFO *prGlueInfo,
 				enum ENUM_BAND eBand)
@@ -2656,7 +2584,7 @@ void wlanUpdateDfsChannelTable(struct GLUE_INFO *prGlueInfo,
 		ARRAY_SIZE(mtk_5ghz_channels),
 		&ucNumOfChannel, aucChannelList);
 
-	if (ucRoleIdx >= 0 && ucRoleIdx < KAL_P2P_NUM)
+	if (ucRoleIdx < KAL_P2P_NUM)
 		prGlueP2pInfo = prGlueInfo->prP2PInfo[ucRoleIdx];
 	else
 		prGlueP2pInfo = prGlueInfo->prP2PInfo[0];
@@ -2746,8 +2674,8 @@ static int32_t wlanNetRegister(struct wireless_dev *prWdev)
 			prNetDevPrivate->ucIsP2p = FALSE;
 #endif
 #if CFG_MTK_MDDP_SUPPORT
-			/* only wlan0 supports mddp */
-			prNetDevPrivate->ucMddpSupport = (u4Idx == 0);
+			/* support both wlan0 and wlan1 */
+			prNetDevPrivate->ucMddpSupport = TRUE;
 #else
 			prNetDevPrivate->ucMddpSupport = FALSE;
 #endif
@@ -2826,16 +2754,6 @@ static void wlanNetUnregister(struct wireless_dev *prWdev)
 		prGlueInfo->fgIsRegistered = FALSE;
 	}
 #endif
-
-#if CFG_SUPPORT_SNIFFER
-	if (prGlueInfo->prMonDevHandler) {
-		unregister_netdev(prGlueInfo->prMonDevHandler);
-		/* FIXME: Why not free_netdev()? */
-		prGlueInfo->prMonDevHandler = NULL;
-	}
-	prGlueInfo->fgIsEnableMon = FALSE;
-#endif
-
 }				/* end of wlanNetUnregister() */
 
 static const struct net_device_ops wlan_netdev_ops = {
@@ -3121,6 +3039,9 @@ static void wlanCreateWirelessDevice(void)
 	prWiphy->interface_modes |= BIT(NL80211_IFTYPE_AP) |
 				    BIT(NL80211_IFTYPE_P2P_CLIENT) |
 				    BIT(NL80211_IFTYPE_P2P_GO) |
+#ifdef CFG_SUPPORT_SNIFFER_RADIOTAP
+				    BIT(NL80211_IFTYPE_MONITOR) |
+#endif
 				    BIT(NL80211_IFTYPE_STATION);
 	prWiphy->software_iftypes |= BIT(NL80211_IFTYPE_P2P_DEVICE);
 	prWiphy->flags |= WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL;
@@ -3487,11 +3408,6 @@ struct wireless_dev *wlanNetCreate(void *pvData,
 	}
 
 	prGlueInfo->prDevHandler = gprWdev[0]->netdev;
-
-#if CFG_SUPPORT_SNIFFER
-	INIT_WORK(&(prGlueInfo->monWork), wlanMonWorkHandler);
-#endif
-
 	prGlueInfo->ePowerState = ParamDeviceStateD0;
 #if !CFG_SUPPORT_PERSIST_NETDEV
 	prGlueInfo->fgIsRegistered = FALSE;
@@ -3836,7 +3752,8 @@ void reset_p2p_mode(struct GLUE_INFO *prGlueInfo)
 			sizeof(struct PARAM_CUSTOM_P2P_SET_STRUCT),
 			FALSE, FALSE, TRUE, &u4BufLen);
 
-	prGlueInfo->prAdapter->fgIsP2PRegistered = FALSE;
+	if (rWlanStatus != WLAN_STATUS_SUCCESS)
+		p2pRemove(prGlueInfo);
 
 	DBGLOG(INIT, INFO,
 			"ret = 0x%08x\n", (uint32_t) rWlanStatus);
@@ -4577,10 +4494,6 @@ connsysFwLogControl(struct ADAPTER *prAdapter, void *pvSetBuffer,
 			u4LogLevel = ENUM_WIFI_LOG_LEVEL_DEFAULT;
 			break;
 		}
-		wlanDbgSetLogLevelImpl(prAdapter,
-					   ENUM_WIFI_LOG_LEVEL_VERSION_V1,
-					   ENUM_WIFI_LOG_MODULE_DRIVER,
-					   u4LogLevel);
 
 		if (prCmd->fgEarlySet) {
 			wlanDbgSetLogLevel(prAdapter,
@@ -5053,7 +4966,7 @@ static int32_t wlanOnPreNetRegister(struct GLUE_INFO *prGlueInfo,
 	/* set MAC address */
 	if (!bAtResetFlow) {
 		uint32_t rStatus = WLAN_STATUS_FAILURE;
-		struct sockaddr MacAddr;
+		struct sockaddr MacAddr = {0};
 		uint32_t u4SetInfoLen = 0;
 		struct net_device *prDevHandler;
 
@@ -5195,7 +5108,9 @@ int32_t wlanOnWhenProbeSuccess(struct GLUE_INFO *prGlueInfo,
 	struct ADAPTER *prAdapter,
 	const u_int8_t bAtResetFlow)
 {
+#if CFG_SUPPORT_PERSIST_NETDEV
 	uint8_t i;
+#endif
 
 	DBGLOG(INIT, TRACE, "start.\n");
 
@@ -5421,7 +5336,9 @@ static int32_t wlanOffAtReset(void)
 	struct net_device *prDev = NULL;
 	struct GLUE_INFO *prGlueInfo = NULL;
 	struct BUS_INFO *prBusInfo = NULL;
+#if CFG_SUPPORT_PERSIST_NETDEV
 	uint8_t i;
+#endif
 
 	DBGLOG(INIT, INFO, "Driver Off during Reset\n");
 
@@ -5872,6 +5789,13 @@ static int32_t wlanProbe(void *pvData, void *pvDriverData)
 		}
 #endif /* WLAN_INCLUDE_SYS */
 
+#ifdef CFG_SUPPORT_SNIFFER_RADIOTAP
+		prGlueInfo->fgIsEnableMon = FALSE;
+		prGlueInfo->ucBandIdx = 0;
+		prGlueInfo->fgDropFcsErrorFrame = TRUE;
+		prGlueInfo->u2Aid = 1;
+#endif
+
 #if CFG_MET_PACKET_TRACE_SUPPORT
 	kalMetInit(prGlueInfo);
 #endif
@@ -6064,7 +5988,9 @@ static void wlanRemove(void)
 	struct GLUE_INFO *prGlueInfo = NULL;
 	struct ADAPTER *prAdapter = NULL;
 	u_int8_t fgResult = FALSE;
+#if CFG_SUPPORT_PERSIST_NETDEV
 	uint8_t i;
+#endif
 
 	DBGLOG(INIT, INFO, "Remove wlan!\n");
 
@@ -6244,8 +6170,6 @@ static void wlanRemove(void)
 	kalMetRemoveProcfs();
 #endif
 
-	kalWlanUeventDeinit();
-
 #if CFG_MET_TAG_SUPPORT
 	if (GL_MET_TAG_UNINIT() != 0)
 		DBGLOG(INIT, ERROR, "MET_TAG_UNINIT error!\n");
@@ -6258,6 +6182,8 @@ static void wlanRemove(void)
 #endif
 
 	wlanAdapterStop(prAdapter, FALSE);
+
+	kalWlanUeventDeinit();
 
 	HAL_LP_OWN_SET(prAdapter, &fgResult);
 	DBGLOG(INIT, INFO, "HAL_LP_OWN_SET(%d)\n",
