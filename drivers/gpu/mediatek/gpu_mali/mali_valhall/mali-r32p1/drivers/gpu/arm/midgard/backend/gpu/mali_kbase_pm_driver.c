@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2010-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2023 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -3097,7 +3097,7 @@ static int power_up_required_cores(struct kbase_device *kbdev)
 	int err = 0;
 
 	if (cores_required) {
-		const unsigned int max_iterations = 100;
+		const unsigned int max_iterations = 10000;
 		unsigned int i;
 
 		kbase_pm_invoke(kbdev, KBASE_PM_CORE_SHADER, cores_required,
