@@ -627,6 +627,10 @@ int mtk_cfg_sched_scan_stop(IN struct wiphy *wiphy,
 int mtk_cfg_connect(struct wiphy *wiphy,
 		    struct net_device *ndev,
 		    struct cfg80211_connect_params *sme);
+int mtk_cfg_update_connect_params(struct wiphy *wiphy,
+		  struct net_device *ndev,
+		  struct cfg80211_connect_params *sme,
+		  u32 changed);
 int mtk_cfg_disconnect(struct wiphy *wiphy,
 		       struct net_device *ndev,
 		       u16 reason_code);
@@ -763,6 +767,11 @@ int mtk_cfg_get_txpower(struct wiphy *wiphy,
 
 int mtk_cfg80211_update_ft_ies(struct wiphy *wiphy, struct net_device *dev,
 				struct cfg80211_update_ft_ies_params *ftie);
+
+#ifdef CFG_SUPPORT_SNIFFER_RADIOTAP
+int mtk_cfg80211_set_monitor_channel(struct wiphy *wiphy,
+				struct cfg80211_chan_def *chandef);
+#endif
 
 #if CFG_SUPPORT_WPA3
 int mtk_cfg80211_external_auth(struct wiphy *wiphy, struct net_device *dev,

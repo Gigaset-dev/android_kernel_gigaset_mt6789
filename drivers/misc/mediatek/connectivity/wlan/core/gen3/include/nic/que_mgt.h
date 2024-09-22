@@ -1017,9 +1017,21 @@ VOID qmResetArpDetect(VOID);
 VOID qmHandleRxArpPackets(P_ADAPTER_T prAdapter, P_SW_RFB_T prSwRfb);
 VOID qmHandleRxDhcpPackets(P_ADAPTER_T prAdapter, P_SW_RFB_T prSwRfb);
 #endif
+
+#if defined(CFG_SUPPORT_REPLAY_DETECTION) || defined(CFG_SUPPORT_FRAG_AGG_ATTACK_DETECTION)
+#define CCMPTSCPNNUM	6
+BOOLEAN qmRxPNtoU64(UINT_8 *pucPN, UINT_8 uPNNum,	UINT_64 *pu64Rets);
+#endif
+
 #ifdef CFG_SUPPORT_REPLAY_DETECTION
 BOOLEAN qmHandleRxReplay(P_ADAPTER_T prAdapter, P_SW_RFB_T prSwRfb);
 #endif
+
+#if CFG_SUPPORT_FRAG_AGG_ATTACK_DETECTION
+BOOLEAN qmDetectRxInvalidEAPOL(IN P_ADAPTER_T prAdapter, IN P_SW_RFB_T prSwRfb);
+BOOLEAN qmAmsduAttackDetection(IN P_ADAPTER_T prAdapter, IN OUT P_SW_RFB_T prSwRfb);
+#endif /* CFG_SUPPORT_FRAG_AGG_ATTACK_DETECTION */
+
 
 VOID qmMoveStaTxQueue(P_STA_RECORD_T prSrcStaRec, P_STA_RECORD_T prDstStaRec);
 VOID qmHandleDelTspec(P_ADAPTER_T prAdapter, P_STA_RECORD_T prStaRec, ENUM_ACI_T eAci);

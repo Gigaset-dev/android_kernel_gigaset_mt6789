@@ -540,7 +540,7 @@ static int btmtk_sdio_write_register(struct btmtk_dev *bdev, u32 reg, u32 val)
 
 static int btmtk_cif_allocate_memory(struct btmtk_sdio_dev *cif_dev)
 {
-	int ret = -1;
+	int ret = 0;
 
 	if (cif_dev->transfer_buf == NULL) {
 		cif_dev->transfer_buf = kzalloc(URB_MAX_BUFFER_SIZE, GFP_KERNEL);
@@ -661,12 +661,20 @@ int btmtk_sdio_read_conn_infra_pc(u32 *val)
 EXPORT_SYMBOL(btmtk_sdio_read_conn_infra_pc);
 
 typedef bool (*wifi_driver_own)(uint8_t enable);
-static wifi_driver_own wifi_driver_own_ptr;
+static wifi_driver_own wifi_driver_own_ptr = NULL;
 static void btmtk_sdio_set_wifi_driver_own(uint8_t enable)
 {
+#ifdef CFG_CHIP_RESET_KO_SUPPORT
+	struct WIFI_NOTIFY_DESC *wifi_notify_desc = NULL;
+
+	wifi_notify_desc = get_wifi_notify_callback();
+	if (!wifi_driver_own_ptr)
+		wifi_driver_own_ptr = wifi_notify_desc->BtNotifyWifiSubResetStep1;
+#else
 	if (!wifi_driver_own_ptr)
 		wifi_driver_own_ptr =
 			(wifi_driver_own)btmtk_kallsyms_lookup_name("halPreventFwOwnEn");
+#endif
 
 	if (wifi_driver_own_ptr) {
 		BTMTK_INFO("%s set wifi own to %d", __func__, enable);
@@ -1371,7 +1379,6 @@ static int btmtk_sdio_load_fw_patch_using_dma(struct btmtk_dev *bdev, u8 *image,
 	s32 sent_len = 0;
 	s32 sdio_len = 0;
 	s32 next_len = 0;
-	u32 u32ReadCRValue = 0;
 	u32 block_count = 0;
 	u32 redundant = 0;
 	u32 delay_count = 0;
@@ -1387,20 +1394,12 @@ static int btmtk_sdio_load_fw_patch_using_dma(struct btmtk_dev *bdev, u8 *image,
 	}
 
 	BTMTK_INFO("%s: loading rom patch... start", __func__);
-	btmtk_sdio_enable_interrupt(0, cif_dev->func);
 	while (section_dl_size != cur_len) {
 		if (!atomic_read(&cif_dev->tx_rdy)) {
-			ret = btmtk_sdio_readl(CHISR, &u32ReadCRValue, cif_dev->func);
-			if ((TX_EMPTY & u32ReadCRValue) != 0) {
-				ret = btmtk_sdio_writel(CHISR, (TX_EMPTY | TX_COMPLETE_COUNT), cif_dev->func);
-				if (ret != 0) {
-					BTMTK_ERR("%s: btmtk_sdio_writel fail", __func__);
-					goto enable_intr;
-				}
-				atomic_set(&cif_dev->tx_rdy, 1);
-			} else if (delay_count > 1000) {
+			if (delay_count > 1000) {
 				BTMTK_ERR("%s: delay_count > 1000", __func__);
-				goto enable_intr;
+				ret = -1;
+				goto failed;
 			} else {
 				usleep_range(100, 200);
 				++delay_count;
@@ -1435,16 +1434,16 @@ static int btmtk_sdio_load_fw_patch_using_dma(struct btmtk_dev *bdev, u8 *image,
 		if (redundant)
 			sdio_len = (block_count + 1) * SDIO_BLOCK_SIZE;
 
-		ret = btmtk_sdio_writesb(CTDR, image, sdio_len, cif_dev->func);
 		atomic_set(&cif_dev->tx_rdy, 0);
+		ret = btmtk_sdio_writesb(CTDR, image, sdio_len, cif_dev->func);
 		cur_len += sent_len;
+		delay_count = 0;
 
 		if (ret < 0) {
 			BTMTK_ERR("%s: send patch failed, terminate", __func__);
-			goto enable_intr;
+			goto failed;
 		}
 	}
-	btmtk_sdio_enable_interrupt(1, cif_dev->func);
 
 	BTMTK_INFO("%s: send dl cmd", __func__);
 	ret = btmtk_main_send_cmd(bdev,
@@ -1461,8 +1460,10 @@ static int btmtk_sdio_load_fw_patch_using_dma(struct btmtk_dev *bdev, u8 *image,
 	BTMTK_INFO("%s: loading rom patch... Done", __func__);
 	return ret;
 
-enable_intr:
-	btmtk_sdio_enable_interrupt(1, cif_dev->func);
+failed:
+	BTMTK_ERR("%s: loading rom patch... Failed!!!", __func__);
+	btmtk_sdio_print_debug_sr(cif_dev);
+	btmtk_sdio_dump_debug_sop(bdev);
 	return ret;
 }
 
@@ -2030,6 +2031,11 @@ static int btmtk_cif_probe(struct sdio_func *func,
 			func->num);
 	DUMP_TIME_STAMP("probe_start");
 
+#ifdef CFG_CHIP_RESET_KO_SUPPORT
+	/* notify reset ko module BT probe start */
+	rstNotifyWholeChipRstStatus(RST_MODULE_BT, RST_MODULE_STATE_PROBE_START, NULL);
+#endif
+
 	/* sdio interface numbers  */
 	if (func->num != BTMTK_SDIO_FUNC) {
 		BTMTK_INFO("%s: func num is not match, func_num = %d", __func__, func->num);
@@ -2068,6 +2074,11 @@ static int btmtk_cif_probe(struct sdio_func *func,
 		btmtk_set_chip_state((void *)bdev, cif_state->ops_end);
 	else
 		btmtk_set_chip_state((void *)bdev, cif_state->ops_error);
+
+#ifdef CFG_CHIP_RESET_KO_SUPPORT
+	/* notify reset ko module BT probe done */
+	rstNotifyWholeChipRstStatus(RST_MODULE_BT, RST_MODULE_STATE_PROBE_DONE, NULL);
+#endif
 
 	DUMP_TIME_STAMP("probe_end");
 	return ret;
@@ -2479,6 +2490,10 @@ int btmtk_sdio_whole_reset(struct btmtk_dev *bdev)
 	cif_dev->patched = 0;
 	btmtk_sdio_set_wifi_driver_own(0);
 
+#ifdef CFG_CHIP_RESET_KO_SUPPORT
+	rstNotifyWholeChipRstStatus(RST_MODULE_BT, RST_MODULE_STATE_PRERESET, cif_dev->func);
+	ret = 0;
+#else
 	BTMTK_INFO("%s, mmc_remove_host", __func__);
 	mmc_remove_host(host);
 
@@ -2489,6 +2504,7 @@ int btmtk_sdio_whole_reset(struct btmtk_dev *bdev)
 	 */
 	BTMTK_INFO("%s, mmc_add_host", __func__);
 	ret = mmc_add_host(host);
+#endif
 
 	BTMTK_INFO("%s, mmc_add_host return %d", __func__, ret);
 	return ret;
@@ -2503,7 +2519,7 @@ static const struct dev_pm_ops btmtk_sdio_pm_ops = {
 #endif
 
 static struct sdio_driver btmtk_sdio_driver = {
-	.name = "btsdio",
+	.name = "btmtksdio",
 	.id_table = btmtk_sdio_tabls,
 	.probe = btmtk_cif_probe,
 	.remove = btmtk_cif_disconnect,

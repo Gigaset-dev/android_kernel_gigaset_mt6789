@@ -1,9 +1,24 @@
-// SPDX-License-Identifier: GPL-2.0
-/* 
- *Copyright (c) 2020 MediaTek Inc. 
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
  */
 
+/*! \file   prealloc.c
+*   \brief  memory preallocation module
+*
+*    This file contains all implementations of memory preallocation module
+*/
 
+
+/*******************************************************************************
+*                         C O M P I L E R   F L A G S
+********************************************************************************
+*/
+
+/*******************************************************************************
+*                    E X T E R N A L   R E F E R E N C E S
+********************************************************************************
+*/
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/errno.h>

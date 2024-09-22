@@ -547,6 +547,8 @@ int mtk_p2p_cfg80211_del_iface(struct wiphy *wiphy, struct wireless_dev *wdev)
 #if 1
 	struct cfg80211_scan_request *prScanRequest = NULL;
 #endif
+	int32_t i4Ret = WLAN_STATUS_SUCCESS;
+	uint8_t fgDoDelIface = FALSE;
 
 	GLUE_SPIN_LOCK_DECLARATION();
 
@@ -560,6 +562,23 @@ int mtk_p2p_cfg80211_del_iface(struct wiphy *wiphy, struct wireless_dev *wdev)
 	prAdapter = prGlueInfo->prAdapter;
 	prP2pGlueDevInfo = prGlueInfo->prP2PDevInfo;
 
+	/* Both p2p and p2p net device should be in registered state */
+	GLUE_ACQUIRE_SPIN_LOCK(prGlueInfo, SPIN_LOCK_NET_DEV);
+	if (prAdapter->rP2PNetRegState == ENUM_NET_REG_STATE_REGISTERED &&
+		prAdapter->rP2PRegState == ENUM_P2P_REG_STATE_REGISTERED) {
+		prAdapter->rP2PNetRegState = ENUM_NET_REG_STATE_REGISTERING;
+		fgDoDelIface = TRUE;
+	}
+	GLUE_RELEASE_SPIN_LOCK(prGlueInfo, SPIN_LOCK_NET_DEV);
+
+	if (!fgDoDelIface) {
+		DBGLOG(P2P, ERROR,
+			"skip del_iface, p2p_state=%d, net_state=%d\n",
+			prAdapter->rP2PRegState,
+			prAdapter->rP2PNetRegState);
+		return -EBUSY;
+	}
+
 	KAL_ACQUIRE_MUTEX(prAdapter, MUTEX_DEL_INF);
 
 	for (u4Idx = 0; u4Idx < KAL_P2P_NUM; u4Idx++) {
@@ -572,13 +591,14 @@ int mtk_p2p_cfg80211_del_iface(struct wiphy *wiphy, struct wireless_dev *wdev)
 	}
 	if (u4Idx == KAL_P2P_NUM) {
 		DBGLOG(INIT, WARN, "can't find the matched dev\n");
-		return -EINVAL;
+		i4Ret = -EINVAL;
+		goto error;
 	}
 
 	prP2pRoleFsmInfo = prAdapter->rWifiVar.aprP2pRoleFsmInfo[u4Idx];
 	if (prP2pRoleFsmInfo == NULL) {
-		KAL_RELEASE_MUTEX(prAdapter, MUTEX_DEL_INF);
-		return -EINVAL;
+		i4Ret = -EINVAL;
+		goto error;
 	}
 
 	ucBssIdx = prP2pRoleFsmInfo->ucBssIndex;
@@ -601,7 +621,6 @@ int mtk_p2p_cfg80211_del_iface(struct wiphy *wiphy, struct wireless_dev *wdev)
 	}
 
 	/* Wait for kalSendCompleteAndAwakeQueue() complete */
-	GLUE_ACQUIRE_SPIN_LOCK(prGlueInfo, SPIN_LOCK_NET_DEV);
 	prP2pInfo->aprRoleHandler = prP2pInfo->prDevHandler;
 	/* Restore */
 	prP2pInfo->prWdev = gprP2pWdev[u4Idx];
@@ -635,7 +654,6 @@ int mtk_p2p_cfg80211_del_iface(struct wiphy *wiphy, struct wireless_dev *wdev)
 		}
 	}
 #endif
-	GLUE_RELEASE_SPIN_LOCK(prGlueInfo, SPIN_LOCK_NET_DEV);
 
 	/* prepare for removal */
 	if (netif_carrier_ok(UnregRoleHander))
@@ -648,25 +666,35 @@ int mtk_p2p_cfg80211_del_iface(struct wiphy *wiphy, struct wireless_dev *wdev)
 	/* free is called at destructor */
 	/* free_netdev(UnregRoleHander); */
 
+error:
 	KAL_RELEASE_MUTEX(prAdapter, MUTEX_DEL_INF);
 
-	prP2pDelIfaceMsg = (struct MSG_P2P_DEL_IFACE *)
-		cnmMemAlloc(prGlueInfo->prAdapter, RAM_TYPE_MSG,
-			sizeof(struct MSG_P2P_DEL_IFACE));
 
-	if (prP2pDelIfaceMsg == NULL) {
-		DBGLOG(INIT, WARN, "unable to alloc msg\n");
-	} else {
-		prP2pDelIfaceMsg->rMsgHdr.eMsgId = MID_MNY_P2P_DEL_IFACE;
-		prP2pDelIfaceMsg->ucRoleIdx = u4Idx;
+	GLUE_ACQUIRE_SPIN_LOCK(prGlueInfo, SPIN_LOCK_NET_DEV);
+	prAdapter->rP2PNetRegState = ENUM_NET_REG_STATE_REGISTERED;
+	GLUE_RELEASE_SPIN_LOCK(prGlueInfo, SPIN_LOCK_NET_DEV);
 
-		mboxSendMsg(prGlueInfo->prAdapter,
-			MBOX_ID_0,
-			(struct MSG_HDR *) prP2pDelIfaceMsg,
-			MSG_SEND_METHOD_BUF);
+	if (i4Ret == WLAN_STATUS_SUCCESS) {
+		prP2pDelIfaceMsg = (struct MSG_P2P_DEL_IFACE *)
+			cnmMemAlloc(prGlueInfo->prAdapter, RAM_TYPE_MSG,
+				sizeof(struct MSG_P2P_DEL_IFACE));
+
+		if (prP2pDelIfaceMsg == NULL) {
+			DBGLOG(INIT, WARN, "unable to alloc msg\n");
+		} else {
+			prP2pDelIfaceMsg->rMsgHdr.eMsgId =
+				MID_MNY_P2P_DEL_IFACE;
+			prP2pDelIfaceMsg->ucRoleIdx = u4Idx;
+
+			mboxSendMsg(prGlueInfo->prAdapter,
+				MBOX_ID_0,
+				(struct MSG_HDR *) prP2pDelIfaceMsg,
+				MSG_SEND_METHOD_BUF);
+		}
 	}
+
+	return i4Ret;
 #endif
-	return 0;
 }				/* mtk_p2p_cfg80211_del_iface */
 
 int mtk_p2p_cfg80211_add_key(struct wiphy *wiphy,
@@ -968,6 +996,8 @@ int mtk_p2p_cfg80211_get_station(struct wiphy *wiphy,
 	struct BSS_INFO *prBssInfo;
 	struct PARAM_LINK_SPEED_EX rLinkSpeed;
 
+	kalMemZero(&rLinkSpeed, sizeof(struct PARAM_LINK_SPEED_EX));
+
 	ASSERT(wiphy);
 
 	do {
@@ -1087,6 +1117,13 @@ int mtk_p2p_cfg80211_scan(struct wiphy *wiphy,
 			break;
 
 		P2P_WIPHY_PRIV(wiphy, prGlueInfo);
+
+#ifdef CFG_SUPPORT_SNIFFER_RADIOTAP
+		if (prGlueInfo->fgIsEnableMon) {
+			i4RetRslt = -EINVAL;
+			break;
+		}
+#endif
 
 		if (wlanIsChipAssert(prGlueInfo->prAdapter))
 			break;
@@ -1507,6 +1544,8 @@ int mtk_p2p_cfg80211_start_ap(struct wiphy *wiphy,
 	struct RF_CHANNEL_INFO rRfChnlInfo;
 	struct ADAPTER *prAdapter = (struct ADAPTER *) NULL;
 	struct WIFI_VAR *prWifiVar = (struct WIFI_VAR *) NULL;
+
+	kalMemZero(&rRfChnlInfo, sizeof(struct RF_CHANNEL_INFO));
 
 	/* RF_CHANNEL_INFO_T rRfChnlInfo; */
 /* P_IE_SSID_T prSsidIE = (P_IE_SSID_T)NULL; */
@@ -2802,6 +2841,8 @@ int mtk_p2p_cfg80211_del_station(struct wiphy *wiphy,
 	uint8_t ucBssIdx = 0;
 	uint32_t waitRet = 0;
 	struct BSS_INFO *prBssInfo = NULL;
+	struct STA_RECORD *prCurrStaRec =
+		(struct STA_RECORD *) NULL;
 
 	do {
 		if ((wiphy == NULL) || (dev == NULL))
@@ -2844,6 +2885,9 @@ int mtk_p2p_cfg80211_del_station(struct wiphy *wiphy,
 			GET_BSS_INFO_BY_INDEX(
 			prGlueInfo->prAdapter,
 			ucBssIdx);
+		prCurrStaRec = bssGetClientByMac(prGlueInfo->prAdapter,
+			prBssInfo,
+			prDisconnectMsg->aucTargetID);
 
 		mboxSendMsg(prGlueInfo->prAdapter,
 			MBOX_ID_0,
@@ -2853,11 +2897,13 @@ int mtk_p2p_cfg80211_del_station(struct wiphy *wiphy,
 		/* if encrypted deauth frame
 		 * is in process, pending remove key
 		*/
-		if (prBssInfo &&
+		if (prBssInfo && prCurrStaRec &&
 			IS_BSS_APGO(prBssInfo) &&
 			(prBssInfo->u4RsnSelectedAKMSuite ==
 			RSN_AKM_SUITE_SAE)) {
 			reinit_completion(&prBssInfo->rDeauthComp);
+			DBGLOG(P2P, TRACE,
+				"Start deauth wait\n");
 			waitRet = wait_for_completion_timeout(
 				&prBssInfo->rDeauthComp,
 				MSEC_TO_JIFFIES(1000));
@@ -3316,6 +3362,8 @@ int mtk_p2p_cfg80211_set_channel(IN struct wiphy *wiphy,
 	struct RF_CHANNEL_INFO rRfChnlInfo;
 	uint8_t ucRoleIdx = 0;
 	struct net_device *dev = NULL;
+
+	kalMemZero(&rRfChnlInfo, sizeof(struct RF_CHANNEL_INFO));
 
 	if ((wiphy == NULL) || (chandef == NULL))
 		return i4Rslt;
@@ -4371,10 +4419,12 @@ int mtk_p2p_cfg80211_testmode_sw_cmd(IN struct wiphy *wiphy,
 
 	DBGLOG(P2P, TRACE, "--> %s()\n", __func__);
 
-	if (data && len)
+	if (len < sizeof(struct NL80211_DRIVER_SW_CMD_PARAMS))
+		rstatus = WLAN_STATUS_INVALID_LENGTH;
+	else if (!data)
+		rstatus = WLAN_STATUS_INVALID_DATA;
+	else {
 		prParams = (struct NL80211_DRIVER_SW_CMD_PARAMS *) data;
-
-	if (prParams) {
 		if (prParams->set == 1) {
 			rstatus = kalIoctl(prGlueInfo,
 				(PFN_OID_HANDLER_FUNC) wlanoidSetSwCtrlWrite,
@@ -4399,7 +4449,6 @@ int mtk_p2p_cfg80211_testmode_update_sta_pmkid_cmd(IN struct wiphy *wiphy,
 	uint8_t ucRoleIdx = 0;
 	uint8_t ucBssIdx = 0;
 	uint32_t rStatus;
-	uint32_t u4BufLen;
 	int fgIsValid = 0;
 
 	ASSERT(wiphy);
@@ -4432,15 +4481,11 @@ int mtk_p2p_cfg80211_testmode_update_sta_pmkid_cmd(IN struct wiphy *wiphy,
 	kalMemCopy(pmkid.arPMKID, prParams->aucPmkid, IW_PMKID_LEN);
 	pmkid.ucBssIdx = ucBssIdx;
 	if (prParams->ucAddRemove) {
-		rStatus = kalIoctl(prGlueInfo, wlanoidSetPmkid, &pmkid,
-				   sizeof(struct PARAM_PMKID),
-				   FALSE, FALSE, FALSE, &u4BufLen);
+		rStatus = rsnSetPmkid(prGlueInfo->prAdapter, &pmkid);
 		if (rStatus != WLAN_STATUS_SUCCESS)
 			DBGLOG(INIT, INFO, "add pmkid error:%x\n", rStatus);
 	} else {
-		rStatus = kalIoctl(prGlueInfo, wlanoidDelPmkid, &pmkid,
-				   sizeof(struct PARAM_PMKID),
-				   FALSE, FALSE, FALSE, &u4BufLen);
+		rStatus = rsnDelPmkid(prGlueInfo->prAdapter, &pmkid);
 		if (rStatus != WLAN_STATUS_SUCCESS)
 			DBGLOG(INIT, INFO, "remove pmkid error:%x\n", rStatus);
 	}

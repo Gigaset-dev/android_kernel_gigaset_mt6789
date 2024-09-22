@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
 ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/mgmt/auth.c#1
 */
@@ -169,14 +123,11 @@ authComposeAuthFrameHeaderAndFF(IN P_ADAPTER_T prAdapter,
 		/* Fill the BSSID field with Target BSSID. */
 		COPY_MAC_ADDR(prAuthFrame->aucBSSID, aucPeerMACAddress);
 
-	} else if (prStaRec != NULL && IS_CLIENT_STA(prStaRec)) {
+	} else {
 		/* Fill the BSSID field with Current BSSID. */
 		COPY_MAC_ADDR(prAuthFrame->aucBSSID, aucMACAddress);
-	} else {
-		COPY_MAC_ADDR(prAuthFrame->aucBSSID, aucMACAddress);
-		DBGLOG(SAA, INFO,
-			"Error status code flow!\n");
 	}
+
 	/* Clear the SEQ/FRAG_NO field. */
 	prAuthFrame->u2SeqCtrl = 0;
 
@@ -186,6 +137,7 @@ authComposeAuthFrameHeaderAndFF(IN P_ADAPTER_T prAdapter,
 	prAuthFrame->u2AuthAlgNum = u2AuthAlgNum;	/* NOTE(Kevin): Optimized for ARM */
 #if CFG_SUPPORT_CFG80211_AUTH
 	if (prConnSettings->ucAuthDataLen != 0 &&
+			prStaRec &&
 			!IS_STA_IN_P2P(prStaRec)) {
 		kalMemCopy(prAuthFrame->aucAuthData,
 			prConnSettings->aucAuthData,
@@ -468,7 +420,8 @@ authSendAuthFrame(IN P_ADAPTER_T prAdapter,
 		ASSERT(prFalseAuthSwRfb);
 		prFalseAuthFrame = (P_WLAN_AUTH_FRAME_T) prFalseAuthSwRfb->pvHeader;
 
-		ASSERT(u2StatusCode != STATUS_CODE_SUCCESSFUL);
+		ASSERT((u2StatusCode != STATUS_CODE_SUCCESSFUL) &&
+			(u2StatusCode != WLAN_STATUS_SAE_HASH_TO_ELEMENT));
 
 		pucTransmitAddr = prFalseAuthFrame->aucDestAddr;
 
@@ -491,6 +444,7 @@ authSendAuthFrame(IN P_ADAPTER_T prAdapter,
 	/* fill the length of auth frame body */
 #if CFG_SUPPORT_CFG80211_AUTH
 	if (prConnSettings->ucAuthDataLen != 0 &&
+			prStaRec &&
 			!IS_STA_IN_P2P(prStaRec))
 		u2PayloadLen = (AUTH_ALGORITHM_NUM_FIELD_LEN +
 			prConnSettings->ucAuthDataLen);
@@ -740,7 +694,8 @@ authCheckRxAuthFrameStatus(IN P_ADAPTER_T prAdapter,
 	if (u2RxAuthAlgNum != (UINT_16) prStaRec->ucAuthAlgNum) {
 		DBGLOG(SAA, LOUD, "Discard Auth frame with auth type = %d, current = %d\n",
 		       u2RxAuthAlgNum, prStaRec->ucAuthAlgNum);
-		return WLAN_STATUS_FAILURE;
+		*pu2StatusCode = STATUS_CODE_AUTH_ALGORITHM_NOT_SUPPORTED;
+		return WLAN_STATUS_SUCCESS;
 	}
 	/* WLAN_GET_FIELD_16(&prAuthFrame->u2AuthTransSeqNo, &u2RxTransactionSeqNum); */
 #if CFG_SUPPORT_CFG80211_AUTH
@@ -1219,6 +1174,8 @@ authProcessRxAuthFrame(IN P_ADAPTER_T prAdapter,
 			OUT PUINT_16 pu2ReturnStatusCode)
 {
 	P_WLAN_AUTH_FRAME_T prAuthFrame;
+	UINT_16 u2RxStatusCode;
+	UINT_16 u2RxTransactionSeqNum;
 	UINT_16 u2ReturnStatusCode = STATUS_CODE_SUCCESSFUL;
 
 	ASSERT(prSwRfb);
@@ -1247,12 +1204,31 @@ authProcessRxAuthFrame(IN P_ADAPTER_T prAdapter,
 		u2ReturnStatusCode = STATUS_CODE_AUTH_ALGORITHM_NOT_SUPPORTED;
 #endif
 #if CFG_SUPPORT_CFG80211_AUTH
-	if (prAuthFrame->aucAuthData[0] != AUTH_TRANSACTION_SEQ_1 &&
-	   prAuthFrame->aucAuthData[0] != AUTH_TRANSACTION_SEQ_2)
+	u2RxStatusCode = (prAuthFrame->aucAuthData[3] << 8) +
+					prAuthFrame->aucAuthData[2];
 #else
-	if (prAuthFrame->u2AuthTransSeqNo != AUTH_TRANSACTION_SEQ_1 &&
-	   prAuthFrame->u2AuthTransSeqNo != AUTH_TRANSACTION_SEQ_2)
+	u2RxStatusCode = prAuthFrame->u2StatusCode;
 #endif
+	if (u2RxStatusCode != STATUS_CODE_RESERVED) {
+		DBGLOG(AAA, LOUD, "Invalid Status code %d\n", u2RxStatusCode);
+		return WLAN_STATUS_FAILURE;
+	}
+
+#if CFG_SUPPORT_CFG80211_AUTH
+	u2RxTransactionSeqNum = prAuthFrame->aucAuthData[0];
+#else
+	u2RxTransactionSeqNum = prAuthFrame->u2AuthTransSeqNo;
+#endif
+
+	if (prAuthFrame->u2AuthAlgNum != AUTH_ALGORITHM_NUM_OPEN_SYSTEM &&
+		prAuthFrame->u2AuthAlgNum != AUTH_ALGORITHM_NUM_SAE)
+		u2ReturnStatusCode = STATUS_CODE_AUTH_ALGORITHM_NOT_SUPPORTED;
+	else if (prAuthFrame->u2AuthAlgNum == AUTH_ALGORITHM_NUM_OPEN_SYSTEM &&
+		u2RxTransactionSeqNum != AUTH_TRANSACTION_SEQ_1)
+		u2ReturnStatusCode = STATUS_CODE_AUTH_OUT_OF_SEQ;
+	else if (prAuthFrame->u2AuthAlgNum == AUTH_ALGORITHM_NUM_SAE &&
+		u2RxTransactionSeqNum != AUTH_TRANSACTION_SEQ_1 &&
+		u2RxTransactionSeqNum != AUTH_TRANSACTION_SEQ_2)
 		u2ReturnStatusCode = STATUS_CODE_AUTH_OUT_OF_SEQ;
 
 	*pu2ReturnStatusCode = u2ReturnStatusCode;
@@ -1283,6 +1259,7 @@ authProcessRxAuth1Frame(IN P_ADAPTER_T prAdapter,
 			IN UINT_16 u2ExpectedTransSeqNum, OUT PUINT_16 pu2ReturnStatusCode)
 {
 	P_WLAN_AUTH_FRAME_T prAuthFrame;
+	UINT_16 u2RxStatusCode;
 	UINT_16 u2ReturnStatusCode = STATUS_CODE_SUCCESSFUL;
 
 	ASSERT(prSwRfb);
@@ -1303,6 +1280,17 @@ authProcessRxAuth1Frame(IN P_ADAPTER_T prAdapter,
 	}
 
 	/* 4 <4> Parse the Fixed Fields of Authentication Frame Body. */
+#if CFG_SUPPORT_CFG80211_AUTH
+	u2RxStatusCode = (prAuthFrame->aucAuthData[3] << 8) +
+					prAuthFrame->aucAuthData[2];
+#else
+	u2RxStatusCode = prAuthFrame->u2StatusCode;
+#endif
+	if (u2RxStatusCode != STATUS_CODE_RESERVED) {
+		DBGLOG(AAA, LOUD, "Invalid Status code %d\n", u2RxStatusCode);
+		return WLAN_STATUS_FAILURE;
+	}
+
 	if (prAuthFrame->u2AuthAlgNum != u2ExpectedAuthAlgNum)
 		u2ReturnStatusCode = STATUS_CODE_AUTH_ALGORITHM_NOT_SUPPORTED;
 #if CFG_SUPPORT_CFG80211_AUTH
@@ -1318,3 +1306,52 @@ authProcessRxAuth1Frame(IN P_ADAPTER_T prAdapter,
 
 }		/* end of authProcessRxAuth1Frame() */
 #endif
+
+/*---------------------------------------------------------------------------*/
+/*!
+ * @brief This function will validate the Rx Auth Frame and then return
+ *        the status code to AAA to indicate
+ *        if need to perform following actions
+ *        when the specified conditions were matched.
+ *
+ * @param[in] prAdapter          Pointer to the Adapter structure.
+ * @param[in] prSwRfb            Pointer to SW RFB data structure.
+ *
+ * @retval TRUE      Reply the Auth
+ * @retval FALSE     Don't reply the Auth
+ */
+/*---------------------------------------------------------------------------*/
+BOOLEAN
+authFloodingCheck(IN P_ADAPTER_T prAdapter,
+		    IN P_BSS_INFO_T prP2pBssInfo,
+		    IN P_SW_RFB_T prSwRfb)
+{
+	P_STA_RECORD_T prStaRec = (P_STA_RECORD_T) NULL;
+	P_WLAN_AUTH_FRAME_T prAuthFrame = (P_WLAN_AUTH_FRAME_T) NULL;
+
+	DBGLOG(SAA, TRACE, "authFloodingCheck Authentication Frame\n");
+
+
+	prAuthFrame = (P_WLAN_AUTH_FRAME_T) prSwRfb->pvHeader;
+
+	if ((prP2pBssInfo->eCurrentOPMode != OP_MODE_ACCESS_POINT) ||
+	    (prP2pBssInfo->eIntendOPMode != OP_MODE_NUM)) {
+		/* We are not under AP Mode yet. */
+		DBGLOG(P2P, WARN,
+			"Current OP mode is not under AP mode. (%d)\n",
+			prP2pBssInfo->eCurrentOPMode);
+		return FALSE;
+	}
+
+	prStaRec = cnmGetStaRecByAddress(prAdapter,
+		prP2pBssInfo->ucBssIndex, prAuthFrame->aucSrcAddr);
+
+	if (!prStaRec) {
+		DBGLOG(SAA, TRACE, "Need reply.\n");
+		return TRUE;
+	}
+
+	DBGLOG(SAA, WARN, "Auth Flooding Attack, don't reply.\n");
+	return FALSE;
+}
+

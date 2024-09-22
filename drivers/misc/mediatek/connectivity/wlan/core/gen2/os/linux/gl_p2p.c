@@ -81,7 +81,12 @@ static struct cfg80211_ops mtk_p2p_ops = {
 	.del_station = mtk_p2p_cfg80211_del_station,
 	.set_monitor_channel = mtk_p2p_cfg80211_set_channel,
 	.set_bitrate_mask = mtk_p2p_cfg80211_set_bitrate_mask,
+#if KERNEL_VERSION(5, 8, 0) > CFG80211_VERSION_CODE
 	.mgmt_frame_register = mtk_p2p_cfg80211_mgmt_frame_register,
+#endif
+#if KERNEL_VERSION(5, 8, 0) <= CFG80211_VERSION_CODE
+	.update_mgmt_frame_registrations = mtk_p2p_cfg80211_mgmt_frame_update,
+#endif
 	.get_station = mtk_p2p_cfg80211_get_station,
 	.add_key = mtk_p2p_cfg80211_add_key,
 	.get_key = mtk_p2p_cfg80211_get_key,
@@ -111,6 +116,12 @@ static const struct wiphy_vendor_command mtk_p2p_vendor_ops[] = {
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = mtk_cfg80211_vendor_get_channel_list
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+		,
+		.policy = nla_parse_wifi_attribute,
+		.maxattr = WIFI_ATTRIBUTE_MAX
+#endif
+
 	},
 	{
 		{
@@ -119,6 +130,12 @@ static const struct wiphy_vendor_command mtk_p2p_vendor_ops[] = {
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = mtk_cfg80211_vendor_set_country_code
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+		,
+		.policy = nla_parse_wifi_attribute,
+		.maxattr = WIFI_ATTRIBUTE_MAX
+#endif
+
 	},
 	{
 		{
@@ -127,6 +144,11 @@ static const struct wiphy_vendor_command mtk_p2p_vendor_ops[] = {
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = mtk_cfg80211_vendor_get_roaming_capabilities
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+		,
+		VENDOR_OPS_SET_POLICY(VENDOR_CMD_RAW_DATA)
+#endif
+
 	},
 	{
 		{
@@ -135,6 +157,11 @@ static const struct wiphy_vendor_command mtk_p2p_vendor_ops[] = {
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = mtk_cfg80211_vendor_config_roaming
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+		,
+		VENDOR_OPS_SET_POLICY(VENDOR_CMD_RAW_DATA)
+#endif
+
 	},
 #if CFG_AUTO_CHANNEL_SEL_SUPPORT
 	{
@@ -146,6 +173,11 @@ static const struct wiphy_vendor_command mtk_p2p_vendor_ops[] = {
 				| WIPHY_VENDOR_CMD_NEED_NETDEV
 				| WIPHY_VENDOR_CMD_NEED_RUNNING,
 		.doit = mtk_cfg80211_vendor_acs
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+		,
+		VENDOR_OPS_SET_POLICY(VENDOR_CMD_RAW_DATA)
+#endif
+
 	},
 #endif
 	{
@@ -156,6 +188,11 @@ static const struct wiphy_vendor_command mtk_p2p_vendor_ops[] = {
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV
 				| WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = mtk_cfg80211_vendor_get_features
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
+		,
+		VENDOR_OPS_SET_POLICY(VENDOR_CMD_RAW_DATA)
+#endif
+
 	},
 };
 
@@ -428,7 +465,11 @@ unsigned int _p2p_cfg80211_classify8021d(struct sk_buff *skb)
 
 static const UINT_16 au16Wlan1dToQueueIdx[8] = { 1, 0, 0, 1, 2, 2, 3, 3 };
 
-#if KERNEL_VERSION(4, 19, 0) <= CFG80211_VERSION_CODE
+#if KERNEL_VERSION(5, 4, 0) <= CFG80211_VERSION_CODE
+u16 p2pSelectQueue(struct net_device *dev,
+		    struct sk_buff *skb,
+		    struct net_device *sb_dev)
+#elif KERNEL_VERSION(4, 19, 0) <= CFG80211_VERSION_CODE
 static UINT_16 p2pSelectQueue(struct net_device *dev, struct sk_buff *skb,
 				struct net_device *sb_dev, select_queue_fallback_t fallback)
 #else
@@ -1372,7 +1413,11 @@ void mtk_p2p_wext_set_Multicastlist(P_GLUE_INFO_T prGlueInfo)
  * \retval NETDEV_TX_BUSY - on failure, packet will be discarded by upper layer.
  */
 /*----------------------------------------------------------------------------*/
-int p2pHardStartXmit(IN struct sk_buff *prSkb, IN struct net_device *prDev)
+#if KERNEL_VERSION(5, 10, 0) <= CFG80211_VERSION_CODE
+netdev_tx_t p2pHardStartXmit(struct sk_buff *prSkb, struct net_device *prDev)
+#else
+int p2pHardStartXmit(struct sk_buff *prSkb,  struct net_device *prDev)
+#endif
 {
 	P_QUE_ENTRY_T prQueueEntry = NULL;
 	P_QUE_T prTxQueue = NULL;
@@ -2670,7 +2715,7 @@ mtk_p2p_wext_discovery_results(IN struct net_device *prDev,
 		/* device capability */
 		if (1) {
 			UINT_8 data[40];
-			UINT_32 u4Offset = 0;
+			INT_32 i4Offset = 0;
 
 			iwe.cmd = IWEVCUSTOM;
 			iwe.u.data.flags = 0;
@@ -2678,12 +2723,12 @@ mtk_p2p_wext_discovery_results(IN struct net_device *prDev,
 			if (iwe.u.data.length > 40)
 				iwe.u.data.length = 40;
 
-			u4Offset = snprintf(data, iwe.u.data.length, "p2p_cap=%02x%02x%02x%02x%c",
+			i4Offset = snprintf(data, iwe.u.data.length, "p2p_cap=%02x%02x%02x%02x%c",
 				 prTargetResult->ucDeviceCapabilityBitmap, prTargetResult->ucGroupCapabilityBitmap,
 				 (UINT_8) prTargetResult->u2ConfigMethod,
 				 (UINT_8) (prTargetResult->u2ConfigMethod >> 8), '\0');
-			if (u4Offset < 0) {
-				DBGLOG(INIT, LOUD, "u4Offset = [%u]\n", u4Offset);
+			if (i4Offset < 0) {
+				DBGLOG(INIT, LOUD, "i4Offset = [%u]\n", i4Offset);
 				return -1;
 			}
 			current_ev =
@@ -2698,15 +2743,15 @@ mtk_p2p_wext_discovery_results(IN struct net_device *prDev,
 			if (iwe.u.data.length > 40)
 				iwe.u.data.length = 40;
 
-			u4Offset = snprintf(data, iwe.u.data.length, "p2p_dev_type=%02x%02x%02x%02x%02x%02x%c",
+			i4Offset = snprintf(data, iwe.u.data.length, "p2p_dev_type=%02x%02x%02x%02x%02x%02x%c",
 				 (UINT_8) prTargetResult->rPriDevType.u2CategoryID,
 				 (UINT_8) prTargetResult->rPriDevType.u2SubCategoryID,
 				 (UINT_8) prTargetResult->arSecDevType[0].u2CategoryID,
 				 (UINT_8) prTargetResult->arSecDevType[0].u2SubCategoryID,
 				 (UINT_8) prTargetResult->arSecDevType[1].u2CategoryID,
 				 (UINT_8) prTargetResult->arSecDevType[1].u2SubCategoryID, '\0');
-			if (u4Offset < 0) {
-				DBGLOG(INIT, LOUD, "u4Offset = [%u]\n", u4Offset);
+			if (i4Offset < 0) {
+				DBGLOG(INIT, LOUD, "i4Offset = [%u]\n", i4Offset);
 				return -1;
 			}
 			current_ev =
@@ -2721,11 +2766,11 @@ mtk_p2p_wext_discovery_results(IN struct net_device *prDev,
 			if (iwe.u.data.length > 40)
 				iwe.u.data.length = 40;
 
-			u4Offset =
+			i4Offset =
 			    snprintf(data, iwe.u.data.length, "p2p_grp_bssid= %pM %c",
 				 prTargetResult->aucBSSID, '\0');
-			if (u4Offset < 0) {
-				DBGLOG(INIT, LOUD, "u4Offset = [%u]\n", u4Offset);
+			if (i4Offset < 0) {
+				DBGLOG(INIT, LOUD, "i4Offset = [%u]\n", i4Offset);
 				return -1;
 			}
 			current_ev = iwe_stream_add_point(info, current_ev,
@@ -3100,16 +3145,16 @@ BOOLEAN kalP2PIndicateFound(IN P_GLUE_INFO_T prGlueInfo)
 {
 	union iwreq_data evt;
 	UINT_8 aucBuffer[IW_CUSTOM_MAX];
-	UINT_32 u4Offset = 0;
+	INT_32 i4Offset = 0;
 
 	ASSERT(prGlueInfo);
 
 	memset(&evt, 0, sizeof(evt));
 
-	u4Offset =
+	i4Offset =
 		snprintf(aucBuffer, IW_CUSTOM_MAX - 1, "P2P_DVC_FND");
-	if (u4Offset < 0) {
-		DBGLOG(INIT, LOUD, "u4Offset = [%u]\n", u4Offset);
+	if (i4Offset < 0) {
+		DBGLOG(INIT, LOUD, "i4Offset = [%u]\n", i4Offset);
 		return FALSE;
 	}
 	evt.data.length = strlen(aucBuffer);

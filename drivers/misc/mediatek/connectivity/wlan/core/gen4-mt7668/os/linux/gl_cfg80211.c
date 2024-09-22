@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
 ** Id: @(#) gl_cfg80211.c@@
 */
@@ -84,6 +38,10 @@
 *                              C O N S T A N T S
 ********************************************************************************
 */
+
+#if CFG_SUPPORT_WAPI
+#define KEY_BUF_SIZE	1024
+#endif
 
 /*******************************************************************************
 *                             D A T A   T Y P E S
@@ -145,7 +103,7 @@ mtk_cfg80211_change_iface(struct wiphy *wiphy,
 	UINT_32 u4BufLen;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting, mtk_cfg80211_change_iface do nothing\n");
 		return -EINVAL;
@@ -154,6 +112,9 @@ mtk_cfg80211_change_iface(struct wiphy *wiphy,
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	if (type == NL80211_IFTYPE_STATION)
 		eOpMode = NET_TYPE_INFRA;
@@ -211,12 +172,15 @@ mtk_cfg80211_add_key(struct wiphy *wiphy,
 	UINT_8 ucCheckZeroKey = 0;
 	UINT_8 i = 0;
 #endif
+#if CFG_SUPPORT_DUAL_WTBL_GTK_REKEY_OFFLOAD
+	PARAM_KEY_T rDupKey;
+#endif
 
 	const UINT_8 aucBCAddr[] = BC_MAC_ADDR;
 	/* const UINT_8 aucZeroMacAddr[] = NULL_MAC_ADDR; */
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(RSN, ERROR,
 			"chip resetting, mtk_cfg80211_add_key do nothing\n");
 		return -EINVAL;
@@ -225,6 +189,9 @@ mtk_cfg80211_add_key(struct wiphy *wiphy,
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 #if DBG
 	DBGLOG(RSN, INFO, "mtk_cfg80211_add_key\n");
@@ -344,6 +311,32 @@ mtk_cfg80211_add_key(struct wiphy *wiphy,
 	}
 #endif
 
+#if CFG_SUPPORT_DUAL_WTBL_GTK_REKEY_OFFLOAD
+		prBssInfo = GET_BSS_INFO_BY_INDEX(prGlueInfo->prAdapter,
+				rKey.ucBssIdx);
+
+		DBGLOG(RSN, INFO, "ucBMCWlanIndexSUsed[1]=%u [2]=%u\n",
+			prBssInfo->ucBMCWlanIndexSUsed[1],
+			prBssInfo->ucBMCWlanIndexSUsed[2]);
+
+		if (pairwise == FALSE
+				&& prBssInfo->ucBMCWlanIndexSUsed[1] == FALSE
+				&& prBssInfo->ucBMCWlanIndexSUsed[2] == FALSE) {
+			/* if this is the first time add gtk */
+			if ((rKey.u4KeyIndex == 1) || (rKey.u4KeyIndex == 2)) {
+				kalMemCopy(&rDupKey, &rKey,
+					sizeof(PARAM_KEY_T));
+				rDupKey.u4KeyIndex = rKey.u4KeyIndex ^ 0x03;
+				kalIoctl(prGlueInfo, wlanoidSetAddKey,
+					&rDupKey, rDupKey.u4Length,
+					FALSE, FALSE, TRUE, &u4BufLen);
+			} else {
+				DBGLOG(RSN, ERROR, "GTK key id is %u\n",
+					rKey.u4KeyIndex);
+			}
+		}
+#endif
+
 	rStatus = kalIoctl(prGlueInfo, wlanoidSetAddKey, &rKey, rKey.u4Length, FALSE, FALSE, TRUE, &u4BufLen);
 
 	if (rStatus == WLAN_STATUS_SUCCESS)
@@ -373,11 +366,14 @@ mtk_cfg80211_get_key(struct wiphy *wiphy,
 	P_GLUE_INFO_T prGlueInfo = NULL;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState())
+	if (kalIsResetting())
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_get_key\n");
 #endif
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 #if 1
 	DBGLOG(INIT, INFO, "--> %s()\n", __func__);
@@ -409,13 +405,14 @@ int mtk_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev, u8 key_in
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
 
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
+
 #if CFG_CHIP_RESET_SUPPORT
 	if (g_u4HaltFlag) {
 		DBGLOG(INIT, WARN, "wlan is halt, skip key deletion\n");
 		return WLAN_STATUS_FAILURE;
 	}
-	rst_data.entry_conut++;
-	DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
 #endif
 
 #if DBG
@@ -449,10 +446,6 @@ int mtk_cfg80211_del_key(struct wiphy *wiphy, struct net_device *ndev, u8 key_in
 	else
 		i4Rslt = 0;
 
-#if CFG_CHIP_RESET_SUPPORT
-	rst_data.entry_conut--;
-	DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
-#endif
 	return i4Rslt;
 }
 
@@ -477,13 +470,16 @@ mtk_cfg80211_set_default_key(struct wiphy *wiphy, struct net_device *ndev, u8 ke
 	BOOLEAN fgDef = FALSE, fgMgtDef = FALSE;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_set_default_key\n");
 		return -EINVAL;
 	}
 #endif
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	/* For STA, should wep set the default key !! */
 #if DBG
@@ -539,15 +535,15 @@ int mtk_cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev, const
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
 
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
+
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(INIT, WARN, "wlan is halt, skip get station\n");
 		return WLAN_STATUS_FAILURE;
 	}
-	rst_data.entry_conut++;
-	DBGLOG(INIT, TRACE, " entry_conut = %d\n", rst_data.entry_conut);
 #endif
-
 	kalMemZero(arBssid, MAC_ADDR_LEN);
 	wlanQueryInformation(prGlueInfo->prAdapter, wlanoidQueryBssid, &arBssid[0], sizeof(arBssid), &u4BufLen);
 
@@ -558,11 +554,6 @@ int mtk_cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev, const
 		DBGLOG(REQ, WARN,
 			"incorrect BSSID: [" MACSTR "] currently connected BSSID[" MACSTR "]\n",
 			MAC2STR(mac), MAC2STR(arBssid));
-#if CFG_CHIP_RESET_SUPPORT
-		rst_data.entry_conut--;
-		DBGLOG(INIT, TRACE, " entry_conut = %d\n",
-						rst_data.entry_conut);
-#endif
 		return -ENOENT;
 	}
 
@@ -673,10 +664,7 @@ int mtk_cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev, const
 #endif
 		sinfo->tx_failed = prDevStats->tx_errors;
 	}
-#if CFG_CHIP_RESET_SUPPORT
-	rst_data.entry_conut--;
-	DBGLOG(INIT, TRACE, " entry_conut = %d\n", rst_data.entry_conut);
-#endif
+
 	return 0;
 }
 #else
@@ -694,15 +682,15 @@ int mtk_cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev, u8 *m
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
 
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
+
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(INIT, WARN, "wlan is halt, skip get station\n");
 		return WLAN_STATUS_FAILURE;
 	}
-	rst_data.entry_conut++;
-	DBGLOG(INIT, TRACE, " entry_conut = %d\n", rst_data.entry_conut);
 #endif
-
 	kalMemZero(arBssid, MAC_ADDR_LEN);
 	wlanQueryInformation(prGlueInfo->prAdapter, wlanoidQueryBssid, &arBssid[0], sizeof(arBssid), &u4BufLen);
 
@@ -712,11 +700,6 @@ int mtk_cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev, u8 *m
 		DBGLOG(REQ, WARN,
 		       "incorrect BSSID: [" MACSTR "] currently connected BSSID[" MACSTR "]\n",
 		       MAC2STR(mac), MAC2STR(arBssid));
-#if CFG_CHIP_RESET_SUPPORT
-		rst_data.entry_conut--;
-		DBGLOG(INIT, TRACE, " entry_conut = %d\n",
-						rst_data.entry_conut);
-#endif
 		return -ENOENT;
 	}
 
@@ -799,10 +782,6 @@ int mtk_cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev, u8 *m
 		sinfo->filled |= STATION_INFO_TX_FAILED;
 		sinfo->tx_failed = prDevStats->tx_errors;
 	}
-#if CFG_CHIP_RESET_SUPPORT
-	rst_data.entry_conut--;
-	DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
-#endif
 	return 0;
 }
 #endif
@@ -830,12 +809,15 @@ int mtk_cfg80211_get_link_statistics(struct wiphy *wiphy, struct net_device *nde
 	UINT_8 ucBssIndex;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState())
+	if (kalIsResetting())
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_get_link_statistics\n");
 #endif
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	kalMemZero(arBssid, MAC_ADDR_LEN);
 	wlanQueryInformation(prGlueInfo->prAdapter, wlanoidQueryBssid, &arBssid[0], sizeof(arBssid), &u4BufLen);
@@ -924,29 +906,18 @@ int mtk_cfg80211_scan(struct wiphy *wiphy, struct cfg80211_scan_request *request
 		return -EINVAL;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(INIT, WARN, "wlan is halt, skip scan");
 		return WLAN_STATUS_FAILURE;
 	}
-	rst_data.entry_conut++;
-	DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
 #endif
-
 	/* check if there is any pending scan/sched_scan not yet finished */
 	if (prGlueInfo->prScanRequest != NULL) {
-#if CFG_CHIP_RESET_SUPPORT
-		rst_data.entry_conut--;
-		DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
-#endif
 		return -EBUSY;
 	}
 
 	if (prGlueInfo->u4ReadyFlag == 0) {
 		DBGLOG(REQ, WARN, "prGlueInfo->u4ReadyFlag == 0\n");
-#if CFG_CHIP_RESET_SUPPORT
-		rst_data.entry_conut--;
-		DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
-#endif
 	}
 
 	if (atomic_read(&prGlueInfo->cfgSuspend)) {
@@ -964,10 +935,6 @@ int mtk_cfg80211_scan(struct wiphy *wiphy, struct cfg80211_scan_request *request
 				  rScanRequest.rSsid[i].u4SsidLen, request->ssids[i].ssid, request->ssids[i].ssid_len);
 		}
 	} else {
-#if CFG_CHIP_RESET_SUPPORT
-		rst_data.entry_conut--;
-		DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
-#endif
 		return -EINVAL;
 	}
 
@@ -1014,11 +981,6 @@ int mtk_cfg80211_scan(struct wiphy *wiphy, struct cfg80211_scan_request *request
 		return -EINVAL;
 	}
 
-#if CFG_CHIP_RESET_SUPPORT
-		rst_data.entry_conut--;
-		DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
-#endif
-
 	return 0;
 }
 
@@ -1042,6 +1004,9 @@ void mtk_cfg80211_abort_scan(struct wiphy *wiphy,
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
 
+	if (!wlanGetHifState(prGlueInfo))
+		return;
+
 	DBGLOG(REQ, INFO, "mtk_cfg80211_abort_scan\n");
 
 	rStatus = kalIoctl(prGlueInfo,
@@ -1054,7 +1019,6 @@ void mtk_cfg80211_abort_scan(struct wiphy *wiphy,
 
 }
 
-static UINT_8 wepBuf[48];
 #if CFG_SUPPORT_CFG80211_AUTH
 /*----------------------------------------------------------------------------*/
 /*!
@@ -1077,14 +1041,16 @@ int mtk_cfg80211_auth(struct wiphy *wiphy, struct net_device *ndev,
 	ENUM_PARAM_OP_MODE_T eOpMode;
 	P_CONNECTION_SETTINGS_T prConnSettings = NULL;
 #if CFG_SUPPORT_REPLAY_DETECTION
+	P_BSS_INFO_T prBssInfo = NULL;
 	struct SEC_DETECT_REPLAY_INFO *prDetRplyInfo = NULL;
 #endif
-	P_PARAM_WEP_T prWepKey;
+	P_PARAM_WEP_T prWepKey = NULL;
+	int ret = 0;
 	/*Is auth parameter needed to be updated to AIS.*/
 	UINT_8 fgNewAuthParam = FALSE;
 
 #if CFG_CHIP_RESET_SUPPORT
-		if (checkResetState()) {
+		if (kalIsResetting()) {
 			DBGLOG(REQ, ERROR,
 				"chip resetting, mtk_cfg80211_auth do nothing\n");
 			return -EINVAL;
@@ -1093,6 +1059,10 @@ int mtk_cfg80211_auth(struct wiphy *wiphy, struct net_device *ndev,
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
+
 #if KERNEL_VERSION(4, 10, 0) > CFG80211_VERSION_CODE
 	if (req->sae_data_len != 0)
 		DBGLOG(REQ, INFO, "[wlan] mtk_cfg80211_auth %p %zu\n",
@@ -1182,7 +1152,11 @@ int mtk_cfg80211_auth(struct wiphy *wiphy, struct net_device *ndev,
 
 #if CFG_SUPPORT_REPLAY_DETECTION
 	/* reset Detect replay information */
-	prDetRplyInfo = &prGlueInfo->prDetRplyInfo;
+	prBssInfo = GET_BSS_INFO_BY_INDEX(prGlueInfo->prAdapter,
+		prGlueInfo->prAdapter->prAisBssInfo->ucBssIndex);
+
+	prDetRplyInfo = &prBssInfo->rDetRplyInfo;
+
 	kalMemZero(prDetRplyInfo, sizeof(struct SEC_DETECT_REPLAY_INFO));
 #endif
 
@@ -1225,8 +1199,12 @@ int mtk_cfg80211_auth(struct wiphy *wiphy, struct net_device *ndev,
 			DBGLOG(REQ, WARN, "Auth Algorithm : %ld with wep key\n",
 			prGlueInfo->rWpaInfo.u4AuthAlg);
 
-		prWepKey = (P_PARAM_WEP_T) wepBuf;
-
+		prWepKey = (P_PARAM_WEP_T) kalMemAlloc(
+			sizeof(P_PARAM_WEP_T), VIR_MEM_TYPE);
+		if (prWepKey == NULL) {
+			DBGLOG(REQ, ERROR, "alloc buffer fail\n");
+			return -ENOMEM;
+		}
 		kalMemZero(prWepKey, sizeof(PARAM_WEP_T));
 		prWepKey->u4Length = OFFSET_OF(PARAM_WEP_T, aucKeyMaterial) +
 			req->key_len;
@@ -1236,7 +1214,8 @@ int mtk_cfg80211_auth(struct wiphy *wiphy, struct net_device *ndev,
 		if (prWepKey->u4KeyLength > MAX_KEY_LEN) {
 			DBGLOG(REQ, WARN, "Too long key length (%u)\n",
 				prWepKey->u4KeyLength);
-			return -EINVAL;
+			ret = -EINVAL;
+			goto freeBuf;
 		}
 		kalMemCopy(prWepKey->aucKeyMaterial, req->key,
 			prWepKey->u4KeyLength);
@@ -1247,7 +1226,8 @@ int mtk_cfg80211_auth(struct wiphy *wiphy, struct net_device *ndev,
 		if (rStatus != WLAN_STATUS_SUCCESS) {
 			DBGLOG(INIT, INFO, "wlanoidSetAddWep fail 0x%x\n",
 				rStatus);
-			return -EFAULT;
+			ret = -EINVAL;
+			goto freeBuf;
 		}
 	}
 	kalMemZero(&rNewSsid, sizeof(PARAM_CONNECT_T));
@@ -1280,7 +1260,8 @@ int mtk_cfg80211_auth(struct wiphy *wiphy, struct net_device *ndev,
 
 		if (rStatus != WLAN_STATUS_SUCCESS) {
 			DBGLOG(REQ, WARN, "set SSID:%x\n", rStatus);
-			return -EINVAL;
+			ret = -EINVAL;
+			goto freeBuf;
 		}
 	} else {
 		rStatus = kalIoctl(prGlueInfo, wlanoidSendAuthAssoc,
@@ -1288,11 +1269,15 @@ int mtk_cfg80211_auth(struct wiphy *wiphy, struct net_device *ndev,
 				FALSE, FALSE, TRUE, &u4BufLen);
 		if (rStatus != WLAN_STATUS_SUCCESS) {
 			DBGLOG(REQ, WARN, "send auth failed:%x\n", rStatus);
-			return -EINVAL;
+			ret = -EINVAL;
+			goto freeBuf;
 		}
 	}
 
-	return 0;
+freeBuf:
+	if (prWepKey)
+		kalMemFree(prWepKey, VIR_MEM_TYPE, sizeof(P_PARAM_WEP_T));
+	return ret;
 }
 #endif
 
@@ -1326,16 +1311,16 @@ int mtk_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev, struct cf
 #endif
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, WARN, "wlan is halt, skip conn.");
 		return WLAN_STATUS_FAILURE;
 	}
-	rst_data.entry_conut++;
-	DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
 #endif
-
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	if (prGlueInfo->u4ReadyFlag == 0) {
 		DBGLOG(INIT, ERROR, "Adapter is not ready\n");
@@ -1344,10 +1329,6 @@ int mtk_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev, struct cf
 
 	if (ndev == NULL) {
 		DBGLOG(REQ, ERROR, "ndev is NULL\n");
-#if CFG_CHIP_RESET_SUPPORT
-		rst_data.entry_conut--;
-		DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
-#endif
 		return -EINVAL;
 	}
 
@@ -1459,11 +1440,6 @@ int mtk_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev, struct cf
 #endif
 		default:
 			DBGLOG(REQ, WARN, "invalid cipher pairwise (%d)\n", sme->crypto.ciphers_pairwise[0]);
-#if CFG_CHIP_RESET_SUPPORT
-			rst_data.entry_conut--;
-			DBGLOG(INIT, TRACE, "entry_conut = %d\n",
-						rst_data.entry_conut);
-#endif
 			return -EINVAL;
 		}
 	}
@@ -1500,11 +1476,6 @@ int mtk_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev, struct cf
 #endif
 		default:
 			DBGLOG(REQ, WARN, "invalid cipher group (%d)\n", sme->crypto.cipher_group);
-#if CFG_CHIP_RESET_SUPPORT
-			rst_data.entry_conut--;
-			DBGLOG(INIT, TRACE, "entry_conut = %d\n",
-						rst_data.entry_conut);
-#endif
 			return -EINVAL;
 		}
 	}
@@ -1525,11 +1496,6 @@ int mtk_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev, struct cf
 				break;
 			default:
 				DBGLOG(REQ, WARN, "invalid Akm Suite (%d)\n", sme->crypto.akm_suites[0]);
-#if CFG_CHIP_RESET_SUPPORT
-				rst_data.entry_conut--;
-				DBGLOG(INIT, TRACE, "entry_conut = %d\n",
-							rst_data.entry_conut);
-#endif
 				return -EINVAL;
 			}
 		} else if (prGlueInfo->rWpaInfo.u4WpaVersion == IW_AUTH_WPA_VERSION_WPA2) {
@@ -1587,11 +1553,6 @@ int mtk_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev, struct cf
 
 			default:
 				DBGLOG(REQ, WARN, "invalid Akm Suite (%d)\n", sme->crypto.akm_suites[0]);
-#if CFG_CHIP_RESET_SUPPORT
-				rst_data.entry_conut--;
-				DBGLOG(INIT, TRACE, "entry_conut = %d\n",
-							rst_data.entry_conut);
-#endif
 				return -EINVAL;
 			}
 		}
@@ -1784,8 +1745,14 @@ int mtk_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev, struct cf
 		DBGLOG(REQ, WARN, "set encryption mode error:0x%x\n", rStatus);
 
 	if (sme->key_len != 0 && prGlueInfo->rWpaInfo.u4WpaVersion == IW_AUTH_WPA_VERSION_DISABLED) {
+		P_PARAM_WEP_T prWepKey;
 		/* NL80211 only set the Tx wep key while connect, the max 4 wep key set prior via add key cmd */
-		P_PARAM_WEP_T prWepKey = (P_PARAM_WEP_T) wepBuf;
+		prWepKey = (P_PARAM_WEP_T) kalMemAlloc(
+			sizeof(P_PARAM_WEP_T), VIR_MEM_TYPE);
+		if (prWepKey == NULL) {
+			DBGLOG(REQ, ERROR, "alloc buffer fail\n");
+			return -ENOMEM;
+		}
 
 		kalMemZero(prWepKey, sizeof(PARAM_WEP_T));
 		prWepKey->u4Length = OFFSET_OF(PARAM_WEP_T, aucKeyMaterial) + sme->key_len;
@@ -1795,12 +1762,6 @@ int mtk_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev, struct cf
 		if (prWepKey->u4KeyLength > MAX_KEY_LEN) {
 			DBGLOG(REQ, WARN, "Too long key length (%u)\n",
 				prWepKey->u4KeyLength);
-
-#if CFG_CHIP_RESET_SUPPORT
-			rst_data.entry_conut--;
-			DBGLOG(INIT, TRACE, "entry_conut = %d\n",
-					rst_data.entry_conut);
-#endif
 			return -EINVAL;
 		}
 		kalMemCopy(prWepKey->aucKeyMaterial, sme->key, prWepKey->u4KeyLength);
@@ -1811,13 +1772,7 @@ int mtk_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev, struct cf
 		if (rStatus != WLAN_STATUS_SUCCESS) {
 			DBGLOG(INIT, INFO, "wlanoidSetAddWep fail 0x%x\n",
 				rStatus);
-
-#if CFG_CHIP_RESET_SUPPORT
-			rst_data.entry_conut--;
-			DBGLOG(INIT, TRACE, "entry_conut = %d\n",
-					rst_data.entry_conut);
-#endif
-			return -EFAULT;
+			return -EINVAL;
 		}
 	}
 
@@ -1830,10 +1785,6 @@ int mtk_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev, struct cf
 
 	if (rStatus != WLAN_STATUS_SUCCESS) {
 		DBGLOG(REQ, WARN, "set SSID:%x\n", rStatus);
-#if CFG_CHIP_RESET_SUPPORT
-		rst_data.entry_conut--;
-		DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
-#endif
 		return -EINVAL;
 	}
 #if 0
@@ -1863,14 +1814,9 @@ int mtk_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev, struct cf
 				   (PVOID)&rNewSsid, sizeof(PARAM_SSID_T), FALSE, FALSE, TRUE, FALSE, &u4BufLen);
 
 		if (rStatus != WLAN_STATUS_SUCCESS) {
-			DBGLOG(REQ, WARN, "set SSID:%lx\n", rStatus);
 			return -EINVAL;
 		}
 	}
-#endif
-#if CFG_CHIP_RESET_SUPPORT
-	rst_data.entry_conut--;
-	DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
 #endif
 	return 0;
 }
@@ -1893,7 +1839,7 @@ int mtk_cfg80211_disconnect(struct wiphy *wiphy, struct net_device *ndev, u16 re
 	UINT_32 u4BufLen;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting, mtk_cfg80211_disconnect do nothing\n");
 		return -EINVAL;
@@ -1902,6 +1848,9 @@ int mtk_cfg80211_disconnect(struct wiphy *wiphy, struct net_device *ndev, u16 re
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	if (atomic_read(&prGlueInfo->cfgSuspend)) {
 		DBGLOG(REQ, WARN, "In suspend block cfg80211 ops\n");
@@ -1941,8 +1890,11 @@ int mtk_cfg80211_deauth(struct wiphy *wiphy, struct net_device *ndev,
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
 
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
+
 #if CFG_CHIP_RESET_SUPPORT
-		if (checkResetState()) {
+		if (kalIsResetting()) {
 			DBGLOG(REQ, ERROR,
 				"chip resetting, mtk_cfg80211_change_iface do nothing\n");
 			return -EINVAL;
@@ -1970,6 +1922,10 @@ int mtk_cfg80211_disassoc(struct wiphy *wiphy, struct net_device *ndev,
 	ASSERT(wiphy);
 
 	prGlueInfo = *((P_GLUE_INFO_T *) wiphy_priv(wiphy));
+	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	DBGLOG(REQ, TRACE, "mtk_cfg80211_disassoc.\n");
 
@@ -1999,7 +1955,7 @@ int mtk_cfg80211_join_ibss(struct wiphy *wiphy, struct net_device *ndev, struct 
 	WLAN_STATUS rStatus;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting, mtk_cfg80211_join_ibss do nothing\n");
 		return -EINVAL;
@@ -2008,6 +1964,9 @@ int mtk_cfg80211_join_ibss(struct wiphy *wiphy, struct net_device *ndev, struct 
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	/* set channel */
 	if (params->channel_fixed) {
@@ -2057,7 +2016,7 @@ int mtk_cfg80211_leave_ibss(struct wiphy *wiphy, struct net_device *ndev)
 	UINT_32 u4BufLen;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting, mtk_cfg80211_leave_ibss do nothing\n");
 		return -EINVAL;
@@ -2066,6 +2025,9 @@ int mtk_cfg80211_leave_ibss(struct wiphy *wiphy, struct net_device *ndev)
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	rStatus = kalIoctl(prGlueInfo, wlanoidSetDisassociate, NULL, 0, FALSE, FALSE, TRUE, &u4BufLen);
 
@@ -2099,6 +2061,9 @@ int mtk_cfg80211_set_power_mgmt(struct wiphy *wiphy, struct net_device *ndev, bo
 	if (!prGlueInfo)
 		return -EFAULT;
 
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
+
 	if (!prGlueInfo->prAdapter->prAisBssInfo)
 		return -EFAULT;
 
@@ -2108,14 +2073,11 @@ int mtk_cfg80211_set_power_mgmt(struct wiphy *wiphy, struct net_device *ndev, bo
 	}
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(INIT, WARN, "wlan is halt, skip set pwr mgmt\n");
 		return WLAN_STATUS_FAILURE;
 	}
-	rst_data.entry_conut++;
-	DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
 #endif
-
 	if (enabled) {
 		if (timeout == -1)
 			rPowerMode.ePowerMode = Param_PowerModeFast_PSP;
@@ -2130,10 +2092,6 @@ int mtk_cfg80211_set_power_mgmt(struct wiphy *wiphy, struct net_device *ndev, bo
 	rStatus = kalIoctl(prGlueInfo,
 			   wlanoidSet802dot11PowerSaveProfile,
 			   &rPowerMode, sizeof(PARAM_POWER_MODE_T), FALSE, FALSE, TRUE, &u4BufLen);
-#if CFG_CHIP_RESET_SUPPORT
-	rst_data.entry_conut--;
-	DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
-#endif
 	if (rStatus != WLAN_STATUS_SUCCESS) {
 		DBGLOG(REQ, WARN, "set_power_mgmt error:0x%x\n", rStatus);
 		return -EFAULT;
@@ -2161,7 +2119,7 @@ int mtk_cfg80211_set_pmksa(struct wiphy *wiphy, struct net_device *ndev, struct 
 	P_PARAM_PMKID_T prPmkid;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting, mtk_cfg80211_set_pmksa do nothing\n");
 		return -EINVAL;
@@ -2170,6 +2128,9 @@ int mtk_cfg80211_set_pmksa(struct wiphy *wiphy, struct net_device *ndev, struct 
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	prPmkid = (P_PARAM_PMKID_T) kalMemAlloc(8 + sizeof(PARAM_BSSID_INFO_T), VIR_MEM_TYPE);
 	if (!prPmkid) {
@@ -2229,6 +2190,9 @@ int mtk_cfg80211_flush_pmksa(struct wiphy *wiphy, struct net_device *ndev)
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
 
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
+
 	prPmkid = (P_PARAM_PMKID_T) kalMemAlloc(8, VIR_MEM_TYPE);
 	if (!prPmkid) {
 		DBGLOG(INIT, INFO, "Can not alloc memory for IW_PMKSA_FLUSH\n");
@@ -2236,14 +2200,12 @@ int mtk_cfg80211_flush_pmksa(struct wiphy *wiphy, struct net_device *ndev)
 	}
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(INIT, WARN, "wlan is halt, skip flush pmksa\n");
+		kalMemFree(prPmkid, VIR_MEM_TYPE, 8);
 		return WLAN_STATUS_FAILURE;
 	}
-	rst_data.entry_conut++;
-	DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
 #endif
-
 	prPmkid->u4Length = 8;
 	prPmkid->u4BSSIDInfoCount = 0;
 
@@ -2253,10 +2215,6 @@ int mtk_cfg80211_flush_pmksa(struct wiphy *wiphy, struct net_device *ndev)
 		DBGLOG(INIT, INFO, "flush pmkid error:0x%x\n", rStatus);
 	kalMemFree(prPmkid, VIR_MEM_TYPE, 8);
 
-#if CFG_CHIP_RESET_SUPPORT
-	rst_data.entry_conut--;
-	DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
-#endif
 	return 0;
 }
 
@@ -2279,7 +2237,7 @@ int mtk_cfg80211_set_rekey_data(struct wiphy *wiphy, struct net_device *dev, str
 	INT_32 i4Rslt = -EINVAL;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_set_rekey_data\n");
 		return -EINVAL;
 	}
@@ -2287,6 +2245,9 @@ int mtk_cfg80211_set_rekey_data(struct wiphy *wiphy, struct net_device *dev, str
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	/* if disable offload, we store key data here, and enable rekey offload when enter wow */
 	if (!prGlueInfo->prAdapter->rWifiVar.ucEapolOffload) {
@@ -2377,19 +2338,20 @@ void mtk_cfg80211_mgmt_frame_register(IN struct wiphy *wiphy,
 	P_GLUE_INFO_T prGlueInfo = (P_GLUE_INFO_T) NULL;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(INIT, WARN, "wlan is halt, skip mgmt reg.");
 		return;
 	}
-	rst_data.entry_conut++;
-	DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
 #endif
-
 	do {
 
 		DBGLOG(INIT, TRACE, "mtk_cfg80211_mgmt_frame_register\n");
 
 		prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
+		ASSERT(prGlueInfo);
+
+		if (!wlanGetHifState(prGlueInfo))
+			return;
 
 		switch (frame_type) {
 		case MAC_FRAME_PROBE_REQ:
@@ -2447,11 +2409,6 @@ void mtk_cfg80211_mgmt_frame_register(IN struct wiphy *wiphy,
 
 	} while (FALSE);
 
-#if CFG_CHIP_RESET_SUPPORT
-	rst_data.entry_conut--;
-	DBGLOG(INIT, TRACE, "entry_conut = %d\n", rst_data.entry_conut);
-#endif
-
 }				/* mtk_cfg80211_mgmt_frame_register */
 
 /*----------------------------------------------------------------------------*/
@@ -2474,7 +2431,7 @@ int mtk_cfg80211_remain_on_channel(struct wiphy *wiphy,
 	P_MSG_REMAIN_ON_CHANNEL_T prMsgChnlReq = (P_MSG_REMAIN_ON_CHANNEL_T) NULL;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting, mtk_cfg80211_remain_on_channel do nothing\n");
 		return -EINVAL;
@@ -2555,7 +2512,7 @@ int mtk_cfg80211_cancel_remain_on_channel(struct wiphy *wiphy, struct wireless_d
 	P_MSG_CANCEL_REMAIN_ON_CHANNEL_T prMsgChnlAbort = (P_MSG_CANCEL_REMAIN_ON_CHANNEL_T) NULL;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting, mtk_cfg80211_cancel_remain_on_channel do nothing\n");
 		return -EINVAL;
@@ -2571,6 +2528,9 @@ int mtk_cfg80211_cancel_remain_on_channel(struct wiphy *wiphy, struct wireless_d
 
 		prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 		ASSERT(prGlueInfo);
+
+		if (!wlanGetHifState(prGlueInfo))
+			break;
 
 		prMsgChnlAbort =
 		    cnmMemAlloc(prGlueInfo->prAdapter, RAM_TYPE_MSG, sizeof(MSG_CANCEL_REMAIN_ON_CHANNEL_T));
@@ -2615,7 +2575,7 @@ int mtk_cfg80211_mgmt_tx(struct wiphy *wiphy,
 	PUINT_8 pucFrameBuf = (PUINT_8) NULL;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting, mtk_cfg80211_mgmt_tx do nothing\n");
 		return -EINVAL;
@@ -2628,6 +2588,9 @@ int mtk_cfg80211_mgmt_tx(struct wiphy *wiphy,
 
 		prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 		ASSERT(prGlueInfo);
+
+		if (!wlanGetHifState(prGlueInfo))
+			return -EINVAL;
 
 		*cookie = prGlueInfo->u8Cookie++;
 
@@ -2688,7 +2651,7 @@ int mtk_cfg80211_mgmt_tx(struct wiphy *wiphy,
 	PUINT_8 pucFrameBuf = (PUINT_8) NULL;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting, mtk_cfg80211_mgmt_tx do nothing\n");
 		return -EINVAL;
@@ -2706,6 +2669,9 @@ int mtk_cfg80211_mgmt_tx(struct wiphy *wiphy,
 
 		prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 		ASSERT(prGlueInfo);
+
+		if (!wlanGetHifState(prGlueInfo))
+			return -EINVAL;
 
 		*cookie = prGlueInfo->u8Cookie++;
 
@@ -2772,7 +2738,7 @@ int mtk_cfg80211_mgmt_tx_cancel_wait(struct wiphy *wiphy, struct wireless_dev *w
 	ASSERT(prGlueInfo);
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting,mtk_cfg80211_mgmt_tx_cancel_wait do nothing\n");
 		return -EINVAL;
@@ -2802,7 +2768,7 @@ int mtk_cfg80211_testmode_hs20_cmd(IN struct wiphy *wiphy, IN void *data, IN int
 	ASSERT(wiphy);
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting, mtk_cfg80211_testmode_hs20_cmd do nothing\n");
 		return -EINVAL;
@@ -2810,6 +2776,10 @@ int mtk_cfg80211_testmode_hs20_cmd(IN struct wiphy *wiphy, IN void *data, IN int
 #endif
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
+	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 #if 1
 	DBGLOG(INIT, INFO, "--> %s()\n", __func__);
@@ -2867,32 +2837,50 @@ int mtk_cfg80211_testmode_set_key_ext(IN struct wiphy *wiphy, IN void *data, IN 
 	UINT_32 u4BufLen = 0;
 	const UINT_8 aucBCAddr[] = BC_MAC_ADDR;
 
-	P_PARAM_KEY_T prWpiKey = (P_PARAM_KEY_T) keyStructBuf;
-
+	P_PARAM_KEY_T prWpiKey = NULL;
+	uint8_t *keyStructBuf = NULL;
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting, mtk_cfg80211_testmode_set_key_ext do nothing\n");
 		return -EINVAL;
 	}
 #endif
 
-	memset(keyStructBuf, 0, sizeof(keyStructBuf));
-
 	ASSERT(wiphy);
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
+	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 #if 1
 	DBGLOG(INIT, INFO, "--> %s()\n", __func__);
 #endif
 
+	if (len < sizeof(NL80211_DRIVER_SET_KEY_EXTS)) {
+		DBGLOG(REQ, ERROR, "len [%d] is invalid!\n", len);
+		fgIsValid = -EINVAL;
+		goto freeBuf;
+	}
 	if (data == NULL || len == 0) {
 		DBGLOG(INIT, TRACE, "%s data or len is invalid\n", __func__);
-		return -EINVAL;
+		fgIsValid = -EINVAL;
+		goto freeBuf;
 	}
 
 	prParams = (P_NL80211_DRIVER_SET_KEY_EXTS) data;
+
+	keyStructBuf = kalMemAlloc(KEY_BUF_SIZE, VIR_MEM_TYPE);
+	if (keyStructBuf == NULL) {
+		DBGLOG(REQ, ERROR, "alloc key buffer fail\n");
+		fgIsValid = -ENOMEM;
+		goto freeBuf;
+	}
+	memset(keyStructBuf, 0, KEY_BUF_SIZE);
+	prWpiKey = (P_PARAM_KEY_T) keyStructBuf;
+
 	prIWEncExt = (struct iw_encode_exts *)&prParams->ext;
 
 	if (prIWEncExt->alg == IW_ENCODE_ALG_SMS4) {
@@ -2901,12 +2889,14 @@ int mtk_cfg80211_testmode_set_key_ext(IN struct wiphy *wiphy, IN void *data, IN 
 		prWpiKey->u4KeyIndex--;
 		if (prWpiKey->u4KeyIndex > 1) {
 			/* key id is out of range */
-			return -EINVAL;
+			fgIsValid = -EINVAL;
+			goto freeBuf;
 		}
 
 		if (prIWEncExt->key_len != 32) {
 			/* key length not valid */
-			return -EINVAL;
+			fgIsValid = -EINVAL;
+			goto freeBuf;
 		}
 		prWpiKey->u4KeyLength = prIWEncExt->key_len;
 
@@ -2939,6 +2929,10 @@ int mtk_cfg80211_testmode_set_key_ext(IN struct wiphy *wiphy, IN void *data, IN 
 		}
 
 	}
+
+freeBuf:
+	if (keyStructBuf)
+		kalMemFree(keyStructBuf, VIR_MEM_TYPE, KEY_BUF_SIZE);
 	return fgIsValid;
 }
 #endif
@@ -2958,7 +2952,7 @@ mtk_cfg80211_testmode_get_sta_statistics(IN struct wiphy *wiphy, IN void *data, 
 	struct sk_buff *skb;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 		"chip resetting, mtk_cfg80211_testmode_get_sta_statistics do nothing\n");
 	}
@@ -3164,15 +3158,24 @@ int mtk_cfg80211_testmode_sw_cmd(IN struct wiphy *wiphy, IN void *data, IN int l
 	ASSERT(wiphy);
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState())
+	if (kalIsResetting())
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_testmode_sw_cmd\n");
 #endif
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
+	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 #if 1
 	DBGLOG(INIT, INFO, "--> %s()\n", __func__);
 #endif
+
+	if (len < sizeof(NL80211_DRIVER_SW_CMD_PARAMS)) {
+		DBGLOG(REQ, ERROR, "len [%d] is invalid!\n", len);
+		return -EINVAL;
+	}
 
 	if (data && len)
 		prParams = (P_NL80211_DRIVER_SW_CMD_PARAMS) data;
@@ -3201,10 +3204,14 @@ static int mtk_wlan_cfg_testmode_cmd(struct wiphy *wiphy, void *data, int len)
 	DBGLOG(INIT, INFO, "-->%s()\n", __func__);
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState())
+	if (kalIsResetting())
 		DBGLOG(REQ, ERROR, "mtk_wlan_cfg_testmode_cmd\n");
 #endif
 
+	if (len < sizeof(NL80211_DRIVER_TEST_MODE_PARAMS)) {
+		DBGLOG(REQ, ERROR, "len [%d] is invalid!\n", len);
+		return -EINVAL;
+	}
 	if (!data || !len) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_testmode_cmd null data\n");
 		return -EINVAL;
@@ -3216,6 +3223,11 @@ static int mtk_wlan_cfg_testmode_cmd(struct wiphy *wiphy, void *data, int len)
 	}
 
 	prGlueInfo = (P_GLUE_INFO_T)wiphy_priv(wiphy);
+	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
+
 	prParams = (P_NL80211_DRIVER_TEST_MODE_PARAMS)data;
 
 	/* Clear the version byte */
@@ -3259,7 +3271,7 @@ int mtk_cfg80211_testmode_cmd(struct wiphy *wiphy, struct wireless_dev *wdev,
 	ASSERT(wdev);
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState())
+	if (kalIsResetting())
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_testmode_cmd\n");
 #endif
 
@@ -3269,7 +3281,7 @@ int mtk_cfg80211_testmode_cmd(struct wiphy *wiphy, struct wireless_dev *wdev,
 int mtk_cfg80211_testmode_cmd(struct wiphy *wiphy, void *data, int len)
 {
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState())
+	if (kalIsResetting())
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_testmode_cmd\n");
 #endif
 
@@ -3292,11 +3304,15 @@ mtk_cfg80211_sched_scan_start(IN struct wiphy *wiphy,
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
+
 	prAdapter = prGlueInfo->prAdapter;
 	prSchedScanRequest = &prAdapter->rSchedScanRequest;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting, mtk_cfg80211_sched_scan_start do nothing\n");
 		return -EINVAL;
@@ -3486,8 +3502,11 @@ int mtk_cfg80211_sched_scan_stop(IN struct wiphy *wiphy, IN struct net_device *n
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
 
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
+
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting, mtk_cfg80211_sched_scan_stop do nothing\n");
 		return -EINVAL;
@@ -3545,6 +3564,7 @@ int mtk_cfg80211_assoc(struct wiphy *wiphy, struct net_device *ndev, struct cfg8
 	PUINT_8 pucIEStart = NULL;
 	UINT_8 fgCarryWPSIE = FALSE;
 	RSN_INFO_T rRsnInfo;
+	uint8_t fgCarryRsnxe = FALSE;
 
 	rRsnInfo.u2PmkidCnt = 0;
 	kalMemZero(rRsnInfo.aucPmkidList, sizeof(rRsnInfo.aucPmkidList));
@@ -3552,7 +3572,7 @@ int mtk_cfg80211_assoc(struct wiphy *wiphy, struct net_device *ndev, struct cfg8
 
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR,
 			"chip resetting, mtk_cfg80211_assoc do nothing\n");
 		return -EINVAL;
@@ -3561,6 +3581,9 @@ int mtk_cfg80211_assoc(struct wiphy *wiphy, struct net_device *ndev, struct cfg8
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 #if CFG_SUPPORT_CFG80211_AUTH
 	prConnSettings = &prGlueInfo->prAdapter->rWifiVar.rConnSettings;
@@ -3998,6 +4021,30 @@ int mtk_cfg80211_assoc(struct wiphy *wiphy, struct net_device *ndev, struct cfg8
 				0, sizeof(struct OWE_INFO_T));
 		}
 #endif
+		/* Gen RSNXE */
+		if (wextSrchDesiredWPAIE(pucIEStart,
+			req->ie_len, 0xf4, (uint8_t **) &prDesiredIE)) {
+			uint16_t u2Length = (*(prDesiredIE+1)+2);
+
+			if (u2Length <= sizeof(prConnSettings->rRsnXE)) {
+				kalMemCopy(
+					&prConnSettings->rRsnXE,
+					prDesiredIE, u2Length);
+				fgCarryRsnxe = TRUE;
+				DBGLOG(REQ, INFO,
+					"DUMP RSNXE, EID %x length %x\n",
+					*prDesiredIE, u2Length);
+				DBGLOG_MEM8(REQ, INFO,
+					&prConnSettings->rRsnXE,
+					u2Length);
+			} else {
+				DBGLOG(RSN, ERROR, "RSNXE length exceeds 2\n");
+			}
+		}
+		if (fgCarryRsnxe == FALSE) {
+			kalMemSet(&prConnSettings->rRsnXE,
+				0, sizeof(struct RSNXE));
+		}
 #endif
 	}
 
@@ -4081,12 +4128,15 @@ int mtk_cfg80211_testmode_get_scan_done(IN struct wiphy *wiphy, IN void *data, I
 	struct sk_buff *skb = NULL;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState())
+	if (kalIsResetting())
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_testmode_get_scan_done\n");
 #endif
 
 	ASSERT(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	skb = cfg80211_testmode_alloc_reply_skb(wiphy, sizeof(UINT_32));
 
@@ -4163,7 +4213,7 @@ mtk_cfg80211_change_station(struct wiphy *wiphy, struct net_device *ndev, const 
 	P_BSS_INFO_T prAisBssInfo;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_change_station\n");
 		return -EINVAL;
 	}
@@ -4171,6 +4221,9 @@ mtk_cfg80211_change_station(struct wiphy *wiphy, struct net_device *ndev, const 
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	/* make up command */
 
@@ -4273,7 +4326,7 @@ mtk_cfg80211_change_station(struct wiphy *wiphy, struct net_device *ndev, u8 *ma
 	P_BSS_INFO_T prAisBssInfo;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_change_station\n");
 		return -EINVAL;
 	}
@@ -4281,6 +4334,9 @@ mtk_cfg80211_change_station(struct wiphy *wiphy, struct net_device *ndev, u8 *ma
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	/* make up command */
 
@@ -4392,7 +4448,7 @@ int mtk_cfg80211_add_station(struct wiphy *wiphy, struct net_device *ndev,
 	UINT_32 u4BufLen;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_add_station\n");
 		return -EINVAL;
 	}
@@ -4400,6 +4456,9 @@ int mtk_cfg80211_add_station(struct wiphy *wiphy, struct net_device *ndev,
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	/* make up command */
 
@@ -4435,7 +4494,7 @@ int mtk_cfg80211_add_station(struct wiphy *wiphy, struct net_device *ndev, u8 *m
 	UINT_32 u4BufLen;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_add_station\n");
 		return -EINVAL;
 	}
@@ -4443,6 +4502,9 @@ int mtk_cfg80211_add_station(struct wiphy *wiphy, struct net_device *ndev, u8 *m
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	/* make up command */
 
@@ -4496,7 +4558,7 @@ int mtk_cfg80211_del_station(struct wiphy *wiphy, struct net_device *ndev, struc
 	u8 deleteMac[MAC_ADDR_LEN];
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_del_station\n");
 		return -EINVAL;
 	}
@@ -4504,6 +4566,9 @@ int mtk_cfg80211_del_station(struct wiphy *wiphy, struct net_device *ndev, struc
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	prAdapter = prGlueInfo->prAdapter;
 
@@ -4532,7 +4597,7 @@ int mtk_cfg80211_del_station(struct wiphy *wiphy, struct net_device *ndev, const
 	u8 deleteMac[MAC_ADDR_LEN];
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_del_station\n");
 		return -EINVAL;
 	}
@@ -4540,6 +4605,9 @@ int mtk_cfg80211_del_station(struct wiphy *wiphy, struct net_device *ndev, const
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	prAdapter = prGlueInfo->prAdapter;
 
@@ -4568,7 +4636,7 @@ int mtk_cfg80211_del_station(struct wiphy *wiphy, struct net_device *ndev, u8 *m
 	STA_RECORD_T *prStaRec;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_del_station\n");
 		return -EINVAL;
 	}
@@ -4576,6 +4644,9 @@ int mtk_cfg80211_del_station(struct wiphy *wiphy, struct net_device *ndev, u8 *m
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
 
 	prAdapter = prGlueInfo->prAdapter;
 
@@ -4613,7 +4684,7 @@ mtk_cfg80211_tdls_mgmt(struct wiphy *wiphy, struct net_device *dev,
 	UINT_32 u4BufLen;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_tdls_mgmt\n");
 		return -EINVAL;
 	}
@@ -4626,6 +4697,9 @@ mtk_cfg80211_tdls_mgmt(struct wiphy *wiphy, struct net_device *dev,
 	/* init */
 	prGlueInfo = (GLUE_INFO_T *) wiphy_priv(wiphy);
 	if (prGlueInfo == NULL)
+		return -EINVAL;
+
+	if (!wlanGetHifState(prGlueInfo))
 		return -EINVAL;
 
 	kalMemZero(&rCmdMgt, sizeof(rCmdMgt));
@@ -4660,7 +4734,7 @@ mtk_cfg80211_tdls_mgmt(struct wiphy *wiphy, struct net_device *dev,
 	UINT_32 u4BufLen;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_tdls_mgmt\n");
 		return -EINVAL;
 	}
@@ -4675,12 +4749,21 @@ mtk_cfg80211_tdls_mgmt(struct wiphy *wiphy, struct net_device *dev,
 	if (prGlueInfo == NULL)
 		return -EINVAL;
 
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
+
 	kalMemZero(&rCmdMgt, sizeof(rCmdMgt));
 	rCmdMgt.u2StatusCode = status_code;
 	rCmdMgt.u4SecBufLen = len;
 	rCmdMgt.ucDialogToken = dialog_token;
 	rCmdMgt.ucActionCode = action_code;
 	kalMemCopy(&(rCmdMgt.aucPeer), peer, 6);
+
+	if  (len > TDLS_SEC_BUF_LENGTH) {
+		DBGLOG(REQ, WARN, "%s:len > TDLS_SEC_BUF_LENGTH\n", __func__);
+		return -EINVAL;
+	}
+
 	kalMemCopy(&(rCmdMgt.aucSecBuf), buf, len);
 
 	kalIoctl(prGlueInfo, TdlsexLinkMgt, &rCmdMgt, sizeof(TDLS_CMD_LINK_MGT_T), FALSE, FALSE, FALSE,
@@ -4701,7 +4784,7 @@ mtk_cfg80211_tdls_mgmt(struct wiphy *wiphy, struct net_device *dev,
 	UINT_32 u4BufLen;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_tdls_mgmt\n");
 		return -EINVAL;
 	}
@@ -4716,17 +4799,23 @@ mtk_cfg80211_tdls_mgmt(struct wiphy *wiphy, struct net_device *dev,
 	if (prGlueInfo == NULL)
 		return -EINVAL;
 
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
+
 	kalMemZero(&rCmdMgt, sizeof(rCmdMgt));
 	rCmdMgt.u2StatusCode = status_code;
 	rCmdMgt.u4SecBufLen = len;
 	rCmdMgt.ucDialogToken = dialog_token;
 	rCmdMgt.ucActionCode = action_code;
 	kalMemCopy(&(rCmdMgt.aucPeer), peer, 6);
-	if	(len > TDLS_SEC_BUF_LENGTH)
-		DBGLOG(REQ, WARN, "In mtk_cfg80211_tdls_mgmt , len > TDLS_SEC_BUF_LENGTH, please check\n");
-	else
-		kalMemCopy(&(rCmdMgt.aucSecBuf), buf, len);
 
+	if (len > TDLS_SEC_BUF_LENGTH) {
+		DBGLOG(REQ, WARN,
+		       "In mtk_cfg80211_tdls_mgmt , len > TDLS_SEC_BUF_LENGTH, please check\n");
+		return -EINVAL;
+	}
+
+	kalMemCopy(&(rCmdMgt.aucSecBuf), buf, len);
 	kalIoctl(prGlueInfo, TdlsexLinkMgt, &rCmdMgt, sizeof(TDLS_CMD_LINK_MGT_T), FALSE, FALSE, FALSE,
 		 /* FALSE,    //6628 -> 6630  fgIsP2pOid-> x */
 		 &u4BufLen);
@@ -4758,7 +4847,7 @@ int mtk_cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 	TDLS_CMD_LINK_OPER_T rCmdOper;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_tdls_oper\n");
 		return -EINVAL;
 	}
@@ -4766,6 +4855,10 @@ int mtk_cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
+
 	prAdapter = prGlueInfo->prAdapter;
 
 	kalMemZero(&rCmdOper, sizeof(rCmdOper));
@@ -4777,7 +4870,7 @@ int mtk_cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 		/* [ALPS03767042] wlan: fix TDLS 5.3 test issue
 		 * [Detail]
 		 * Timing issue of data direct path design
-		 *   - Data sent directly through HW (new design)
+		 *   - Data sent directly through HW 
 		 *   - Command sent to FW to process (original design)
 		 * Issue occurs while
 		 *   - Tear down packet sent by wlanHardStartXmit(),
@@ -4810,7 +4903,7 @@ int mtk_cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev, u8 *peer
 	TDLS_CMD_LINK_OPER_T rCmdOper;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_tdls_oper\n");
 		return -EINVAL;
 	}
@@ -4818,6 +4911,10 @@ int mtk_cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev, u8 *peer
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (!wlanGetHifState(prGlueInfo))
+		return -EINVAL;
+
 	prAdapter = prGlueInfo->prAdapter;
 
 	kalMemZero(&rCmdOper, sizeof(rCmdOper));
@@ -4829,7 +4926,7 @@ int mtk_cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev, u8 *peer
 		/* [ALPS03767042] wlan: fix TDLS 5.3 test issue
 		 * [Detail]
 		 * Timing issue of data direct path design
-		 *   - Data sent directly through HW (new design)
+		 *   - Data sent directly through HW 
 		 *   - Command sent to FW to process (original design)
 		 * Issue occurs while
 		 *   - Tear down packet sent by wlanHardStartXmit(),
@@ -4973,6 +5070,11 @@ mtk_reg_notify(IN struct wiphy *pWiphy,
 		return;
 	}
 
+	if (atomic_read(&prGlueInfo->cfgSuspend)) {
+		DBGLOG(RLM, EVENT, "Suspend Trigger Country Reg Ignore\n");
+		return;
+        }
+
 	pWiphy = gprWdev->wiphy;
 
 	/*
@@ -5004,6 +5106,16 @@ mtk_reg_notify(IN struct wiphy *pWiphy,
 		}
 	}
 
+	DBGLOG(RLM, EVENT,
+		"alpha2=%s, initiator=%x, intersect=%d, regulatory_flags[0x%x]\n",
+		pRequest->alpha2, pRequest->initiator,
+		pRequest->intersect,
+#if KERNEL_VERSION(3, 14, 0) > CFG80211_VERSION_CODE
+		pWiphy->flags
+#else
+		pWiphy->regulatory_flags
+#endif
+	);
 
 	/*
 	 * Ignore the CORE's WW setting when using local data base of regulatory rules
@@ -5015,13 +5127,6 @@ mtk_reg_notify(IN struct wiphy *pWiphy,
 		(pWiphy->regulatory_flags & REGULATORY_CUSTOM_REG))
 #endif
 		return;/*Ignore the CORE's WW setting*/
-
-
-	/*
-	 * State machine transition
-	 */
-	DBGLOG(RLM, INFO, "request->alpha2=%s, initiator=%x, intersect=%d\n",
-			pRequest->alpha2, pRequest->initiator, pRequest->intersect);
 
 	old_state = rlmDomainGetCtrlState();
 	regd_state_machine(pRequest);
@@ -5110,6 +5215,12 @@ DOMAIN_SEND_CMD:
 	if (!regd_is_single_sku_en())
 		return; /*no need to send information to firmware due to firmware is not supported*/
 
+	if (test_bit(SUSPEND_FLAG_CLEAR_WHEN_RESUME,
+	    &prAdapter->ulSuspendFlag)) {
+		DBGLOG(RLM, STATE,
+			"[%s] Suspend is ongoing\n", __func__);
+		return;
+	}
 
 	/*
 	 * Send commands to firmware
@@ -5130,7 +5241,7 @@ cfg80211_regd_set_wiphy(IN struct wiphy *prWiphy)
 #endif
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "cfg80211_regd_set_wiphy\n");
 		return;
 	}
@@ -5212,11 +5323,9 @@ int mtk_cfg80211_suspend(struct wiphy *wiphy, struct cfg80211_wowlan *wow)
 {
 	P_GLUE_INFO_T prGlueInfo;
 	ADAPTER_T *prAdapter;
-	UINT_32 u4BufLen;
-	WLAN_STATUS rStatus = WLAN_STATUS_SUCCESS;
 
 #if CFG_CHIP_RESET_SUPPORT
-	if (checkResetState()) {
+	if (kalIsResetting()) {
 		DBGLOG(REQ, ERROR, "mtk_cfg80211_suspend\n");
 		return -EINVAL;
 	}
@@ -5230,39 +5339,30 @@ int mtk_cfg80211_suspend(struct wiphy *wiphy, struct cfg80211_wowlan *wow)
 
 	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
 
-	atomic_set(&prGlueInfo->cfgSuspend, 1);
-	DBGLOG(REQ, EVENT, "cfg80211 ops block\n");
+	if (prGlueInfo && prGlueInfo->prAdapter) {
+		atomic_set(&prGlueInfo->cfgSuspend, 1);
+		DBGLOG(REQ, EVENT, "cfg80211 ops block\n");
 
-	prAdapter = prGlueInfo->prAdapter;
+		prAdapter = prGlueInfo->prAdapter;
 
-	DBGLOG(REQ, WARN, "Wow:%d, WowEnable:%d, AdvPws:%d, state:%d\n",
-		prGlueInfo->prAdapter->rWifiVar.ucWow, prGlueInfo->prAdapter->rWowCtrl.fgWowEnable,
-		prGlueInfo->prAdapter->rWifiVar.ucAdvPws,
-		kalGetMediaStateIndicated(prGlueInfo));
+#if !CFG_ENABLE_WAKE_LOCK
+		/* AIS flow: disassociation if wow_en=0 */
+		/* cancel scan report done event */
+		aisPreSuspendFlow(prGlueInfo);
 
-	/* 1) wifi cfg "Wow" must be true,
-	 * 2) wow is disable
-	 * 3) AdvPws is disable
-	 * 4) WIfI connected => execute link down flow
-	 */
-	if (prGlueInfo->prAdapter->rWifiVar.ucWow
-		&& !prGlueInfo->prAdapter->rWowCtrl.fgWowEnable
-		&& !prGlueInfo->prAdapter->rWifiVar.ucAdvPws) {
-		if (kalGetMediaStateIndicated(prGlueInfo) == PARAM_MEDIA_STATE_CONNECTED) {
-			DBGLOG(REQ, WARN, "CFG80211 suspend link down\n");
-			rStatus = kalIoctl(prGlueInfo, wlanoidLinkDown, NULL, 0, TRUE, FALSE, FALSE, &u4BufLen);
-		}
-	}
+		/* In current design, only support AIS connection
+		 * during suspend only.
+		 * It need to add flow to deactive P2P (GC/GO) link
+		 * during suspend flow.
+		 * Otherwise, MT7668 would fail to enter deep sleep.
+		 */
+		p2pProcessPreSuspendFlow(prAdapter);
+#endif
 
-	/* In current design, only support AIS connection during suspend only.
-	 * It need to add flow to deactive P2P (GC/GO) link during suspend flow.
-	 * Otherwise, MT7668 would fail to enter deep sleep.
-	 */
-	p2pProcessPreSuspendFlow(prAdapter);
-
-	if (rStatus != WLAN_STATUS_SUCCESS) {
-		DBGLOG(REQ, WARN, "cfg 80211 suspend fail!\n");
-		return -EINVAL;
+		set_bit(SUSPEND_FLAG_FOR_WAKEUP_REASON,
+			&prGlueInfo->prAdapter->ulSuspendFlag);
+		set_bit(SUSPEND_FLAG_CLEAR_WHEN_RESUME,
+			&prGlueInfo->prAdapter->ulSuspendFlag);
 	}
 	return 0;
 }

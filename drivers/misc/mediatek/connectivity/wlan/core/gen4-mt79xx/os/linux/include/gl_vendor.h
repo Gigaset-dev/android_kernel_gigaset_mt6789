@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
  * Copyright (c) 2016 MediaTek Inc.
  */
@@ -52,6 +52,7 @@
 #define QCA_WLAN_VENDOR_ATTR_SETBAND_MASK 43
 #define QCA_WLAN_VENDOR_ATTR_MAX 44
 #define QCA_NL80211_VENDOR_SUBCMD_SETBAND 105
+#define QCA_WLAN_VENDOR_ATTR_ROAMING_POLICY 5
 #define NL80211_VENDOR_SUBCMD_NAN 12
 #define NL80211_VENDOR_SUBCMD_GET_APF_CAPABILITIES 14
 #define NL80211_VENDOR_SUBCMD_NDP 81
@@ -116,6 +117,7 @@ enum WIFI_SUB_COMMAND {
 	WIFI_SUBCMD_CONFIG_ROAMING = 0x000a,			/* 0x000a */
 	WIFI_SUBCMD_ENABLE_ROAMING,				/* 0x000b */
 	WIFI_SUBCMD_SELECT_TX_POWER_SCENARIO,			/* 0x000c */
+	WIFI_SUBCMD_SET_LATENCY_MODE,				/*0x000d*/
 };
 
 enum RTT_SUB_COMMAND {
@@ -184,6 +186,7 @@ enum WIFI_ATTRIBUTE {
 	WIFI_ATTRIBUTE_ROAMING_WHITELIST_SSID,
 	WIFI_ATTRIBUTE_ROAMING_STATE,
 	WIFI_ATTRIBUTE_TX_POWER_SCENARIO,
+	WIFI_ATTRIBUTE_LOW_LATENCY_MODE,
 	WIFI_ATTRIBUTE_MAX
 };
 
@@ -358,14 +361,6 @@ enum WIFI_DATA_STALL_ATTRIBUTE {
  *                            P U B L I C   D A T A
  *******************************************************************************
  */
-#if CFG_SUPPORT_WAPI
-extern uint8_t
-keyStructBuf[1024];	/* add/remove key shared buffer */
-#else
-extern uint8_t
-keyStructBuf[100];	/* add/remove key shared buffer */
-#endif
-
 #if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE
 extern const struct nla_policy nla_parse_wifi_rssi_monitor[
 		WIFI_ATTRIBUTE_RSSI_MONITOR_ATTRIBUTE_MAX + 1];
@@ -390,6 +385,9 @@ extern const struct nla_policy qca_roaming_param_policy[
 
 extern const struct nla_policy nla_get_apf_policy[
 		APF_ATTRIBUTE_MAX + 1];
+
+/*record timestamp when wifi last on*/
+extern OS_SYSTIME lastWifiOnTime;
 
 /*******************************************************************************
  *                           MACROS
@@ -829,6 +827,11 @@ int mtk_cfg80211_vendor_driver_memory_dump(struct wiphy *wiphy,
 int mtk_cfg80211_vendor_event_wowlan_magic_pkt(
 	struct wiphy *wiphy,
 	struct wireless_dev *wdev, uint32_t num);
+#endif
+
+#if CFG_SUPPORT_LOWLATENCY_MODE
+int mtk_cfg80211_vendor_set_wifi_low_latency_mode(struct wiphy *wiphy,
+		struct wireless_dev *wdev, const void *data, int data_len);
 #endif
 
 #endif /* _GL_VENDOR_H */

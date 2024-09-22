@@ -194,7 +194,7 @@ static ssize_t ics_ring_write(struct ics_ring *iRing, char *buf,
 
 	if (likely(iRing->ring_base)) {
 		RING_WRITE_FOR_EACH(left_to_write, ring_seg, ring) {
-			memcpy(ring_seg.ring_pt, buf, ring_seg.sz);
+			memcpy(ring_seg.ring_pt, buf + written, ring_seg.sz);
 			left_to_write -= ring_seg.sz;
 			written += ring_seg.sz;
 			ICS_DBG_LIMITED("written:%ld left:%ld\n", written,

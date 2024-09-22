@@ -1682,11 +1682,6 @@ UINT_32 TsfRawData2IqFmt(P_EVENT_DUMP_MEM_T prEventDumpMem)
 	kfree(pucDataRAWWF0);
 	kfree(pucDataRAWWF1);
 
-	if (u4RemainByte < 0) {
-		ASSERT(-1);
-		return -1;
-	}
-
 	return 0;
 }
 #endif /* CFG_SUPPORT_QA_TOOL */

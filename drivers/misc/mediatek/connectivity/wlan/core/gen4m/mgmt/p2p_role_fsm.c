@@ -71,11 +71,8 @@ static uint8_t *apucDebugP2pRoleState[P2P_ROLE_STATE_NUM] = {
 uint8_t *
 	p2pRoleFsmGetFsmState(
 	IN enum ENUM_P2P_ROLE_STATE eCurrentState) {
-	if (eCurrentState
-		>= P2P_ROLE_STATE_IDLE &&
-		eCurrentState
-		< P2P_ROLE_STATE_NUM)
-		return apucDebugP2pRoleState[eCurrentState];
+	if (eCurrentState < P2P_ROLE_STATE_NUM)
+		return apucDebugP2pRoleState[(uint32_t)eCurrentState];
 
 	return (uint8_t *) DISP_STRING("UNKNOWN");
 }
@@ -439,7 +436,8 @@ p2pRoleFsmStateTransition(IN struct ADAPTER *prAdapter,
 	prChnlReqInfo = &(prP2pRoleFsmInfo->rChnlReqInfo);
 
 	do {
-		if (!IS_BSS_ACTIVE(prP2pRoleBssInfo)) {
+		if (!prP2pRoleBssInfo ||
+			!IS_BSS_ACTIVE(prP2pRoleBssInfo)) {
 			if (!cnmP2PIsPermitted(prAdapter))
 				return;
 
@@ -1909,10 +1907,36 @@ void p2pRoleFsmRunEventRadarDet(IN struct ADAPTER *prAdapter,
 		uint8_t ucNumOfChannel;
 		uint8_t ch_idx = 0;
 		uint8_t ucChannelNum = 36;
+#if IS_ENABLED(CONFIG_ARM64)
 		struct RF_CHANNEL_INFO aucChannelList
 			[MAX_5G_BAND_CHN_NUM] = {};
 		struct RF_CHANNEL_INFO aucChannelListRdd
 			[MAX_5G_BAND_CHN_NUM] = {};
+#else
+		struct RF_CHANNEL_INFO *aucChannelList = NULL;
+		struct RF_CHANNEL_INFO *aucChannelListRdd = NULL;
+
+		aucChannelList = (struct RF_CHANNEL_INFO *)
+			kalMemAlloc(sizeof(
+				struct RF_CHANNEL_INFO) * MAX_5G_BAND_CHN_NUM,
+				VIR_MEM_TYPE);
+		if (!aucChannelList)
+			goto error;
+
+		aucChannelListRdd = (struct RF_CHANNEL_INFO *)
+			kalMemAlloc(sizeof(
+				struct RF_CHANNEL_INFO) *
+				MAX_5G_BAND_CHN_NUM,
+				VIR_MEM_TYPE);
+		if (!aucChannelListRdd) {
+			kalMemFree(aucChannelList, VIR_MEM_TYPE, sizeof(
+				struct  RF_CHANNEL_INFO) * MAX_5G_BAND_CHN_NUM);
+			goto error;
+		}
+
+		kalMemZero(aucChannelList, sizeof(struct RF_CHANNEL_INFO));
+		kalMemZero(aucChannelListRdd, sizeof(struct RF_CHANNEL_INFO));
+#endif
 
 		if (prP2pRoleFsmInfo->eCurrentState == P2P_ROLE_STATE_DFS_CAC) {
 			p2pRoleFsmStateTransition(prAdapter,
@@ -1969,6 +1993,14 @@ void p2pRoleFsmRunEventRadarDet(IN struct ADAPTER *prAdapter,
 				(struct MSG_HDR *)
 				&prP2pConnReqInfo->rMsgStartAp);
 		}
+#if !IS_ENABLED(CONFIG_ARM64)
+		if (aucChannelList)
+			kalMemFree(aucChannelList, VIR_MEM_TYPE, sizeof(
+				struct	RF_CHANNEL_INFO) * MAX_5G_BAND_CHN_NUM);
+		if (aucChannelListRdd)
+			kalMemFree(aucChannelListRdd, VIR_MEM_TYPE, sizeof(
+				struct	RF_CHANNEL_INFO) * MAX_5G_BAND_CHN_NUM);
+#endif
 	}
 
 error:
@@ -2094,6 +2126,7 @@ void p2pRoleFsmRunEventCsaDone(IN struct ADAPTER *prAdapter,
 			/* SAP: Skip channel request/abort for
 			 * STA+SAP/MCC concurrent cases.
 			 */
+#if !CFG_P2P_FORCE_ROC_CSA
 			if (prAisBssInfo &&
 				(prAisBssInfo->ucPrimaryChannel !=
 				prP2pBssInfo->ucPrimaryChannel) &&
@@ -2102,11 +2135,11 @@ void p2pRoleFsmRunEventCsaDone(IN struct ADAPTER *prAdapter,
 				p2pFuncDfsSwitchCh(prAdapter,
 					prP2pBssInfo,
 					prP2pRoleFsmInfo->rChnlReqInfo);
-			} else {
+			} else
+#endif
 				p2pRoleFsmStateTransition(prAdapter,
 					prP2pRoleFsmInfo,
 					P2P_ROLE_STATE_SWITCH_CHANNEL);
-			}
 		}
 	} else { /* GO */
 		DBGLOG(P2P, INFO, "GO CSA done: %s band\n",
@@ -2666,7 +2699,8 @@ void p2pRoleFsmRunEventJoinComplete(IN struct ADAPTER *prAdapter,
 	prP2pBssInfo =
 		GET_BSS_INFO_BY_INDEX(prAdapter,
 			prStaRec->ucBssIndex);
-
+	if (!prP2pBssInfo)
+		goto error;
 	if (prP2pBssInfo->eCurrentOPMode != OP_MODE_INFRASTRUCTURE) {
 		DBGLOG(P2P, ERROR,
 			"prP2pBssInfo->eCurrentOPMode %d != OP_MODE_INFRASTRUCTURE(%d)!\n",
@@ -3166,6 +3200,8 @@ p2pRoleFsmRunEventChnlGrant(IN struct ADAPTER *prAdapter,
 
 #if (CFG_SUPPORT_DFS_MASTER == 1)
 		case P2P_ROLE_STATE_DFS_CAC:
+			if (prMsgChGrant->ucBssIndex > MAX_BSSID_NUM)
+				break;
 			rlmDomainSetDfsDbdcBand(prMsgChGrant->eDBDCBand);
 
 			p2pFuncStartRdd(prAdapter, prMsgChGrant->ucBssIndex);
@@ -3196,6 +3232,8 @@ p2pRoleFsmRunEventChnlGrant(IN struct ADAPTER *prAdapter,
 				u4CacTimeMs/1000);
 			break;
 		case P2P_ROLE_STATE_SWITCH_CHANNEL:
+			if (!prBssInfo)
+				break;
 			prBssInfo->fgIsSwitchingChnl = FALSE;
 
 			/* Restore connection state */
@@ -3622,7 +3660,8 @@ void p2pRoleFsmRunEventSwitchOPMode(IN struct ADAPTER *prAdapter,
 		GET_BSS_INFO_BY_INDEX(prAdapter,
 			prP2pRoleFsmInfo->ucBssIndex);
 
-	if (!(prSwitchOpMode->eOpMode < OP_MODE_NUM)) {
+	if (!prP2pBssInfo ||
+		!(prSwitchOpMode->eOpMode < OP_MODE_NUM)) {
 		DBGLOG(P2P, ERROR,
 			"prSwitchOpMode->eOpMode %d should < OP_MODE_NUM(%d)\n",
 			prSwitchOpMode->eOpMode, OP_MODE_NUM);
@@ -3683,7 +3722,8 @@ void p2pRoleFsmRunEventBeaconUpdate(IN struct ADAPTER *prAdapter,
 			prRoleP2pFsmInfo->ucBssIndex);
 
 	prP2pConnReqInfo = &(prRoleP2pFsmInfo->rConnReqInfo);
-
+	if (!prP2pBssInfo)
+		goto error;
 	prP2pBssInfo->fgIsWepCipherGroup = prBcnUpdateMsg->fgIsWepCipher;
 
 	prBcnUpdateInfo = &(prRoleP2pFsmInfo->rBeaconUpdateInfo);
@@ -3775,6 +3815,8 @@ p2pProcessEvent_UpdateNOAParam(IN struct ADAPTER *prAdapter,
 	u_int8_t fgNoaAttrExisted = FALSE;
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIdx);
+	if (!prBssInfo)
+		return;
 	prP2pSpecificBssInfo =
 		prAdapter->rWifiVar
 			.prP2pSpecificBssInfo[prBssInfo->u4PrivateData];
@@ -4419,7 +4461,7 @@ static void trimAcsScanList(IN struct ADAPTER *prAdapter,
 #if (CFG_SUPPORT_AVOID_DESENSE == 1)
 		if (IS_CHANNEL_IN_DESENSE_RANGE(prAdapter,
 			prRfChannelInfo1->ucChannelNum,
-			prRfChannelInfo1->eBand))
+			(uint32_t)prRfChannelInfo1->eBand))
 			continue;
 #endif
 		DBGLOG(P2P, INFO, "acs trim scan list, [%d]=%d %d\n",
@@ -4617,10 +4659,12 @@ void p2pRoleFsmRunEventAcs(IN struct ADAPTER *prAdapter,
 
 	if (prAcsReqInfo->eHwMode == P2P_VENDOR_ACS_HW_MODE_11ANY) {
 		struct BSS_INFO *prAisBssInfo;
-
-		prAisBssInfo = aisGetAisBssInfo(prAdapter,
-			AIS_DEFAULT_INDEX);
-		if (prAisBssInfo->eConnectionState == MEDIA_STATE_CONNECTED) {
+		prAisBssInfo = aisGetConnectedBssInfo(prAdapter);
+		if (prAisBssInfo &&
+			prAisBssInfo->eConnectionState == MEDIA_STATE_CONNECTED &&
+			(!p2pFuncIsDualAPMode(prAdapter) ||
+			(p2pFuncIsDualAPMode(prAdapter) &&
+			prAisBssInfo->eBand > BAND_2G4))) {
 			/* Force SCC, indicate channel directly */
 			indicateAcsResultByAisCh(prAdapter, prAcsReqInfo,
 				prAisBssInfo);

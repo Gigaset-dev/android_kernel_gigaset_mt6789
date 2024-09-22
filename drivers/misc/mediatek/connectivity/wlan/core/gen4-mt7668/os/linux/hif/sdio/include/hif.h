@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+/* SPDX-License-Identifier: BSD-2-Clause */
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
 ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/os/linux/hif/sdio/include/hif.h#1
 */
@@ -214,6 +168,18 @@ typedef struct _SDIO_RX_COALESCING_BUF_T {
 	UINT_32 u4PktCount;
 } SDIO_RX_COALESCING_BUF_T, *P_SDIO_RX_COALESCING_BUF_T;
 
+enum sdio_state {
+	SDIO_STATE_WIFI_OFF, /* Hif power off wifi */
+	SDIO_STATE_LINK_DOWN,
+	SDIO_STATE_PRE_SUSPEND_START,
+	SDIO_STATE_PRE_SUSPEND_DONE,
+	SDIO_STATE_PRE_SUSPEND_FAIL,
+	SDIO_STATE_SUSPEND,
+	SDIO_STATE_PRE_RESUME,
+	SDIO_STATE_LINK_UP,
+	SDIO_STATE_READY
+};
+
 /* host interface's private data structure, which is attached to os glue
 ** layer info structure.
  */
@@ -225,6 +191,9 @@ typedef struct _GL_HIF_INFO_T {
 #else
 	struct sdio_func *func;
 #endif
+
+	enum sdio_state state;
+	spinlock_t rStateLock;
 
 	P_SDIO_CTRL_T prSDIOCtrl;
 
@@ -329,6 +298,7 @@ VOID halGetMailbox(IN P_ADAPTER_T prAdapter, IN UINT_32 u4MailboxNum, OUT PUINT_
 VOID halDeAggRxPkt(P_ADAPTER_T prAdapter, P_SDIO_RX_COALESCING_BUF_T prRxBuf);
 VOID halPrintMailbox(IN P_ADAPTER_T prAdapter);
 VOID halPollDbgCr(IN P_ADAPTER_T prAdapter, IN UINT_32 u4LoopCount);
+void glSdioSetState(P_GL_HIF_INFO_T prHifInfo, enum sdio_state state);
 /*******************************************************************************
 *                              F U N C T I O N S
 ********************************************************************************

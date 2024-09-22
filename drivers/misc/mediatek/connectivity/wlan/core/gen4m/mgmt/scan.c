@@ -1391,8 +1391,8 @@ void scanHandleRnrSsid(IN struct PARAM_SCAN_REQUEST_ADV *prScanRequest,
 	}
 }
 
-uint8_t scanGetRnrChannel(IN struct NEIGHBOR_AP_INFO_FIELD
-						*prNeighborAPInfoField)
+uint8_t scanGetRnrChannel(IN struct ADAPTER *prAdapter,
+	IN struct NEIGHBOR_AP_INFO_FIELD *prNeighborAPInfoField)
 {
 	uint8_t ucRnrChNum;
 	struct ieee80211_channel *prChannel;
@@ -1415,6 +1415,14 @@ uint8_t scanGetRnrChannel(IN struct NEIGHBOR_AP_INFO_FIELD
 	}
 
 	ucRnrChNum = nicFreq2ChannelNum(prChannel->center_freq * 1000);
+
+#if (CFG_SUPPORT_WIFI_6G == 1)
+	/* Check if current country not support 6G channel, return 0 */
+	if (band == NL80211_BAND_6GHZ &&
+		!rlmDomainIsLegalChannel(prAdapter, BAND_6G, ucRnrChNum)) {
+		return 0;
+	}
+#endif
 
 	return ucRnrChNum;
 }
@@ -1654,7 +1662,8 @@ void scanParsingRnrElement(IN struct ADAPTER *prAdapter,
 		}
 
 		/* Get RNR channel */
-		ucRnrChNum = scanGetRnrChannel(prNeighborAPInfoField);
+		ucRnrChNum =
+			scanGetRnrChannel(prAdapter, prNeighborAPInfoField);
 		if (ucRnrChNum == 0 || IS_6G_PSC_CHANNEL(ucRnrChNum)) {
 			DBGLOG(SCN, TRACE, "Not handle RNR channel(%d)!\n",
 					ucRnrChNum);
@@ -3683,7 +3692,7 @@ struct BSS_DESC *scanSearchBssDescByPolicy(
 	GET_CURRENT_SYSTIME(&rCurrentTime);
 
 	/* check for fixed channel operation */
-	if (prBssInfo->eNetworkType == NETWORK_TYPE_AIS) {
+	if (prBssInfo && prBssInfo->eNetworkType == NETWORK_TYPE_AIS) {
 #if CFG_SUPPORT_CHNL_CONFLICT_REVISE
 		fgIsFixedChannel =
 			cnmAisDetectP2PChannel(prAdapter, &eBand, &ucChannel);

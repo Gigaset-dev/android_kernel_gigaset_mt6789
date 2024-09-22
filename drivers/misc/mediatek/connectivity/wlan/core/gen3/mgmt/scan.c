@@ -1893,6 +1893,7 @@ WLAN_STATUS scanAddScanResult(IN P_ADAPTER_T prAdapter, IN P_BSS_DESC_T prBssDes
 
 	ASSERT(prAdapter);
 	ASSERT(prSwRfb);
+	kalMemZero(&rSsid, sizeof(rSsid));
 
 	prScanInfo = &(prAdapter->rWifiVar.rScanInfo);
 

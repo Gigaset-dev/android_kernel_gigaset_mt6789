@@ -37,6 +37,12 @@ $(info $(LOG_TAG) srctree = $(srctree))
 
 ###############################################################################
 # To add WMT dependent Macro and header file, will be removed later
+$(info $(LOG_TAG) BT_ENABLE_LOW_POWER_DEBUG=$(BT_ENABLE_LOW_POWER_DEBUG))
+ifeq ($(BT_ENABLE_LOW_POWER_DEBUG),y)
+    ccflags-y += -D ENABLE_LOW_POWER_DEBUG=1
+else
+    ccflags-y += -D ENABLE_LOW_POWER_DEBUG=0
+endif
 
 ccflags-y += -D MTK_WCN_WMT_STP_EXP_SYMBOL_ABSTRACT
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/include

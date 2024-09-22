@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
 ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/common/wlan_oid.c#11
 */
@@ -2207,6 +2161,7 @@ wlanoidSetRemoveWep(IN P_ADAPTER_T prAdapter,
 		return WLAN_STATUS_INVALID_DATA;
 	}
 
+	kalMemZero(&rRemoveKey, sizeof(PARAM_REMOVE_KEY_T));
 	rRemoveKey.u4Length = sizeof(PARAM_REMOVE_KEY_T);
 	rRemoveKey.u4KeyIndex = *(PUINT_32) pvSetBuffer;
 
@@ -2457,6 +2412,13 @@ wlanoidSetAddKey(IN P_ADAPTER_T prAdapter, IN PVOID pvSetBuffer, IN UINT_32 u4Se
 
 					prAisSpecBssInfo = &prAdapter->rWifiVar.rAisSpecificBssInfo;
 					prAisSpecBssInfo->fgBipKeyInstalled = TRUE;
+					DBGLOG(RSN, INFO,
+						"Change BIP BC keyId from %d to 3\n",
+						prCmdKey->ucKeyId);
+					/* Set IGTK WTBL keyid 3 for WTBL,
+					 * so hw can search GTK correctly.
+					 */
+					prCmdKey->ucKeyId = 3;
 				}
 			}
 #endif
@@ -2591,6 +2553,9 @@ wlanoidSetAddKey(IN P_ADAPTER_T prAdapter, IN PVOID pvSetBuffer, IN UINT_32 u4Se
 					     prBssInfo->prStaRecOfAP->aucMacAddr,
 					     prBssInfo->prStaRecOfAP->ucIndex,
 					     prCmdKey->ucAlgorithmId, prCmdKey->ucKeyId);
+				kalMemCopy(prCmdKey->aucPeerAddr,
+					prBssInfo->prStaRecOfAP->aucMacAddr,
+					MAC_ADDR_LEN);
 			}
 
 			DBGLOG(RSN, INFO, "BIP BC wtbl index:%d\n", prCmdKey->ucWlanIndex);
@@ -2728,11 +2693,19 @@ wlanoidSetRemoveKey(IN P_ADAPTER_T prAdapter,
 	BOOL fgRemoveBCKey = FALSE;
 	UINT_32 ucRemoveBCKeyAtIdx = WTBL_RESERVED_ENTRY;
 	UINT_32 u4KeyIndex;
+	UINT_8 fgIsOid = g_fgIsOid;
 
 	DEBUGFUNC("wlanoidSetRemoveKey");
 
-	ASSERT(prAdapter);
-	ASSERT(pu4SetInfoLen);
+	if (prAdapter == NULL) {
+		DBGLOG(REQ, WARN, "prAdapter is NULL");
+		return WLAN_STATUS_ADAPTER_NOT_READY;
+	}
+
+	if (pu4SetInfoLen == NULL) {
+		DBGLOG(REQ, WARN, "The pu4SetInfoLen is NULL");
+		return WLAN_STATUS_INVALID_DATA;
+	}
 
 	DBGLOG(RSN, INFO, "wlanoidSetRemoveKey\n");
 
@@ -2750,11 +2723,16 @@ wlanoidSetRemoveKey(IN P_ADAPTER_T prAdapter,
 		return WLAN_STATUS_ADAPTER_NOT_READY;
 	}
 
-	ASSERT(pvSetBuffer);
+	if (pvSetBuffer == NULL) {
+		DBGLOG(REQ, WARN, "pvSetBuffer is NULL");
+		return WLAN_STATUS_INVALID_DATA;
+	}
+
 	prRemovedKey = (P_PARAM_REMOVE_KEY_T) pvSetBuffer;
 
 	/* Dump PARAM_REMOVE_KEY content. */
-	DBGLOG(RSN, INFO, "Set: Dump PARAM_REMOVE_KEY content\n");
+	DBGLOG(RSN, INFO, "Set: Dump PARAM_REMOVE_KEY content (%p)\n",
+			prRemovedKey);
 	DBGLOG(RSN, INFO, "Length    : 0x%08x\n", prRemovedKey->u4Length);
 	DBGLOG(RSN, INFO, "Key Index : 0x%08x\n", prRemovedKey->u4KeyIndex);
 	DBGLOG(RSN, INFO, "BSS_INDEX : %d\n", prRemovedKey->ucBssIdx);
@@ -2763,11 +2741,17 @@ wlanoidSetRemoveKey(IN P_ADAPTER_T prAdapter,
 
 	prGlueInfo = prAdapter->prGlueInfo;
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, prRemovedKey->ucBssIdx);
-	ASSERT(prBssInfo);
+	if (prBssInfo == NULL) {
+		DBGLOG(REQ, WARN, "prBssInfo is NULL");
+		return WLAN_STATUS_INVALID_DATA;
+	}
 
 	u4KeyIndex = prRemovedKey->u4KeyIndex & 0x000000FF;
 #if CFG_SUPPORT_802_11W
-	ASSERT(u4KeyIndex < MAX_KEY_NUM + 2);
+	if (u4KeyIndex >= MAX_KEY_NUM + 2) {
+		DBGLOG(RSN, WARN, "key id %d over the max val\n", u4KeyIndex);
+		return WLAN_STATUS_INVALID_DATA;
+	}
 #else
 	/* ASSERT(prCmdKey->ucKeyId < MAX_KEY_NUM); */
 #endif
@@ -2781,8 +2765,10 @@ wlanoidSetRemoveKey(IN P_ADAPTER_T prAdapter,
 	/* Clean up the Tx key flag */
 	if (prRemovedKey->u4KeyIndex & IS_UNICAST_KEY) {
 		prStaRec = cnmGetStaRecByAddress(prAdapter, prRemovedKey->ucBssIdx, prRemovedKey->arBSSID);
-		if (!prStaRec)
+		if (!prStaRec) {
+			DBGLOG(RSN, INFO, "unicast key w/o starec\n");
 			return WLAN_STATUS_SUCCESS;
+		}
 	} else {
 		if (u4KeyIndex == prBssInfo->ucBcDefaultKeyIdx)
 			prBssInfo->fgBcDefaultKeyExist = FALSE;
@@ -2800,7 +2786,12 @@ wlanoidSetRemoveKey(IN P_ADAPTER_T prAdapter,
 				prBssInfo->fgBcDefaultKeyExist = FALSE;
 				prBssInfo->ucBcDefaultKeyIdx = 0xff;
 			}
-			ASSERT(prBssInfo->wepkeyWlanIdx < WTBL_SIZE);
+
+			if (prBssInfo->wepkeyWlanIdx >= WTBL_SIZE) {
+				DBGLOG(REQ, WARN, "wepkeyWlanIdx err : %d\n",
+					prBssInfo->wepkeyWlanIdx);
+				return WLAN_STATUS_INVALID_DATA;
+			}
 			ucRemoveBCKeyAtIdx = prBssInfo->wepkeyWlanIdx;
 			fgRemoveBCKey = TRUE;
 		} else {
@@ -2813,8 +2804,14 @@ wlanoidSetRemoveKey(IN P_ADAPTER_T prAdapter,
 					prBssInfo->fgBcDefaultKeyExist = FALSE;
 					prBssInfo->ucBcDefaultKeyIdx = 0xff;
 				}
-				if (u4KeyIndex != 0)
-					ASSERT(prBssInfo->ucBMCWlanIndexS[u4KeyIndex] < WTBL_SIZE);
+
+				if ((u4KeyIndex != 0) &&
+					(prBssInfo->ucBMCWlanIndexS[u4KeyIndex]
+					 >= WTBL_SIZE)) {
+					DBGLOG(REQ, WARN, "u4KeyIndex err\n");
+					return WLAN_STATUS_INVALID_DATA;
+				}
+
 				ucRemoveBCKeyAtIdx = prBssInfo->ucBMCWlanIndexS[u4KeyIndex];
 
 				prBssInfo->ucBMCWlanIndexSUsed[u4KeyIndex]
@@ -2847,13 +2844,16 @@ wlanoidSetRemoveKey(IN P_ADAPTER_T prAdapter,
 	/* increase command sequence number */
 	ucCmdSeqNum = nicIncreaseCmdSeqNum(prAdapter);
 
+	if (prRemovedKey->ucCtrlFlag & FLAG_RM_KEY_CTRL_WO_OID)
+		fgIsOid = FALSE;
+
 	/* compose CMD_802_11_KEY cmd pkt */
 	prCmdInfo->eCmdType = COMMAND_TYPE_NETWORK_IOCTL;
 	/* prCmdInfo->ucBssIndex = prRemovedKey->ucBssIdx; */
 	prCmdInfo->u2InfoBufLen = CMD_HDR_SIZE + sizeof(CMD_802_11_KEY);
 	prCmdInfo->pfCmdDoneHandler = nicCmdEventSetCommon;
 	prCmdInfo->pfCmdTimeoutHandler = nicOidCmdTimeoutCommon;
-	prCmdInfo->fgIsOid = g_fgIsOid;
+	prCmdInfo->fgIsOid = fgIsOid;
 	prCmdInfo->ucCID = CMD_ID_ADD_REMOVE_KEY;
 	prCmdInfo->fgSetQuery = TRUE;
 	prCmdInfo->fgNeedResp = FALSE;
@@ -6503,6 +6503,12 @@ wlanoidSetSwCtrlWrite(IN P_ADAPTER_T prAdapter,
 		ucNss = (UINT_8)(u4Data & BITS(0, 3));
 		ucChannelWidth = (UINT_8)((u4Data & BITS(4, 7)) >> 4);
 		ucBssIndex = (UINT_8) u2SubId;
+
+		if (!IS_BSS_INDEX_VALID(ucBssIndex)) {
+			DBGLOG(RLM, ERROR,
+				"Invalid bssidx:%d\n", ucBssIndex);
+			break;
+		}
 
 		/* ucChannelWidth 0:20MHz, 1:40MHz, 2:80MHz, 3:160MHz 4:80+80MHz */
 		DBGLOG(REQ, INFO, "Change BSS[%d] OpMode to BW[%d] Nss[%d]\n",

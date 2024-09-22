@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*! \file   wlan_lib.c
 *    \brief  Internal driver stack will export the required procedures here for GLUE Layer.
 *
@@ -818,15 +772,21 @@ VOID wlanIST(IN P_ADAPTER_T prAdapter)
 
 	ACQUIRE_POWER_CONTROL_FROM_PM(prAdapter);
 
-	u4Status = nicProcessIST(prAdapter);
-	if (u4Status != WLAN_STATUS_SUCCESS)
-		DBGLOG(REQ, INFO, "Fail in nicProcessIST! status [%x]\n",
-		       u4Status);
+	if (prAdapter->fgIsFwOwn == FALSE) {
+		u4Status = nicProcessIST(prAdapter);
+		if (u4Status != WLAN_STATUS_SUCCESS &&
+			(u4Status != WLAN_STATUS_NOT_INDICATING))
+			DBGLOG(REQ, INFO, "Fail: nicProcessIST! status [%d]\n",
+				u4Status);
 
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
-	if (KAL_WAKE_LOCK_ACTIVE(prAdapter, &prAdapter->prGlueInfo->rIntrWakeLock))
-		KAL_WAKE_UNLOCK(prAdapter, &prAdapter->prGlueInfo->rIntrWakeLock);
+#if CFG_ENABLE_WAKE_LOCK
+		if (KAL_WAKE_LOCK_ACTIVE(prAdapter,
+			&prAdapter->prGlueInfo->rIntrWakeLock))
+			KAL_WAKE_UNLOCK(prAdapter,
+				&prAdapter->prGlueInfo->rIntrWakeLock);
 #endif
+	}
+
 	nicEnableInterrupt(prAdapter);
 
 	RECLAIM_POWER_CONTROL_TO_PM(prAdapter, FALSE);
@@ -1714,7 +1674,9 @@ VOID wlanReleasePendingOid(IN P_ADAPTER_T prAdapter, IN ULONG ulParamPtr)
 #if CFG_CHIP_RESET_SUPPORT
 			DBGLOG(HAL, ERROR, "fgIsChipNoAck = %d\n",
 						prAdapter->fgIsChipNoAck);
-			glResetTrigger(prAdapter);
+			glGetRstReason(RST_OID_TIMEOUT);
+			GL_RESET_TRIGGER(prAdapter,
+					 RST_FLAG_CHIP_RESET);
 #endif
 		}
 		set_bit(GLUE_FLAG_HIF_PRT_HIF_DBG_INFO_BIT, &(prAdapter->prGlueInfo->ulFlag));
@@ -2250,7 +2212,9 @@ WLAN_STATUS wlanSendNicPowerCtrlCmd(IN P_ADAPTER_T prAdapter, IN UINT_8 ucPowerM
 #if CFG_CHIP_RESET_SUPPORT
 				DBGLOG(HAL, ERROR, "fgIsChipNoAck = %d\n",
 						prAdapter->fgIsChipNoAck);
-				glResetTrigger(prAdapter);
+				glGetRstReason(RST_OID_TIMEOUT);
+				GL_RESET_TRIGGER(prAdapter,
+						 RST_FLAG_CHIP_RESET);
 #endif
 				break;
 			}
@@ -6773,6 +6737,9 @@ VOID wlanInitFeatureOption(IN P_ADAPTER_T prAdapter)
 	prWifiVar->ucP2pGcHt = (UINT_8) wlanCfgGetUint32(prAdapter, "P2pGcHT", FEATURE_ENABLED);
 	prWifiVar->ucP2pGcVht = (UINT_8) wlanCfgGetUint32(prAdapter, "P2pGcVHT", FEATURE_ENABLED);
 
+	prWifiVar->ucDisP2pPs = (UINT_8) wlanCfgGetUint32(prAdapter,
+				"DisP2pPs", FEATURE_DISABLED);
+
 	prWifiVar->ucAmpduRx = (UINT_8) wlanCfgGetUint32(prAdapter, "AmpduRx", FEATURE_ENABLED);
 	prWifiVar->ucAmpduTx = (UINT_8) wlanCfgGetUint32(prAdapter, "AmpduTx", FEATURE_ENABLED);
 
@@ -9783,6 +9750,25 @@ int wlanSuspendRekeyOffload(P_GLUE_INFO_T prGlueInfo, IN UINT_8 ucRekeyMode)
 	kalMemFree(prGtkData, VIR_MEM_TYPE, sizeof(PARAM_GTK_REKEY_DATA));
 
 	return i4Rslt;
+}
+
+/* HIF suspend should wait for cfg80211 suspend done */
+#define HIF_SUSPEND_MAX_WAIT_TIME 50 /* unit: 5ms */
+
+void
+wlanWaitCfg80211SuspendDone(P_GLUE_INFO_T prGlueInfo)
+{
+	UINT_8 u1Count = 0;
+
+	while (!(test_bit(SUSPEND_FLAG_CLEAR_WHEN_RESUME,
+		&prGlueInfo->prAdapter->ulSuspendFlag))) {
+		if (u1Count > HIF_SUSPEND_MAX_WAIT_TIME) {
+			DBGLOG(HAL, ERROR, "cfg80211 not suspend\n");
+			break;
+		}
+		usleep_range(5000, 6000);
+		u1Count++;
+	}
 }
 
 /*----------------------------------------------------------------------------*/

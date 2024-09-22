@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+/* SPDX-License-Identifier: BSD-2-Clause */
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
 ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/os/linux/include/gl_kal.h#2
 */
@@ -276,10 +230,14 @@ typedef enum _ENUM_KAL_MEM_ALLOCATION_TYPE_E {
 	MEM_TYPE_NUM
 } ENUM_KAL_MEM_ALLOCATION_TYPE;
 
-#ifdef CONFIG_ANDROID		/* Defined in Android kernel source */
-typedef struct wake_lock KAL_WAKE_LOCK_T, *P_KAL_WAKE_LOCK_T;
+#if CFG_ENABLE_WAKE_LOCK
+#if (KERNEL_VERSION(4, 9, 0) <= LINUX_VERSION_CODE)
+#define KAL_WAKE_LOCK_T struct wakeup_source
 #else
-typedef UINT_32 KAL_WAKE_LOCK_T, *P_KAL_WAKE_LOCK_T;
+#define KAL_WAKE_LOCK_T struct wake_lock
+#endif
+#else
+#define KAL_WAKE_LOCK_T uint32_t
 #endif
 
 #if CFG_SUPPORT_AGPS_ASSIST
@@ -567,26 +525,57 @@ static inline void kalCfg80211ScanDone(struct cfg80211_scan_request *request,
 /*----------------------------------------------------------------------------*/
 /* Macros of wake_lock operations for using in Driver Layer                   */
 /*----------------------------------------------------------------------------*/
-#if defined(CONFIG_ANDROID) && (CFG_ENABLE_WAKE_LOCK)
-/* CONFIG_ANDROID is defined in Android kernel source */
+#if CFG_ENABLE_WAKE_LOCK
+		/* CONFIG_ANDROID is defined in Android kernel source */
+#if (KERNEL_VERSION(4, 9, 0) <= LINUX_VERSION_CODE)
+#define KAL_WAKE_LOCK_INIT(_prAdapter, _prWakeLock, _pcName) \
+	wakeup_source_init(_prWakeLock, _pcName)
+
+#define KAL_WAKE_LOCK_DESTROY(_prAdapter, _prWakeLock) \
+	wakeup_source_trash(_prWakeLock)
+
+#define KAL_WAKE_LOCK(_prAdapter, _prWakeLock) ({ \
+	if (halIsHifStateReady(_prAdapter) == TRUE) { \
+		__pm_stay_awake(_prWakeLock); \
+	} \
+})
+
+#define KAL_WAKE_LOCK_TIMEOUT(_prAdapter, _prWakeLock, _u4Timeout) ({ \
+	if (halIsHifStateReady(_prAdapter) == TRUE) { \
+		__pm_wakeup_event(_prWakeLock, _u4Timeout); \
+	} \
+})
+#define KAL_WAKE_UNLOCK(_prAdapter, _prWakeLock) \
+	__pm_relax(_prWakeLock)
+
+#define KAL_WAKE_LOCK_ACTIVE(_prAdapter, _prWakeLock) \
+	((_prWakeLock)->active)
+
+#else
 #define KAL_WAKE_LOCK_INIT(_prAdapter, _prWakeLock, _pcName) \
 	wake_lock_init(_prWakeLock, WAKE_LOCK_SUSPEND, _pcName)
 
 #define KAL_WAKE_LOCK_DESTROY(_prAdapter, _prWakeLock) \
 	wake_lock_destroy(_prWakeLock)
 
-#define KAL_WAKE_LOCK(_prAdapter, _prWakeLock) \
-	wake_lock(_prWakeLock)
+#define KAL_WAKE_LOCK(_prAdapter, _prWakeLock) ({ \
+	if (halIsHifStateReady(_prAdapter) == TRUE) { \
+		wake_lock(_prWakeLock); \
+	} \
+})
 
-#define KAL_WAKE_LOCK_TIMEOUT(_prAdapter, _prWakeLock, _u4Timeout) \
-	wake_lock_timeout(_prWakeLock, _u4Timeout)
+#define KAL_WAKE_LOCK_TIMEOUT(_prAdapter, _prWakeLock, _u4Timeout) ({ \
+	if (halIsHifStateReady(_prAdapter) == TRUE) { \
+		wake_lock_timeout(_prWakeLock, _u4Timeout); \
+	} \
+})
 
 #define KAL_WAKE_UNLOCK(_prAdapter, _prWakeLock) \
 	wake_unlock(_prWakeLock)
 
 #define KAL_WAKE_LOCK_ACTIVE(_prAdapter, _prWakeLock) \
 	wake_lock_active(_prWakeLock)
-
+#endif
 #else
 #define KAL_WAKE_LOCK_INIT(_prAdapter, _prWakeLock, _pcName)
 #define KAL_WAKE_LOCK_DESTROY(_prAdapter, _prWakeLock)
@@ -992,6 +981,9 @@ VOID kalConstructDefaultFirmwarePrio(P_GLUE_INFO_T prGlueInfo, PPUINT_8 apucName
 PVOID kalFirmwareImageMapping(IN P_GLUE_INFO_T prGlueInfo,
 			      OUT PPVOID ppvMapFileBuf, OUT PUINT_32 pu4FileLength, IN ENUM_IMG_DL_IDX_T eDlIdx);
 VOID kalFirmwareImageUnmapping(IN P_GLUE_INFO_T prGlueInfo, IN PVOID prFwHandle, IN PVOID pvMapFileBuf);
+#endif
+#if CFG_CHIP_RESET_SUPPORT
+void kalRemoveProbe(IN P_GLUE_INFO_T prGlueInfo);
 #endif
 
 /*----------------------------------------------------------------------------*/
