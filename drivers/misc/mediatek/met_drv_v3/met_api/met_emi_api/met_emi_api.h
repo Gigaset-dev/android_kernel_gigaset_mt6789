@@ -8,6 +8,8 @@
 #if IS_ENABLED(CONFIG_MTK_DRAMC)
 EXTERNAL_SYMBOL_FUNC(unsigned int,mtk_dramc_get_data_rate,void)
 EXTERNAL_SYMBOL_FUNC(unsigned int,mtk_dramc_get_ddr_type,void)
+#elif IS_ENABLED(CONFIG_MTK_DRAMC_LEGACY)
+EXTERNAL_SYMBOL_FUNC(unsigned int,get_dram_data_rate,void)
 #endif
 
 #if IS_ENABLED(CONFIG_MTK_DVFSRC_MET)

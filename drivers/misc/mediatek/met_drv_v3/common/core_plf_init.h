@@ -98,14 +98,16 @@ extern struct metdevice met_ptpod;
 
 #ifdef MET_SSPM
 
-#include <linux/scmi_protocol.h>
 #include "sspm_reservedmem.h"
+#ifdef MET_SCMI
+#include <linux/scmi_protocol.h>
 #ifndef __TINYSYS_SCMI_H__
 #define __TINYSYS_SCMI_H__
 #include "tinysys-scmi.h"
 #endif
 
 #include "met_scmi_api/met_scmi_api.h"
+#endif /* MET_SCMI */
 
 #include "met_sspm_api/met_sspm_api.h"
 

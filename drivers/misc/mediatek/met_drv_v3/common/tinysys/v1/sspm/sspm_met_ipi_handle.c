@@ -34,9 +34,11 @@
 #include <linux/of.h>
 #include <linux/device.h>
 
+#ifdef MET_SCMI
 #ifndef __TINYSYS_SCMI_H__
 #define __TINYSYS_SCMI_H__
 #include "tinysys-scmi.h"
+#endif
 #endif
 
 #define MS_TO_JIFFIES(TIME)     ((unsigned long)(TIME) / (MSEC_PER_SEC / HZ))
@@ -89,11 +91,24 @@ static int sspm_buffer_dumping;
 static int sspm_recv_thread_comp;
 static int sspm_run_mode = SSPM_RUN_NORMAL;
 
-
+#ifndef MET_SCMI
+extern int _sspm_log_discard;
+#ifndef SSPM_VERSION_V2
+#include "sspm_ipi.h"
+static struct ipi_action ondiemet_sspm_isr;
+#else
+#include "core_plf_init.h"
+uint32_t rdata = 0;
+uint32_t ridx, widx, wlen;
+uint32_t ackdata = 0;
+#endif
+#endif /* !MET_SCMI */
 
 /*****************************************************************************
  * internal function ipmlement
  *****************************************************************************/
+
+#ifdef MET_SCMI
 void MET_handler(u32 r_feature_id, scmi_tinysys_report* report)
 {
     u32 cmd = 0;
@@ -127,7 +142,9 @@ void MET_handler(u32 r_feature_id, scmi_tinysys_report* report)
 	MET_PRINTF_D("\x1b[1;33m ==> MET_handler done, while(1) wake up \033[0m\n");
 	complete(&SSPM_CMD_comp);
 }
+#endif
 
+#ifdef MET_SCMI
 int scmi_tinysys_to_sspm_command( u32 feature_id,
                                               unsigned int *buffer,
                                               unsigned int slot,	// size of buffer
@@ -186,7 +203,9 @@ int scmi_tinysys_to_sspm_command( u32 feature_id,
 
     return ret;
 }
+#endif
 
+#ifdef MET_SCMI
 void start_sspm_ipi_recv_thread()
 {
     init_completion(&SSPM_ACK_comp);
@@ -226,7 +245,105 @@ void start_sspm_ipi_recv_thread()
 	}
 }
 
+#else /* MET_SCMI */
 
+#ifdef SSPM_VERSION_V2
+static int met_ipi_cb(unsigned int ipi_id, void *prdata, void *data, unsigned int len)
+{
+	unsigned int *cmd_buf = (unsigned int *)data;
+	unsigned int cmd;
+	int ret;
+
+	if (sspm_recv_thread_comp == 1) {
+		PR_BOOTMSG("%s %d\n", __FUNCTION__, __LINE__);
+		return 0;
+	}
+
+	cmd = cmd_buf[0] & MET_SUB_ID_MASK;
+
+	switch (cmd) {
+	case MET_DUMP_BUFFER:	/* mbox 1: start index; 2: size */
+		sspm_buffer_dumping = 1;
+		ridx = cmd_buf[1];
+		widx = cmd_buf[2];
+		log_size = cmd_buf[3];
+		break;
+
+	case MET_CLOSE_FILE:	/* no argument */
+		/* do close file */
+		ridx = cmd_buf[1];
+		widx = cmd_buf[2];
+		if (widx < ridx) {	/* wrapping occurs */
+			wlen = log_size - ridx;
+			sspm_log_req_enq((char *)(sspm_log_virt_addr) + (ridx << 2),
+					wlen * 4, _log_done_cb, (void *)1);
+			sspm_log_req_enq((char *)(sspm_log_virt_addr),
+					widx * 4, _log_done_cb, (void *)1);
+		} else {
+			wlen = widx - ridx;
+			sspm_log_req_enq((char *)(sspm_log_virt_addr) + (ridx << 2),
+					wlen * 4, _log_done_cb, (void *)1);
+		}
+		ret = sspm_log_stop();
+		break;
+
+	case MET_RESP_MD2AP:
+		break;
+
+	default:
+		break;
+	}
+	return 0;
+}
+
+#endif /* SSPM_VERSION_V2 */
+
+void start_sspm_ipi_recv_thread(void)
+{
+#ifdef SSPM_VERSION_V2
+	int ret;
+
+	if (sspm_ipidev_symbol == NULL) {
+		sspm_ipidev_symbol = &sspm_ipidev;
+	}
+
+	if (sspm_ipidev_symbol == NULL) {
+		return;
+	}
+
+
+	// tinysys send ipi to APSYS
+	ret = mtk_ipi_register(sspm_ipidev_symbol, IPIR_C_MET, met_ipi_cb,
+				NULL, (void *)&recv_buf);
+
+	if (ret) {
+		PR_BOOTMSG("[MET] ipi_register:%d failed:%d\n", IPIR_C_MET, ret);
+	} else {
+		PR_BOOTMSG("mtk_ipi_register IPIR_C_MET success \n");
+	}
+
+	// APSYS send ipi to tinysys
+	ret = mtk_ipi_register(sspm_ipidev_symbol, IPIS_C_MET, NULL,
+				NULL, (void *)&ackdata);
+
+	if (ret)
+		pr_debug("[MET] ipi_register:%d failed:%d\n", IPIS_C_MET, ret);
+#endif
+
+	if (sspm_ipi_thread_started != 1) {
+		sspm_recv_thread_comp = 0;
+		_sspm_recv_task =
+		    kthread_run(_sspm_recv_thread, NULL, "ondiemet_sspm_recv");
+		if (IS_ERR(_sspm_recv_task))
+			pr_debug("MET: Can not create ondiemet_sspm_recv\n");
+		else
+			sspm_ipi_thread_started = 1;
+	}
+}
+
+#endif
+
+#ifdef MET_SCMI
 void stop_sspm_ipi_recv_thread()
 {
 	if (_sspm_recv_task) {
@@ -237,6 +354,52 @@ void stop_sspm_ipi_recv_thread()
 		sspm_ipi_thread_started = 0;
 	}
 }
+#else /* NOT MET_SCMI, SSPM_VERSION_V0 AND V1 AND V2 */
+void stop_sspm_ipi_recv_thread(void)
+{
+	if (_sspm_recv_task) {
+		sspm_recv_thread_comp = 1;
+#ifndef SSPM_VERSION_V2
+		sspm_ipi_recv_complete(IPI_ID_TST1);
+#endif
+		kthread_stop(_sspm_recv_task);
+		_sspm_recv_task = NULL;
+		sspm_ipi_thread_started = 0;
+#ifndef SSPM_VERSION_V2
+		sspm_ipi_recv_unregistration(IPI_ID_TST1);
+#else
+		mtk_ipi_unregister(sspm_ipidev_symbol, IPIR_C_MET);
+		mtk_ipi_unregister(sspm_ipidev_symbol, IPIS_C_MET);
+#endif
+	}
+} /* MET_SCMI */
+
+#endif
+
+#if defined(SSPM_VERSION_V0) || defined(SSPM_VERSION_V1) || defined(SSPM_VERSION_V2) /* SSPM_VERSION_V0 AND V1 AND V2 */
+int met_ipi_to_sspm_command(void *buffer, int slot, unsigned int *retbuf, int retslot)
+{
+	int ret;
+
+#ifndef SSPM_VERSION_V2
+	ret = sspm_ipi_send_sync(IPI_ID_MET, IPI_OPT_WAIT, buffer, slot, retbuf, retslot);
+#else
+	if(!sspm_ipidev_symbol)
+		ret = -1;
+	else {
+		ret = mtk_ipi_send_compl(sspm_ipidev_symbol, IPIS_C_MET, IPI_SEND_WAIT, buffer, slot, 2000);
+		*retbuf = ackdata;
+	}
+#endif
+	if (ret != 0)
+		pr_debug("met_ipi_to_sspm_command error(%d)\n", ret);
+
+	dump_stack();
+	return ret;
+}
+EXPORT_SYMBOL(met_ipi_to_sspm_command);
+#endif
+
 
 
 void sspm_start(void)
@@ -266,6 +429,7 @@ void sspm_start(void)
 		ret = kstrtouint(buf, 10, &platform_id);
 	}
 
+#ifdef MET_SCMI
 	/* send DRAM physical address */
 	ipi_buf[0] = MET_MAIN_ID | MET_BUFFER_INFO;
 	ipi_buf[1] = (ret == 0) ? platform_id : 0;
@@ -273,13 +437,32 @@ void sspm_start(void)
 	ipi_buf[3] = (unsigned int)(sspm_log_phy_addr >> 32); /* addr high*/
 
 	ret = met_scmi_to_sspm_command(ipi_buf, sizeof(ipi_buf)/sizeof(unsigned int), &rdata, 1);
+#else
+
+	/* send DRAM physical address */
+	ipi_buf[0] = MET_MAIN_ID | MET_BUFFER_INFO;
+	ipi_buf[1] = (unsigned int)sspm_log_phy_addr; /* address */
+	if (ret == 0)
+		ipi_buf[2] = platform_id;
+	else
+		ipi_buf[2] = 0;
+
+	ipi_buf[3] = 0;
+
+	ret = met_ipi_to_sspm_command((void *)ipi_buf, 0, &rdata, 1);
+#endif
 
 	/* start ondiemet now */
 	ipi_buf[0] = MET_MAIN_ID | MET_OP | MET_OP_START;
 	ipi_buf[1] = ondiemet_module[ONDIEMET_SSPM] ;
 	ipi_buf[2] = SSPM_LOG_FILE;
 	ipi_buf[3] = SSPM_RUN_NORMAL;
+
+#ifdef MET_SCMI
 	ret = met_scmi_to_sspm_command(ipi_buf, sizeof(ipi_buf)/sizeof(unsigned int), &rdata, 1);
+#else
+	ret = met_ipi_to_sspm_command((void *)ipi_buf, 0, &rdata, 1);
+#endif
 
 }
 
@@ -288,7 +471,7 @@ void sspm_stop(void)
 {
 	int ret = 0;
 	unsigned int rdata = 0;
-	unsigned int ipi_buf[2] = {0, 0};
+	unsigned int ipi_buf[4] = {0, 0, 0, 0};
 	unsigned int chip_id = 0;
 
 	MET_PRINTF_D("\x1b[1;31m ==> sspm_stop \033[0m\n");
@@ -297,7 +480,12 @@ void sspm_stop(void)
 	if (sspm_buf_available == 1) {
 		ipi_buf[0] = MET_MAIN_ID | MET_OP | MET_OP_STOP;
 		ipi_buf[1] = chip_id;
+#ifdef MET_SCMI
 		ret = met_scmi_to_sspm_command(ipi_buf, sizeof(ipi_buf)/sizeof(unsigned int), &rdata, 1);
+#else
+		ret = met_ipi_to_sspm_command(ipi_buf, 0, &rdata, 1);
+#endif
+
 	}
 }
 
@@ -306,7 +494,7 @@ void sspm_extract(void)
 {
 	int ret;
 	unsigned int rdata;
-	unsigned int ipi_buf[1] = {0};
+	unsigned int ipi_buf[4] = {0, 0, 0, 0};
 	int count;
 
 	MET_PRINTF_D("\x1b[1;31m ==> sspm_extract \033[0m\n");
@@ -318,7 +506,14 @@ void sspm_extract(void)
 			count--;
 		}
 		ipi_buf[0] = MET_MAIN_ID | MET_OP | MET_OP_EXTRACT;
+
+#ifdef MET_SCMI
 		ret = met_scmi_to_sspm_command(ipi_buf, sizeof(ipi_buf)/sizeof(unsigned int), &rdata, 1);
+#else
+		ret = met_ipi_to_sspm_command((void *)ipi_buf, 0, &rdata, 1);
+#endif
+
+
 	}
 
 	if (sspm_run_mode == SSPM_RUN_NORMAL) {
@@ -331,13 +526,19 @@ void sspm_flush(void)
 {
 	int ret;
 	unsigned int rdata;
-	unsigned int ipi_buf[1] = {0};
+	unsigned int ipi_buf[4] = {0, 0, 0, 0};
 
 	MET_PRINTF_D("\x1b[1;31m ==> sspm_flush \033[0m\n");
 
 	if (sspm_buf_available == 1) {
 		ipi_buf[0] = MET_MAIN_ID | MET_OP | MET_OP_FLUSH;
+
+#ifdef MET_SCMI
 		ret = met_scmi_to_sspm_command((void *)ipi_buf, sizeof(ipi_buf)/sizeof(unsigned int), &rdata, 1);
+#else
+		ret = met_ipi_to_sspm_command((void *)ipi_buf, 0, &rdata, 1);
+#endif
+
 	}
 
 	if (sspm_run_mode == SSPM_RUN_NORMAL) {
@@ -354,7 +555,9 @@ int met_scmi_to_sspm_command(
 {
 	int ret = 0;
 
+#ifdef MET_SCMI
 	ret = scmi_tinysys_to_sspm_command(feature_id, buffer, slot, retbuf, retslot, MS_TO_JIFFIES(2000));
+#endif
 
 	if (ret != 0) {
 		pr_debug("met_AP_to_sspm_command error(%d)\n", ret);
@@ -385,7 +588,7 @@ static void _log_done_cb(const void *p)
 {
 	unsigned int ret;
 	unsigned int rdata = 0;
-	unsigned int ipi_buf[2] = {0, 0};
+	unsigned int ipi_buf[4] = {0, 0, 0, 0};
 	unsigned int opt = (p != NULL);
 
 	MET_PRINTF_D("\x1b[1;31m ==> _log_done_cb ++\033[0m\n");
@@ -394,12 +597,18 @@ static void _log_done_cb(const void *p)
 		MET_PRINTF_D("\x1b[1;31m ==> Send MET_RESP_AP2MD --> SSPM \033[0m\n");
 		ipi_buf[0] = MET_MAIN_ID | MET_RESP_AP2MD;
 		ipi_buf[1] = MET_DUMP_BUFFER;
+		ipi_buf[2] = 0;
+		ipi_buf[3] = 0;
+#ifdef MET_SCMI
 		ret = met_scmi_to_sspm_command((void *)ipi_buf, sizeof(ipi_buf)/sizeof(unsigned int), &rdata, 1);
-	}
-
+#else
+		ret = met_ipi_to_sspm_command((void *)ipi_buf, 0, &rdata, 1);
+#endif
+    }
 	MET_PRINTF_D("\x1b[1;31m ==> _log_done_cb --\033[0m\n");
 }
 
+#ifdef MET_SCMI
 static int _sspm_recv_thread(void *data)
 {
     u32 cmd = 0;
@@ -507,8 +716,141 @@ static int _sspm_recv_thread(void *data)
 			PR_BOOTMSG("[MET] [%s,%d] scmi_tinysys_common_set is not linked!\n", __FILE__, __LINE__);
 			return 1;
 		}
-	} while (!kthread_should_stop());
+
+	}while (!kthread_should_stop());
 
 	return 0;
 }
+
+#elif defined(SSPM_VERSION_V0) || defined(SSPM_VERSION_V1)
+int _sspm_recv_thread(void *data)
+{
+	uint32_t rdata = 0, cmd, ret;
+	uint32_t ridx, widx, wlen;
+
+	ondiemet_sspm_isr.data = (void *)recv_buf;
+	ret = sspm_ipi_recv_registration(IPI_ID_TST1, &ondiemet_sspm_isr);
+
+	do {
+		sspm_ipi_recv_wait(IPI_ID_TST1);
+
+		if (sspm_recv_thread_comp == 1) {
+			while (!kthread_should_stop())
+				;
+			return 0;
+		}
+		cmd = recv_buf[0] & MET_SUB_ID_MASK;
+
+		switch (cmd) {
+		case MET_DUMP_BUFFER:	/* mbox 1: start index; 2: size */
+			sspm_buffer_dumping = 1;
+			ridx = recv_buf[1];
+			widx = recv_buf[2];
+			log_size = recv_buf[3];
+			sspm_ipi_send_ack(IPI_ID_TST1, &rdata);
+			if (widx < ridx) {	/* wrapping occurs */
+				wlen = log_size - ridx;
+				sspm_log_req_enq((char *)(sspm_log_virt_addr) + (ridx << 2),
+				wlen * 4, _log_done_cb, (void *)1);
+				sspm_log_req_enq((char *)(sspm_log_virt_addr),
+						     widx * 4, _log_done_cb, (void *)0);
+			} else {
+				wlen = widx - ridx;
+				sspm_log_req_enq((char *)(sspm_log_virt_addr) + (ridx << 2),
+				wlen * 4, _log_done_cb, (void *)0);
+			}
+			break;
+		case MET_CLOSE_FILE:	/* no argument */
+			/* do close file */
+			ridx = recv_buf[1];
+			widx = recv_buf[2];
+			_sspm_log_discard = recv_buf[3];
+			if (widx < ridx) {	/* wrapping occurs */
+				wlen = log_size - ridx;
+				sspm_log_req_enq((char *)(sspm_log_virt_addr) + (ridx << 2),
+				wlen * 4, _log_done_cb, (void *)1);
+				sspm_log_req_enq((char *)(sspm_log_virt_addr),
+						     widx * 4, _log_done_cb, (void *)1);
+			} else {
+				wlen = widx - ridx;
+				sspm_log_req_enq((char *)(sspm_log_virt_addr) + (ridx << 2),
+				wlen * 4, _log_done_cb, (void *)1);
+			}
+			ret = sspm_log_stop();
+			/* pr_debug("MET_CLOSE_FILE: ret=%d log_discard=%d\n", ret, met_sspm_log_discard); */
+			sspm_ipi_send_ack(IPI_ID_TST1, &rdata);
+			if (sspm_run_mode == SSPM_RUN_CONTINUOUS) {
+				/* clear the memory */
+				memset_io((void *)sspm_log_virt_addr, 0,
+					  sspm_buffer_size);
+				/* re-start ondiemet again */
+				sspm_start();
+		}
+			break;
+		case MET_RESP_MD2AP:
+			sspm_ipi_send_ack(IPI_ID_TST1, &rdata);
+			sspm_buffer_dumping = 0;
+			break;
+		default:
+			sspm_ipi_send_ack(IPI_ID_TST1, &rdata);
+			break;
+		}
+	} while (!kthread_should_stop());
+	return 0;
+}
+
+#elif defined(SSPM_VERSION_V2)
+int _sspm_recv_thread(void *data)
+{
+	int ret = 0;
+	uint32_t cmd = 0;
+
+	do {
+		ret = mtk_ipi_recv_reply(sspm_ipidev_symbol,IPIR_C_MET, (void *)&rdata, 1);
+
+		if (ret) {
+			pr_debug("[MET] ipi_register:%d failed:%d\n", IPIR_C_MET, ret);
+		}
+
+		if (sspm_recv_thread_comp == 1) {
+			while (!kthread_should_stop())
+				;
+			return 0;
+		}
+		cmd = recv_buf[0] & MET_SUB_ID_MASK;
+
+		switch (cmd) {
+		case MET_DUMP_BUFFER:	/* mbox 1: start index; 2: size */
+			if (widx < ridx) {	/* wrapping occurs */
+				wlen = log_size - ridx;
+				sspm_log_req_enq((char *)(sspm_log_virt_addr) + (ridx << 2),
+				wlen * 4, _log_done_cb, (void *)1);
+				sspm_log_req_enq((char *)(sspm_log_virt_addr),
+							 widx * 4, _log_done_cb, (void *)0);
+			} else {
+				wlen = widx - ridx;
+				sspm_log_req_enq((char *)(sspm_log_virt_addr) + (ridx << 2),
+				wlen * 4, _log_done_cb, (void *)0);
+			}
+			break;
+		case MET_CLOSE_FILE:	/* no argument */
+			if (sspm_run_mode == SSPM_RUN_CONTINUOUS) {
+				/* clear the memory */
+				memset_io((void *)sspm_log_virt_addr, 0,
+					  sspm_buffer_size);
+				/* re-start ondiemet again */
+				sspm_start();
+            }
+			break;
+		case MET_RESP_MD2AP:
+			sspm_buffer_dumping = 0;
+			break;
+		default:
+			break;
+		}
+	} while (!kthread_should_stop());
+	return 0;
+}
+
+#endif //SCMI or SSPM_VERSION_V0 or SSPM_VERSION_V1 or SSPM_VERSION_V2
 

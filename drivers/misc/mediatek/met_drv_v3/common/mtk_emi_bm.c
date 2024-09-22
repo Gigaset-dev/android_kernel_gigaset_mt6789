@@ -4,6 +4,7 @@
  *
  */
 #include <linux/kernel.h>
+#include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/io.h>
@@ -92,7 +93,9 @@ void __iomem *BaseAddrSLC_PMU[MET_MAX_EMI_NUM];
 
 /*read from dts*/
 int EMI_NUM;
+int DRAMC_VER;
 int DRAM_CH_NUM_PER_EMI;
+int SEDA_VER = 350;  /* 300/350/360/500  300:SEDA3.0 */
 int DRAM_FREQ_DEFAULT;
 int DDR_RATIO_DEFAULT;
 int DRAM_TYPE_DEFAULT;
@@ -354,6 +357,14 @@ int MET_BM_Init(void)
 		return -1;
 	}
 	ret = of_property_read_u32_index(node, // device node
+									"dramc_ver",  //device name
+									0, //offset
+									&DRAMC_VER);
+	if (ret) {
+		PR_BOOTMSG("Cannot get dramc_ver index from dts\n");
+		return -1;
+	}
+	ret = of_property_read_u32_index(node, // device node
 									"dram_num",  //device name
 									0, //offset
 									&dram_chann_num);
@@ -362,6 +373,15 @@ int MET_BM_Init(void)
 		return -1;
 	}
 	DRAM_CH_NUM_PER_EMI = dram_chann_num;
+
+	ret = of_property_read_u32_index(node, // device node
+									"seda_ver",  //device name
+									0, //offset
+									&SEDA_VER);
+	if (ret) {
+		PR_BOOTMSG("Cannot get seda_ver index from dts. Default value is 350\n");
+		SEDA_VER = 350;
+	}
 
 	ret = of_property_read_u32_index(node, // device node
 									"dram_freq_default",  //device name
@@ -3341,10 +3361,9 @@ struct kobj_attribute slc_pmu_cnt_filter0_attr = __ATTR(slc_pmu_cnt_filter0, 066
 struct kobj_attribute slc_pmu_cnt_filter1_attr = __ATTR(slc_pmu_cnt_filter1, 0664, slc_pmu_cnt_filter1_show, slc_pmu_cnt_filter1_store);
 struct kobj_attribute slc_pmu_cnt_bw_lat_sel_attr = __ATTR(slc_pmu_cnt_bw_lat_sel, 0664, slc_pmu_cnt_bw_lat_sel_show, slc_pmu_cnt_bw_lat_sel_store);
 
-
 void emi_init(void)
 {
-	unsigned int bmrw0_val, bmrw1_val, i, emi_no;
+	unsigned int bmrw0_val, bmrw1_val, i, emi_no, enable;
 	/*unsigned int msel_group_val[4];*/
 
 	/*save origianl EMI config*/
@@ -3370,7 +3389,7 @@ void emi_init(void)
 			MET_BM_SetLatencyCounter(1, emi_no);    /*enable latency count*/
 
 			MET_BM_SetMonitorCounter(1,
-							 0xff,   /*set master_sel all for BSCT/BACT... */
+							 0xff,   /*set master_sel all for BSCT/BACT... for SEDA 3.5*/
 							 0x0,
 							 emi_no);
 		}
@@ -3400,37 +3419,6 @@ void emi_init(void)
 
 		// PR_BOOTMSG("[%s]reserve_wsct_setting[%d]=%d\n",__func__,emi_no, reserve_wsct_setting_[emi_no]);
 
-		// if (reserve_wsct_setting_[emi_no] == 0) {
-		// 	/* wsct 0 : total-all*/
-		// 	msel_group_ext_val_[emi_no][0] = BM_MASTER_ALL;
-		// 	wsct_rw_val_[emi_no][0] = BM_WSCT_RW_RWBOTH;
-		// 	WSCT_HPRI_DIS_[emi_no][0] = 1;
-		// 	WSCT_HPRI_SEL_[emi_no][0] = 0xF;
-		// 	wsct_busid_val_[emi_no][0] = 0xFFFFF;
-		// 	wsct_idMask_val_[emi_no][0] = 0xFFFF;
-		// 	wsct_chn_rank_sel_val_[emi_no][0] = 0xF;
-		// 	wsct_byte_bnd_dis_[emi_no][0] = 1;
-
-		// 	/* wsct 4 : total-Read , modify @2020/12/17 */
-		// 	msel_group_ext_val_[emi_no][4] = BM_MASTER_ALL;
-		// 	wsct_rw_val_[emi_no][4] = BM_WSCT_RW_READONLY;
-		// 	WSCT_HPRI_DIS_[emi_no][4] = 1;
-		// 	WSCT_HPRI_SEL_[emi_no][4] = 0xF;
-		// 	wsct_busid_val_[emi_no][4] = 0xFFFFF;
-		// 	wsct_idMask_val_[emi_no][4] = 0xFFFF;
-		// 	wsct_chn_rank_sel_val_[emi_no][4] = 0xF;
-		// 	wsct_byte_bnd_dis_[emi_no][4] = 1;
-
-		// 	/* wsct 5 : total-write , modify @2020/12/17 */
-		// 	msel_group_ext_val_[emi_no][5] = BM_MASTER_ALL;
-		// 	wsct_rw_val_[emi_no][5] = BM_WSCT_RW_WRITEONLY;
-		// 	WSCT_HPRI_DIS_[emi_no][5] = 1;
-		// 	WSCT_HPRI_SEL_[emi_no][5] = 0xF;
-		// 	wsct_busid_val_[emi_no][5] = 0xFFFFF;
-		// 	wsct_idMask_val_[emi_no][5] = 0xFFFF;
-		// 	wsct_chn_rank_sel_val_[emi_no][5] = 0xF;
-		// 	wsct_byte_bnd_dis_[emi_no][5] = 1;
-		// }
 
 		/*if msel_enable is disable, the use total(0xff) to set config*/
 		if (msel_enable_[emi_no]==0) {
@@ -3439,30 +3427,54 @@ void emi_init(void)
 			}
 		}
 
-		MET_BM_SetWSCT_master_rw(msel_group_ext_val_[emi_no], wsct_rw_val_[emi_no], emi_no);
-		MET_BM_SetWSCT_high_priority(WSCT_HPRI_DIS_[emi_no], WSCT_HPRI_SEL_[emi_no], emi_no);
-		MET_BM_SetWSCT_busid_idmask(wsct_busid_val_[emi_no], wsct_idMask_val_[emi_no], emi_no);
-		MET_BM_SetWSCT_chn_rank_sel(wsct_chn_rank_sel_val_[emi_no], emi_no);
-		MET_BM_SetWSCT_burst_range(wsct_byte_bnd_dis_[emi_no], wsct_byte_low_bnd_val_[emi_no],
-									 wsct_byte_up_bnd_val_[emi_no], emi_no);
-		MET_BM_SetTSCT_busid_enable(tsct_busid_enable_val_[emi_no], emi_no);
+		if ( SEDA_VER == 300 ) {
+			/*setting master select for SEDA 3*/
+			for (i = 1; i <= 4; i++) {
+				MET_BM_SetMonitorCounter(i,
+						 msel_group_ext_val_[emi_no][ i - 1] & BM_MASTER_ALL,
+						 BM_TRANS_TYPE_4BEAT |
+						 BM_TRANS_TYPE_8Byte |
+						 BM_TRANS_TYPE_BURST_WRAP,
+						 emi_no);
+			}
+			/* set ultra*/
+			for (i = 0; i < BM_COUNTER_MAX; i++) {
+				if ((high_priority_filter & (1 << i)) == 0)
+					enable = 0;
+				else
+					enable = 1;
 
-		MET_BM_SetTtype_high_priority_sel(high_priority_filter_[emi_no], TTYPE_HPRI_SEL_[emi_no], emi_no);
-		MET_BM_SetTtype_busid_idmask(ttype_busid_val_[emi_no], ttype_idMask_val_[emi_no],
-									ttype1_16_en_[emi_no], ttype17_21_en_[emi_no], emi_no);
-		MET_BM_SetTtype_chn_rank_sel(ttype_chn_rank_sel_val_[emi_no], emi_no);
-		MET_BM_SetTtype_burst_range(ttype_byte_bnd_dis_[emi_no], ttype_byte_low_bnd_val_[emi_no],
-									ttype_byte_up_bnd_val_[emi_no], emi_no);
+				MET_BM_SetUltraHighFilter(i + 1, enable, emi_no);
+			}
 
-		if (MET_EMI_support_list & (1<<SLC_PMU_SUPPORT_IDX)) {
-			MET_BM_SetSLC_pmu_cnt_filter(slc_pmu_cnt_setting_enable_val_[emi_no], slc_pmu_cnt_filter0_val_[emi_no],
-											slc_pmu_cnt_filter1_val_[emi_no], slc_pmu_cnt_bw_lat_sel_val_[emi_no], emi_no);
 		}
+		else {
+			MET_BM_SetWSCT_master_rw(msel_group_ext_val_[emi_no], wsct_rw_val_[emi_no], emi_no);
+			MET_BM_SetWSCT_high_priority(WSCT_HPRI_DIS_[emi_no], WSCT_HPRI_SEL_[emi_no], emi_no);
+			MET_BM_SetWSCT_busid_idmask(wsct_busid_val_[emi_no], wsct_idMask_val_[emi_no], emi_no);
+			MET_BM_SetWSCT_chn_rank_sel(wsct_chn_rank_sel_val_[emi_no], emi_no);
+			MET_BM_SetWSCT_burst_range(wsct_byte_bnd_dis_[emi_no], wsct_byte_low_bnd_val_[emi_no],
+										 wsct_byte_up_bnd_val_[emi_no], emi_no);
+			MET_BM_SetTSCT_busid_enable(tsct_busid_enable_val_[emi_no], emi_no); /*SEDA 3.5 only for TSCT */
+
+			MET_BM_SetTtype_high_priority_sel(high_priority_filter_[emi_no], TTYPE_HPRI_SEL_[emi_no], emi_no);
+			MET_BM_SetTtype_busid_idmask(ttype_busid_val_[emi_no], ttype_idMask_val_[emi_no],
+										ttype1_16_en_[emi_no], ttype17_21_en_[emi_no], emi_no);
+			MET_BM_SetTtype_chn_rank_sel(ttype_chn_rank_sel_val_[emi_no], emi_no);
+			MET_BM_SetTtype_burst_range(ttype_byte_bnd_dis_[emi_no], ttype_byte_low_bnd_val_[emi_no],
+										ttype_byte_up_bnd_val_[emi_no], emi_no);
+
+			if (MET_EMI_support_list & (1<<SLC_PMU_SUPPORT_IDX)) {
+				MET_BM_SetSLC_pmu_cnt_filter(slc_pmu_cnt_setting_enable_val_[emi_no], slc_pmu_cnt_filter0_val_[emi_no],
+												slc_pmu_cnt_filter1_val_[emi_no], slc_pmu_cnt_bw_lat_sel_val_[emi_no], emi_no);
+			}
 #ifdef EMI_LOWEFF_SUPPORT
-		MET_BM_SetLOWEFF_master_rw(0, wmask_msel_val_[emi_no], ageexp_msel_val_[emi_no],
+			MET_BM_SetLOWEFF_master_rw(0, wmask_msel_val_[emi_no], ageexp_msel_val_[emi_no],
 										ageexp_rw_val_[emi_no],emi_no);
 #endif
 
+
+		} /*end of if(SEDA_VER == 300) */
 		bmrw0_val = 0;
 		for (i = 0; i < 16; i++)
 			bmrw0_val |= (ttype_rw_val_[emi_no][i] << (i * 2));
@@ -3472,6 +3484,7 @@ void emi_init(void)
 			bmrw1_val |= (ttype_rw_val_[emi_no][i] << ((i-16) * 2));
 
 		MET_BM_SetTtypeCounterRW(bmrw0_val, bmrw1_val, emi_no);
+
 
 	} /*end of for( emi_no=0;emi_no<EMI_NUM;emi_no++ )*/
 
@@ -3488,11 +3501,15 @@ void MET_BM_IPI_REGISTER_CB(void)
 {
 	int ret;
 	unsigned int rdata;
-	unsigned int ipi_buf[1] = {0};
+	unsigned int ipi_buf[4] = {0, 0, 0, 0};
 
 	if (sspm_buf_available == 1) {
 		ipi_buf[0] = MET_MAIN_ID | (MID_EMI << MID_BIT_SHIFT) | MET_ARGU | SET_REGISTER_CB;
+#ifdef MET_SCMI
 		ret = met_scmi_to_sspm_command((void *)ipi_buf, sizeof(ipi_buf)/sizeof(unsigned int), &rdata, 1);
+#else //SSPM_VERSION v1, v2
+		ret = met_ipi_to_sspm_command((void *)ipi_buf, 0, &rdata, 1);
+#endif
 	}
 }
 
@@ -3501,12 +3518,19 @@ void MET_BM_IPI_configs(void)
 {
 	int ret;
 	unsigned int rdata;
-	unsigned int ipi_buf[3] = {0, 0, 0};
+	unsigned int ipi_buf[4] = {0, 0, 0, 0};
 
 	if (sspm_buf_available == 1) {
 		ipi_buf[0] = MET_MAIN_ID | (MID_EMI << MID_BIT_SHIFT) | MET_ARGU | SET_EBM_CONFIGS1;
 		ipi_buf[2] = EMI_VER_MAJOR << 24 | EMI_VER_MINOR << 16 | DRAMC_VER << 8 | 0;
+
+#ifdef MET_SCMI
 		ret = met_scmi_to_sspm_command((void *)ipi_buf, sizeof(ipi_buf)/sizeof(unsigned int), &rdata, 1);
+#else
+		ipi_buf[1] = INTERNAL_MODE << 16;
+		ret = met_ipi_to_sspm_command((void *)ipi_buf, 0, &rdata, 1);
+#endif
+
 	}
 }
 #endif
@@ -3517,16 +3541,19 @@ unsigned int get_sspm_support_feature(void)
 
 #ifdef MET_SSPM
 	int ret;
-	unsigned int ipi_buf[1] = {0};
+	unsigned int ipi_buf[4] = {0, 0, 0, 0};
 
 	if (met_sspm_api_ready && met_scmi_api_ready) {
 		if (sspm_buf_available == 1) {
 			ipi_buf[0] = MET_MAIN_ID | (MID_EMI << MID_BIT_SHIFT) | MET_REQ_AP2MD ;
-
+#ifdef MET_SCMI
 			ret = met_scmi_to_sspm_command((void *)ipi_buf, sizeof(ipi_buf)/sizeof(unsigned int), &rdata, 1);
+#else
+			ret = met_ipi_to_sspm_command((void *)ipi_buf, 0, &rdata, 1);
+#endif
 
 			if (ret != 0) {
-				PR_BOOTMSG("met_scmi_to_sspm_command fail(%d)\n", ret);
+				PR_BOOTMSG("met_scmi_to_sspm_command or met_ipi_to_sspm_command fail(%d)\n", ret);
 				rdata = 0;
 			}
 		}
@@ -3599,6 +3626,9 @@ unsigned met_get_dram_data_rate(void)
 #if IS_ENABLED(CONFIG_MTK_DRAMC)
 	if (mtk_dramc_get_data_rate_symbol)
 		dram_data_rate_MHz = mtk_dramc_get_data_rate_symbol();
+#elif IS_ENABLED(CONFIG_MTK_DRAMC_LEGACY)
+	if (get_dram_data_rate_symbol)
+		dram_data_rate_MHz = get_dram_data_rate_symbol();
 #endif
 	if (dram_data_rate_MHz == 0)
 		dram_data_rate_MHz = met_emi_default_val[e_MET_DRAM_FREQ];
@@ -4137,8 +4167,15 @@ void met_emi_resume_basic(void)
 
 int emi_print_header_basic(char *buf, int len)
 {
+	char * output_buf;
+
+        output_buf = kmalloc(PAGE_SIZE/4, GFP_KERNEL);
+        if (output_buf == NULL) {
+                PR_BOOTMSG("Failed to allocate emi header local buffer!!\n");
+                return -1;
+        }
+
 	if( (strlen(header_str) - output_str_len) > PAGE_SIZE ){
-		char output_buf[PAGE_SIZE/4];
 
 		strncpy(output_buf, header_str+output_str_len, (PAGE_SIZE/4) -1);
 		output_buf[(PAGE_SIZE/4) - 1] = '\0';
@@ -4159,6 +4196,7 @@ int emi_print_header_basic(char *buf, int len)
 		output_header_len = 0;
 		output_str_len = 0;
 	}
+	kfree(output_buf);
 	return len;
 }
 
@@ -4226,6 +4264,7 @@ EXPORT_SYMBOL(mdmcu_sel_enable);
 EXPORT_SYMBOL(BaseAddrSLC_PMU);
 /*read from dts*/
 EXPORT_SYMBOL(EMI_NUM);
+EXPORT_SYMBOL(DRAMC_VER);
 EXPORT_SYMBOL(DRAM_CH_NUM_PER_EMI);
 // EXPORT_SYMBOL(DRAM_FREQ_DEFAULT);
 // EXPORT_SYMBOL(DDR_RATIO_DEFAULT);

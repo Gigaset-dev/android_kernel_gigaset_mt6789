@@ -186,7 +186,6 @@ int sspm_log_init(struct device *dev)
 #else
 	struct proc_dir_entry *met_dir = NULL;
 #endif
-
 	met_dir = dev_get_drvdata(dev);
 	mutex_init(&lock_tracef);
 	_sspm_log_req_q_init(&sspm_log_req_q);
@@ -224,23 +223,32 @@ int sspm_log_init(struct device *dev)
 	} else {
 		sspm_buf_available = 0;
 	}
-#else
-	np = of_find_node_by_name(NULL, "met_res_ram_sspm");
-	if (!np) {
-		pr_debug("unable to find met_res_ram_sspm\n");
-		return 0;
-	}
-	of_property_read_u64(np, "start", &sspm_log_phy_addr);
-	of_property_read_u32(np, "size", &sspm_buffer_size);
+#elif defined(MET_SCMI)
+		np = of_find_node_by_name(NULL, "met_res_ram_sspm");
+		if (!np) {
+			pr_debug("unable to find met_res_ram_sspm\n");
+			return 0;
+		}
+		of_property_read_u64(np, "start", &sspm_log_phy_addr);
+		of_property_read_u32(np, "size", &sspm_buffer_size);
 
-	if ((sspm_log_phy_addr > 0) && (sspm_buffer_size > 0)) {
-		sspm_log_virt_addr = (void*)ioremap_wc(sspm_log_phy_addr, sspm_buffer_size);
+		if ((sspm_log_phy_addr > 0) && (sspm_buffer_size > 0)) {
+			sspm_log_virt_addr = (void*)ioremap_wc(sspm_log_phy_addr, sspm_buffer_size);
+			sspm_buf_available = 1;
+		} else {
+			sspm_buf_available = 0;
+		}
+#elif defined(SSPM_VERSION_V0) || defined(SSPM_VERSION_V1) || defined(SSPM_VERSION_V2)
+		sspm_log_virt_addr = (void*)sspm_reserve_mem_get_virt(MET_MEM_ID);
+		sspm_log_phy_addr = sspm_reserve_mem_get_phys(MET_MEM_ID);
+		sspm_buffer_size = sspm_reserve_mem_get_size(MET_MEM_ID);
 
-		sspm_buf_available = 1;
-	} else {
-		sspm_buf_available = 0;
-	}
-#endif /* CONFIG_MTK_GMO_RAM_OPTIMIZE */
+		if ((sspm_log_phy_addr > 0) && (sspm_buffer_size > 0)) {
+			sspm_buf_available = 1;
+		} else {
+			sspm_buf_available = 0;
+		}
+#endif
 
 	start_sspm_ipi_recv_thread();
 

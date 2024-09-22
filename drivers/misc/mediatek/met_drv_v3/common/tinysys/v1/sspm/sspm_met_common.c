@@ -212,7 +212,7 @@ static void ondiemet_sspm_stop(void)
 
 static void update_event_id_flag(int event_id)
 {
-	unsigned int ipi_buf[3] = {0, 0, 0};
+	unsigned int ipi_buf[4] = {0, 0, 0, 0};
 	unsigned int rdata = 0;
 	unsigned int res = 0;
 	unsigned int group = 0;
@@ -225,8 +225,12 @@ static void update_event_id_flag(int event_id)
 	ipi_buf[0] = MET_MAIN_ID | MET_ARGU | MID_COMMON<<MID_BIT_SHIFT | 1;
 	ipi_buf[1] = group;
 	ipi_buf[2] = event_id_flag[group];
-	res = met_scmi_to_sspm_command((void *)ipi_buf, sizeof(ipi_buf)/sizeof(unsigned int), &rdata, 1);
 
+#ifdef MET_SCMI
+	res = met_scmi_to_sspm_command((void *)ipi_buf, sizeof(ipi_buf)/sizeof(unsigned int), &rdata, 1);
+#else
+	res = met_ipi_to_sspm_command((void *)ipi_buf, 0, &rdata, 1);
+#endif
 	met_sspm_common.mode = 1;
 }
 

@@ -688,6 +688,14 @@ static int gpu_pmu_print_header(
 	char *buf,
 	int len)
 {
+	char* output_buf;
+
+	output_buf = kmalloc(PAGE_SIZE/4, GFP_KERNEL); 
+	if (output_buf == NULL) { 
+		PR_BOOTMSG("Failed to allocate gpu pmu header memory!!\n");
+		return -1;
+	}
+
 	if (pmu_str){
 		if(output_header_pmu_len == 0){
 			len = SNPRINTF(buf, PAGE_SIZE, "%s", header_pmu);
@@ -696,7 +704,6 @@ static int gpu_pmu_print_header(
 		}
 		else{
 			if( (strlen(pmu_str) - output_pmu_str_len) > PAGE_SIZE ){
-				char output_buf[PAGE_SIZE/4];
 
 				strncpy(output_buf, pmu_str+output_pmu_str_len, PAGE_SIZE/4);
 				len = SNPRINTF(buf, PAGE_SIZE, "%s", output_buf);
@@ -713,7 +720,7 @@ static int gpu_pmu_print_header(
 		}
 	}
 	
-
+	kfree(output_buf);
 	return len;
 }
 
