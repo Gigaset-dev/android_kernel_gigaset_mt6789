@@ -32,6 +32,15 @@
 		} \
 	}
 
+#if IS_ENABLED(CONFIG_MTK_TINYSYS_SSPM_SUPPORT)
+#ifndef MET_SCMI
+#ifdef SSPM_VERSION_V2
+extern struct mtk_ipi_device sspm_ipidev;
+extern struct mtk_ipi_device *sspm_ipidev_symbol;
+#endif /* SSPM_VERSION_V2 */
+#endif /* MET_SCMI */
+#endif
+
 extern unsigned int mt_get_chip_id(void);
 extern unsigned int (*mt_get_chip_id_symbol)(void);
 

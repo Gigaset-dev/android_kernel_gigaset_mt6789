@@ -169,7 +169,7 @@ static struct kobject *_g_tinysys_kobj;
 static int _sspm_log_mode;
 static int _sspm_run_mode;
 static int _sspm_log_size;
-static int _sspm_log_discard;
+int _sspm_log_discard = -1;
 
 static DEVICE_ATTR(sspm_ipi_supported, 0444, sspm_ipi_supported_show, NULL);
 static DEVICE_ATTR(sspm_buffer_size, 0444, sspm_buffer_size_show, NULL);
@@ -212,6 +212,16 @@ static struct kobj_attribute _attr_mcupm_recording = \
 #endif
 
 static struct device *ondiemet_attr_dev;
+
+#if IS_ENABLED(CONFIG_MTK_TINYSYS_SSPM_SUPPORT)
+#ifndef MET_SCMI
+#ifdef SSPM_VERSION_V2
+//#include "sspm/ondiemet_sspm.h"
+extern struct mtk_ipi_device sspm_ipidev;
+extern struct mtk_ipi_device *sspm_ipidev_symbol;
+#endif
+#endif /* !MET_SCMI */
+#endif
 
 /*****************************************************************************
  * external function ipmlement
@@ -412,6 +422,17 @@ static ssize_t sspm_ipi_supported_show(
 {
 	int ipi_supported = 1;
 	int i = 0;
+
+#if IS_ENABLED(CONFIG_MTK_TINYSYS_SSPM_SUPPORT)
+#ifndef MET_SCMI
+#ifdef SSPM_VERSION_V2
+    if(sspm_ipidev_symbol)
+        ipi_supported = 1;
+    else
+        ipi_supported = 0;
+#endif
+#endif /* !MET_SCMI */
+#endif
 
 	i = snprintf(buf, PAGE_SIZE, "%d\n", ipi_supported);
 	if (i < 0)

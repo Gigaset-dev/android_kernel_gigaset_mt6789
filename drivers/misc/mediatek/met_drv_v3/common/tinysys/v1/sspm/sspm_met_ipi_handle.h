@@ -41,6 +41,9 @@ int met_scmi_to_sspm_command_async(
 	unsigned int *retbuf,
 	int retslot);
 
+int met_ipi_to_sspm_command(void *buffer, int slot, unsigned int *retbuf, int retslot);
+int met_ipi_to_sspm_command_async(void *buffer, int slot, unsigned int *retbuf, int retslot);
+
 
 /*****************************************************************************
  * external variable declaration

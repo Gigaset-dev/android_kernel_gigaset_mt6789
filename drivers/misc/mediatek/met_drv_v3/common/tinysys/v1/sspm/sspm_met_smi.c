@@ -358,7 +358,7 @@ static int smi_process_argument(const char *__restrict__ arg, int len)
 	unsigned int smi_conf_index = 0;
 	struct met_smi_conf smi_conf;
 
-	uint32_t ipi_buf[3] = {0, 0, 0};
+	uint32_t ipi_buf[4] = {0, 0, 0, 0};
 	uint32_t ret = 0;
 	uint32_t rdata = 0;
 	uint16_t sspm_master = 0;
@@ -542,8 +542,12 @@ static int smi_process_argument(const char *__restrict__ arg, int len)
 		ipi_buf[0] = MET_MAIN_ID | MET_ARGU | MID_SMI << MID_BIT_SHIFT | 1;
 		ipi_buf[1] = sspm_master;
 		ipi_buf[2] = sspm_meta;
-		met_scmi_to_sspm_command((void *)ipi_buf, sizeof(ipi_buf)/sizeof(unsigned int), &rdata, 1);
 
+#ifdef MET_SCMI
+		met_scmi_to_sspm_command((void *)ipi_buf, sizeof(ipi_buf)/sizeof(unsigned int), &rdata, 1);
+#else
+		met_ipi_to_sspm_command((void *)ipi_buf, 0, &rdata, 1);
+#endif
 		/* Set mode */
 		met_sspm_smi.mode = 1;
 		ondiemet_module[ONDIEMET_SSPM] |= ID_SMI;

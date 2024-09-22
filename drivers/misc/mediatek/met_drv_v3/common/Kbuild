@@ -19,6 +19,7 @@ ifneq ($(wildcard $(srctree)/drivers/misc/mediatek/include/mt-plat/mtk_io.h),)
     ccflags-y += -DUSE_KERNEL_MTK_IO_H
 endif
 
+ccflags-y += -Wno-unused-variable
 ccflags-y += -DCONFIG_MET_MODULE
 ccflags-y += -DMET_PLF_USE
 ccflags-y += -I$(MET_COMMON_DIR)
@@ -55,7 +56,17 @@ endif
 # MET feature declaration
 ################################################################################
 TINYSYS_VERSION := v1
-SSPM_VERSION := v3
+ifeq ($(CONFIG_MTK_TINYSYS_SSPM_V0), y)
+    SSPM_VERSION := v0
+else ifeq ($(CONFIG_MTK_TINYSYS_SSPM_V1), y)
+    SSPM_VERSION := v1
+else ifeq ($(CONFIG_MTK_TINYSYS_SSPM_V2), y)
+    SSPM_VERSION := v2
+else ifeq ($(CONFIG_MTK_TINYSYS_SSPM_V3), y)
+    SSPM_VERSION := v3
+else
+    $(info ======== Unknown CONFIG_MTK_TINYSYS_SSPM_Vx version, MET sspm may not work ========)
+endif
 
 FEATURE_SSPM_EMI := y
 FEATURE_GPU := y
@@ -86,25 +97,69 @@ endif
 
 ifneq (,$(filter $(CONFIG_MTK_TINYSYS_SCMI),y m))
     $(info CONFIG_MTK_TINYSYS_SCMI = y)
+    MET_SCMI := y
 else
     $(info CONFIG_MTK_TINYSYS_SCMI = n)
-    MET_SSPM := n
+    MET_SCMI := n
 endif
 
 ifeq ($(MET_SSPM), y)
-    ifneq ("$(wildcard $(srctree)/drivers/misc/mediatek/sspm/$(SSPM_VERSION)/sspm_reservedmem.h)","")
-        subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/sspm/$(SSPM_VERSION)
-    else
-        $(info ======== Missing $(srctree)/drivers/misc/mediatek/sspm/$(SSPM_VERSION)/sspm_reservedmem.h ========)
-        $(info ======== disable MET_SSPM ========)
-        MET_SSPM := n
+    ifeq ($(SSPM_VERSION), v0)
+        ccflags-y += -DSSPM_VERSION_V0
+    else ifeq ($(SSPM_VERSION), v1)
+        ccflags-y += -DSSPM_VERSION_V1
+    else ifeq ($(SSPM_VERSION), v2)
+        ccflags-y += -DSSPM_VERSION_V2
+    else ifeq ($(SSPM_VERSION), v3)
+        ccflags-y += -DSSPM_VERSION_V3
     endif
 
-    ifneq ("$(wildcard $(srctree)/drivers/misc/mediatek/tinysys_scmi/tinysys-scmi.h)","")
-        ccflags-y += -I$(srctree)/drivers/misc/mediatek/tinysys_scmi/
+    $(info SSPM_VERSION = $(SSPM_VERSION))
+    ifneq (,$(filter $(SSPM_VERSION),v0 v1 v2))
+        MET_SSPM_COMM := $(srctree)/drivers/misc/mediatek/sspm
+        MET_SSPM_COMM_VER := $(MET_SSPM_COMM)/$(SSPM_VERSION)
+        ifneq (,$(filter $(SSPM_VERSION),v0 v1))
+            MET_SSPM_IF_INC := $(MET_SSPM_COMM_VER)
+            MET_SSPM_IF := sspm_ipi.h
+            MET_SSPM_IPI := sspm_ipi_define.h
+        else ifeq ($(SSPM_VERSION), v2)
+            MET_SSPM_IF_INC := $(srctree)/include/linux/soc/mediatek
+            MET_SSPM_IF := mtk_tinysys_ipi.h
+            MET_SSPM_IPI := sspm_ipi_table.h
+        else
+            $(info ======== Only SSPM_VERSION = v1 or v2 should define MET_SSPM_IF_INC, MET_SSPM_IF or MET_SSPM_IPI ========)
+            MET_SSPM := n
+        endif
+        ifneq ("$(wildcard $(MET_SSPM_COMM_VER)/$(MET_SSPM_IPI))","")
+            subdir-ccflags-y += -I$(MET_SSPM_COMM)
+            subdir-ccflags-y += -I$(MET_SSPM_COMM_VER)
+        else
+            $(info ======== Missing $(MET_SSPM_COMM_VER)/$(MET_SSPM_IPI) for SSPM_VERSION = $(SSPM_VERSION), disable MET_SSPM ========)
+            MET_SSPM := n
+        endif
+        ifneq ("$(wildcard $(MET_SSPM_IF_INC)/$(MET_SSPM_IF))","")
+            ccflags-y += -I$(MET_SSPM_IF_INC)
+        else
+            $(info ======== Missing $(MET_SSPM_IF_INC)/$(MET_SSPM_IF) for SSPM_VERSION = $(SSPM_VERSION), disable MET_SSPM ========)
+            MET_SSPM := n
+        endif
+    else ifeq ($(SSPM_VERSION),v3)
+        ifneq ("$(wildcard $(srctree)/drivers/misc/mediatek/sspm/$(SSPM_VERSION)/sspm_reservedmem.h)","")
+            subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/sspm/$(SSPM_VERSION)
+        else
+            $(info ======== Missing $(srctree)/drivers/misc/mediatek/sspm/$(SSPM_VERSION)/sspm_reservedmem.h ========)
+            $(info ======== disable MET_SSPM ========)
+            MET_SSPM := n
+        endif
+        ifneq ("$(wildcard $(srctree)/drivers/misc/mediatek/tinysys_scmi/tinysys-scmi.h)","")
+            ccflags-y += -I$(srctree)/drivers/misc/mediatek/tinysys_scmi/
+        else
+            $(info ======== Missing $(srctree)/drivers/misc/mediatek/tinysys_scmi/tinysys-scmi.h ========)
+            $(info ======== disable MET_SSPM ========)
+            MET_SSPM := n
+        endif
     else
-        $(info ======== Missing $(srctree)/drivers/misc/mediatek/tinysys_scmi/tinysys-scmi.h ========)
-        $(info ======== disable MET_SSPM ========)
+        $(info ======== Unknown SSP_VERSION = $(SSPM_VERSION) ========)
         MET_SSPM := n
     endif
 endif

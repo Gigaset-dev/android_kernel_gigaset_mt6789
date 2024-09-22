@@ -22,7 +22,6 @@
 #include "core_plf_init.h"
 
 #include "mcupm_driver.h"
-#include "mcupm_driver.h"
 
 #include "mcupm_met_log.h"
 #include "mcupm_met_ipi_handle.h"
@@ -185,7 +184,6 @@ int mcupm_log_init(struct device *dev)
 #else
 	struct proc_dir_entry *met_dir = NULL;
 #endif
-
 	met_dir = dev_get_drvdata(dev);
 	mutex_init(&lock_tracef);
 	_mcupm_log_req_q_init(&mcupm_log_req_q);
@@ -223,24 +221,39 @@ int mcupm_log_init(struct device *dev)
 	} else {
 		mcupm_buf_available = 0;
 	}
-#else
+#elif defined(MET_MCUPM)
+	mcupm_buf_available = 0;
 	np = of_find_node_by_name(NULL, "met_res_ram_mcupm");
-	if (!np) {
-		pr_debug("unable to find met_res_ram_mcupm\n");
-		return 0;
+	if (np) {
+		of_property_read_u64(np, "start", &mcupm_log_phy_addr);
+		of_property_read_u32(np, "size", &mcupm_buffer_size);
+
+		if ((mcupm_log_phy_addr > 0) && (mcupm_buffer_size > 0)) {
+			mcupm_log_virt_addr = (void*)ioremap_wc(mcupm_log_phy_addr, mcupm_buffer_size);
+
+			mcupm_buf_available = 1;
+		} else {
+			mcupm_buf_available = 0;
+		}
 	}
-	of_property_read_u64(np, "start", &mcupm_log_phy_addr);
-	of_property_read_u32(np, "size", &mcupm_buffer_size);
 
-	if ((mcupm_log_phy_addr > 0) && (mcupm_buffer_size > 0)) {
-		mcupm_log_virt_addr = (void*)ioremap_wc(mcupm_log_phy_addr, mcupm_buffer_size);
+	if(mcupm_buf_available == 0) {
+		mcupm_buffer_size = mcupm_reserve_mem_get_size(MCUPM_MET_ID);
+		PR_BOOTMSG("mcupm_buffer_size=%x\n", mcupm_buffer_size);
+		if (mcupm_buffer_size > 0) {
+			mcupm_log_virt_addr = (void*)mcupm_reserve_mem_get_virt(MCUPM_MET_ID);
+			PR_BOOTMSG("mcupm_log_virt_addr=%p\n", mcupm_log_virt_addr);
+			mcupm_log_phy_addr = mcupm_reserve_mem_get_phys(MCUPM_MET_ID);
+			PR_BOOTMSG("mcupm_log_phy_addr=%u\n", (unsigned int) mcupm_log_phy_addr);
 
-		mcupm_buf_available = 1;
-	} else {
-		mcupm_buf_available = 0;
+			if ((mcupm_log_phy_addr > 0) && (mcupm_buffer_size > 0) && (mcupm_log_virt_addr > 0)) {
+				mcupm_buf_available = 1;
+			} else {
+				mcupm_buf_available = 0;
+			}
+		}
 	}
-#endif /* CONFIG_MTK_GMO_RAM_OPTIMIZE */
-
+#endif
 	start_mcupm_ipi_recv_thread();
 
 	return 0;
