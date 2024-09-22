@@ -38,6 +38,11 @@
 #if IS_ENABLED(CONFIG_MTK_SCP_AUDIO)
 #include "../audio_scp/mtk-scp-audio-pcm.h"
 #endif
+//prize add by pengzhipeng 20230105 start
+#if IS_ENABLED(CONFIG_SND_SOC_FS1599)
+#include "../../codecs/fs1599/fsm_public.h"
+#endif
+//prize add by pengzhipeng 20230105 start
 //prize add by lipengpeng 20220607 start
 #if IS_ENABLED(CONFIG_SND_SOC_AW8839X)
 #include "../../codecs/aw883xx/aw883xx.h"
@@ -52,6 +57,12 @@ static int mtk_spk_i2s_out = MTK_SPK_I2S_3, mtk_spk_i2s_in = MTK_SPK_I2S_0;
 static unsigned int mtk_spk_out_ch;
 static struct mtk_spk_i2c_ctrl mtk_spk_list[MTK_SPK_TYPE_NUM] = {
 	[MTK_SPK_NOT_SMARTPA] = {
+//prize add by pengzhipeng 20230105 start
+#if IS_ENABLED(CONFIG_SND_SOC_FS1599)
+		.i2c_probe = exfsm_i2c_probe,
+		.i2c_remove = exfsm_i2c_remove,
+#endif
+//prize add by pengzhipeng 20230105 end
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.codec_name = "snd-soc-dummy",
 	},
@@ -78,6 +89,16 @@ static struct mtk_spk_i2c_ctrl mtk_spk_list[MTK_SPK_TYPE_NUM] = {
 		.codec_name = "tfa98xx",
 	},
 #endif /* CONFIG_SND_SOC_TFA9874 */
+//prize add by lipengpeng 20220607 start
+#if IS_ENABLED(CONFIG_SND_SOC_AW8839X)
+        [MTK_SPK_AWINIC_AW883XX] = {
+                //.i2c_probe = aw883xx_i2c_probe,
+                //.i2c_remove = aw883xx_i2c_remove,
+                .codec_dai_name = "aw883xx-aif-6-34",
+                .codec_name = "aw883xx_smartpa.6-0034",
+        },
+#endif 
+//prize add by lipengpeng 20220607 end
 
 #if IS_ENABLED(CONFIG_SND_SOC_FS1894U)
 	[MTK_SPK_FOURSEMI_FS18XX] = {
@@ -111,23 +132,29 @@ static int mtk_spk_i2c_probe(struct i2c_client *client,
 	int i, ret = 0;
 
 	dev_info(&client->dev, "%s()\n", __func__);
-//prize add by lipengpeng 20220615 start 
-	mtk_spk_type = 5;
-//prize add by lipengpeng 20220615 end 	
+//prize add by pengzhipeng 20230105 start
+#if IS_ENABLED(CONFIG_SND_SOC_FS1599)
+#else
+	mtk_spk_type = 5;//prize add by lipengpeng 20220607
+#endif
+//prize add by pengzhipeng 20230105 end
 	for (i = 0; i < MTK_SPK_TYPE_NUM; i++) {
 		if (!mtk_spk_list[i].i2c_probe)
 			continue;
-
 		ret = mtk_spk_list[i].i2c_probe(client, id);
 		if (ret)
 			continue;
 
 		mtk_spk_type = i;
+		printk("pzp mtk_spk_type=%d\n",mtk_spk_type);
 		break;
 	}
-//prize add by lipengpeng 20220615 start 
-   mtk_spk_type = 5;
-//prize add by lipengpeng 20220615 end
+//prize add by pengzhipeng 20230105 start
+#if IS_ENABLED(CONFIG_SND_SOC_FS1599)
+#else
+   mtk_spk_type = 5;//prize add by lipengpeng 20220607
+#endif
+//prize add by pengzhipeng 20230105 end
 	return ret;
 }
 
@@ -157,9 +184,13 @@ EXPORT_SYMBOL(mtk_spk_get_type);
 
 void mtk_spk_set_type(int spk_type)
 {
-//prize add by lipengpeng 20220615 start 
-	mtk_spk_type = 5;
-//prize add by lipengpeng 20220615 end 	
+//prize add by pengzhipeng 20230105 start
+#if IS_ENABLED(CONFIG_SND_SOC_FS1599)
+	mtk_spk_type = spk_type;//prize add by pengzhipeng 20230105
+#else
+	mtk_spk_type = 5;//prize add by lipengpeng 20220607
+#endif
+//prize add by pengzhipeng 20230105 end
 }
 EXPORT_SYMBOL(mtk_spk_set_type);
 
@@ -208,9 +239,13 @@ int mtk_spk_update_info(struct snd_soc_card *card,
 	int i2s_in_dai_link_idx = -1;
 	const int i2s_num = 2;
 	unsigned int i2s_set[2] = {0};
-//prize add by lipengpeng 20220615 start 
-    mtk_spk_type=5;
-//prize add by lipengpeng 20220615 end 	
+//prize add by pengzhipeng 20230105 start
+#if IS_ENABLED(CONFIG_SND_SOC_FS1599)
+#else
+    mtk_spk_type=5;//prize add by lipengpeng 20220607
+#endif
+//prize add by pengzhipeng 20230105 end
+	
 	if (mtk_spk_type == MTK_SPK_NOT_SMARTPA)
 		goto BYPASS_UPDATE;
 

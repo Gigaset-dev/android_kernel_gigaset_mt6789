@@ -100,7 +100,7 @@ struct mtk_pe {
 /* dual charger */
 	int pe_slave_mivr_diff;
 	/* psy */
-	struct power_supply *pdpe_psy;
+	struct power_supply *pdpe_psy;//prize
 
 };
 
@@ -133,6 +133,6 @@ extern int pe_hal_set_charging_current(struct chg_alg_device *alg,
 extern int pe_hal_set_input_current(struct chg_alg_device *alg,
 	enum chg_idx chgidx, u32 ua);
 extern int pe_hal_get_log_level(struct chg_alg_device *alg);
-extern int mtk_pe_init(void);
+extern int mtk_pe_init(void);//prize
 
 #endif /* __MTK_PE_INTF_H */

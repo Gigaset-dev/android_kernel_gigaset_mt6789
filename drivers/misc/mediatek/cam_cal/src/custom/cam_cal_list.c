@@ -14,6 +14,9 @@
 
 struct stCAM_CAL_LIST_STRUCT g_camCalList[] = {
 	/*Below is commom sensor */
+	{HI1339_SENSOR_ID, 0xB0, Common_read_region},
+	{OV13B10MAIN_SENSOR_ID, 0xB0, Common_read_region},
+	{SC800CS_LY_SENSOR_ID, 0xA0, Common_read_region},
 	{OV48B_SENSOR_ID, 0xA0, Common_read_region, MAX_EEPROM_SIZE_16K},
 	{IMX766_SENSOR_ID, 0xA0, Common_read_region, MAX_EEPROM_SIZE_32K},
 	{IMX766DUAL_SENSOR_ID, 0xA2, Common_read_region, MAX_EEPROM_SIZE_16K},
@@ -36,10 +39,17 @@ struct stCAM_CAL_LIST_STRUCT g_camCalList[] = {
 	{IMX350_SENSOR_ID, 0xA0, Common_read_region},
 	{IMX386_MONO_SENSOR_ID, 0xA0, Common_read_region},
 	{IMX499_SENSOR_ID, 0xA0, Common_read_region},
+	#if 0 // def SUPPORT_S5K4H7  prize remove by zhuzhengjiang
+	{S5K4H7FRONT_SENSOR_ID, 0x20, s5k4h7_read_otpdata},
+	#endif
 	//prize add by linchong 20220614 start
 	{S5KGM1ST_SENSOR_ID, 0xB0, Common_read_region},
+	{S5KJN1_SENSOR_ID, 0xA0, Common_read_region},
+	{GC08A3SUB_SENSOR_ID, 0xB4, Common_read_region},
 	{OV16A1Q_SENSOR_ID, 0xA0, Common_read_region},
 	{GC08A3WIDE_SENSOR_ID, 0xA2, Common_read_region},
+	{OV50A40_SENSOR_ID, 0xA0, Common_read_region},
+	{HI1336WIDE_SENSOR_ID, 0xA0, Common_read_region},
 	//prize add by linchong 20220614 end
 	/*  ADD before this line */
 	{0, 0, 0}       /*end of list */

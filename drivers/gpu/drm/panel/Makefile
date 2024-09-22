@@ -92,6 +92,7 @@ obj-$(CONFIG_DRM_PANEL_ALPHA_JDI_NT36672EGMS_CPHY_VDO) += panel-alpha-jdi-nt3667
 obj-$(CONFIG_DRM_PANEL_ALPHA_JDI_NT36672E_VDO_120HZ) += panel-alpha-jdi-nt36672e-vdo-120hz.o
 obj-$(CONFIG_DRM_PANEL_ALPHA_JDI_NT36672E_VDO_144HZ) += panel-alpha-jdi-nt36672e-vdo-144hz.o
 obj-$(CONFIG_DRM_PANEL_ALPHA_JDI_NT36672E_VDO_60HZ) += panel-alpha-jdi-nt36672e-vdo-60hz.o
+obj-$(CONFIG_DRM_PANEL_ALPHA_JDI_NT36672E_VDO_60HZ_QCG) += panel-alpha-jdi-nt36672e-vdo-60hz-qcg.o
 obj-$(CONFIG_DRM_PANEL_ALPHA_JDI_NT36672E_VDO_120HZ_HFP) += panel-alpha-jdi-nt36672e-vdo-120hz-hfp.o
 obj-$(CONFIG_DRM_PANEL_ALPHA_JDI_NT36672E_VDO_144HZ_HFP) += panel-alpha-jdi-nt36672e-vdo-144hz-hfp.o
 obj-$(CONFIG_DRM_PANEL_TRULY_NT35595_CMD) += panel-truly-nt35595-cmd.o
@@ -112,20 +113,53 @@ obj-$(CONFIG_DRM_PANEL_TIANMA_HX83102J_VDO) += panel-tianma-hx83102j-vdo.o
 obj-$(CONFIG_BACKLIGHT_KTZ8866)         += ktz8866.o
 obj-$(CONFIG_DRM_PANEL_EDO_HX5329_CMD_120) += panel-edo-hx5329-cmd-120hz.o
 obj-$(CONFIG_DRM_MTK_GENERAL_PANEL_DRV) += mtk-drm-general-panel-driver.o
-
 #prize hjw  for panel 20220606 start
 obj-$(CONFIG_DRM_PANEL_SHARP_R63417_CMD) += panel-sharp-r63417-cmd.o
 obj-$(CONFIG_DRM_PANEL_TRULY6517_ILI9882N_VDO)+= panel-truly6517-ili9882n-vdo.o
 obj-$(CONFIG_DRM_PANEL_TRULY6517_ILI9881H_VDO)+= panel-truly6517-ili9881h-vdo.o
 obj-$(CONFIG_DRM_PANEL_TRULY6517_ILI9882Q_VDO)+= panel-truly6517-ili9882q-vdo.o
+# DRV added by chenjiaxi, add f1 tlsj lcm, start
+obj-$(CONFIG_DRM_PANEL_NT36672C_120HZ_VDO_BOE_YX)+= panel-boe-nt36672c-vdo-yx.o
+# DRV added by chenjiaxi, add f1 tlsj lcm, end
+obj-$(CONFIG_DRM_PANEL_NT36672C_120HZ_VDO)+= panel-alpha-dzx-nt36672c-vdo-120hz.o
+# DRV added by chenjiaxi, add nt36672c dzx gms panel, start
+obj-$(CONFIG_DRM_PANEL_NT36672C_120HZ_VDO_GMS)+= panel-alpha-dzx-nt36672c-vdo-120hz-gms.o
+# DRV added by chenjiaxi, add nt36672c dzx gms panel, end
 # DRV added by chenjiaxi, add boe rm692e5 cmd panel, start
 obj-$(CONFIG_DRM_PANEL_BOE_RM692E5_CMD_120HZ)+= panel-boe-rm692e5-cmd.o
+obj-$(CONFIG_DRM_PANEL_BOE_RM692E5_CMD_120HZ_GMS)+= panel-boe-rm692e5-cmd-gms.o
+obj-$(CONFIG_DRM_PANEL_VISIONOX_RM692E0_DPHY_CMD_120HZ)+= panel-visionox-rm692e0-dphy-cmd-120hz.o
+obj-$(CONFIG_DRM_PANEL_DAXIAN_SH8804B_DPHY_CMD_120HZ)+= panel-daxian-sh8804b-dphy-cmd-120hz.o
 # DRV added by chenjiaxi, add boe rm692e5 cmd panel, end
 obj-$(CONFIG_DRM_PANEL_FHD_HX8399C_VDO)+= panel-fhd-hx8399c-vdo.o
 obj-$(CONFIG_DRM_PANEL_CSOT_FT8756_VDO) += panel-csot-ft8756-vdo.o
 obj-$(CONFIG_DRM_PANEL_CSOT_FT8756_VDO_WCL) += panel-csot-ft8756-vdo-wcl.o
 obj-$(CONFIG_DRM_PANEL_CSOT_FT8756_VDO_XBD) += panel-csot-ft8756-vdo-xbd.o
+
+# DRV added by wangwei1, add csot nt37701a cmd panel, start
+obj-$(CONFIG_DRM_PANEL_CSOT_NT37701A_DPHY_CMD_120HZ)+= panel-csot-nt37701a-dphy-cmd-120hz.o
+# DRV added by wangwei1, add csot nt37701a cmd panel, end
+
+#PRIZE:add by durunshen 20230210 start 
+obj-$(CONFIG_DRM_PANEL_TDDI_ILI7807S_VDO_BOE_120HZ_6382) += panel-tddi-ili7807s-vdo-boe-120hz-6382.o
+#prize add by durunshen 20230210  end 
+obj-$(CONFIG_DRM_PANEL_FT8720_120HZ_VDO)+= panel-jdi-txd-ft8720-vdo-120hz.o
 #prize hjw  for panel 20220606 end
+# DRV added by chenjiaxi, start
+obj-$(CONFIG_DRM_PANEL_BOE_ILI7807S_120HZ_VDO)+= panel-boe-txd-ili7807s-vdo-120hz.o
+# DRV added by chenjiaxi, end
+
+# DRV added by pengzhipeng, start
+obj-$(CONFIG_DRM_PANEL_BOE_FT8725_120HZ_VDO)+= panel-focaltech-ft8725-vdo-boe-120hz.o
+# DRV added by pengzhipeng, end
+
+# DRV added by wangwei1, add csot nt37705 cmd panel, start
+obj-$(CONFIG_DRM_PANEL_COST_NT37705_DPHY_CMD_120HZ) += panel-cost-nt37705-dphy-cmd-120hz.o
+# DRV added by wangwei1, add csot nt37705 cmd panel, end
+#drv add by wangwei1 20230605 start
+obj-$(CONFIG_DRM_PANEL_ILI9882N_HDP_DSI_VDO_TRULY6517_Q29) += panel_ili9882n_hdp_dsi_vdo_truly6517_q29.o
+#drv add by wangwei1 20230605 end
+
 mediatek-drm-gateic-y := mtk_drm_panel_i2c.o \
 		  mtk_drm_gateic_rt4801h.o \
 		  mtk_drm_gateic_rt4831a.o \

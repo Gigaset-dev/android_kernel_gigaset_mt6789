@@ -104,44 +104,13 @@ static bool is_typec_adapter(struct mtk_charger *info)
 
 	return false;
 }
-/*
-static int pdpe_get_connet_state(struct mtk_charger *info)
-{
-	int ret = 0;
-    union power_supply_propval val = {0,};
 
-    if (!info->pdpe_psy) {
-        info->pdpe_psy = power_supply_get_by_name("pdpe-state");
-        if (!info->pdpe_psy) {
-            return -ENODEV;
-        }
-    }
-
-    ret = power_supply_get_property(info->pdpe_psy, POWER_SUPPLY_PROP_ONLINE, &val);
-	
-    if (!ret){
-        ret = val.intval;
-	}
-	else{
-		ret = -1;
-	}
-
-    return ret;
-}
-*/
 static bool support_fast_charging(struct mtk_charger *info)
 {
 	struct chg_alg_device *alg;
 	int i = 0, state = 0;
 	bool ret = false;
-/*	union power_supply_propval val = {0,};
-	
-	state = pdpe_get_connet_state(info);
-	if(state == PDPE_WORK_PD_CHECK || state == PDPE_WORK_PD_RUN || state == PDPE_WORK_PD_CHECK_DONE){
-		pr_err("gezi %s------%d state = %d\n", __func__,__LINE__,state);
-		return false;
-	}
-*/	
+
 	for (i = 0; i < MAX_ALG_NO; i++) {
 		alg = info->alg[i];
 		if (alg == NULL)
@@ -163,116 +132,7 @@ static bool support_fast_charging(struct mtk_charger *info)
 	}
 	return ret;
 }
-/*
-#define	TEMPR_BELOW_T0	0
-#define TEMPR_T0_TO_T1	15
-#define TEMPR_T1_TO_T2	36
-#define TEMPR_T2_TO_T3	41
 
-enum sw_chg_state {
-	STATE_BELOW_T0 = 0,
-	STATE_T0_TO_T1,
-	STATE_T1_TO_T2,
-	STATE_T2_TO_T3,
-	STATE_ABOVE_T3,
-};
-*/
-/*
-static void wireless_charge_state(struct mtk_charger *info)
-{
-	int input_current_limit = 0;
-	struct charger_data *pdata;
-	int temp = get_battery_temperature(info);
-	pdata = &info->chg_data[CHG1_SETTING];
-	
-	switch(info->wireless_chg_state)
-	{
-		case STATE_BELOW_T0://( < 0)
-			input_current_limit = 500000;
-			if(temp >= TEMPR_BELOW_T0){
-				info->wireless_chg_state = STATE_T0_TO_T1;
-			}
-			break;
-		case STATE_T0_TO_T1://0 ~ 15 
-			input_current_limit = 1500000;
-			if(temp >= TEMPR_T0_TO_T1){
-				info->wireless_chg_state = STATE_T1_TO_T2;
-			}
-			else if(temp <= TEMPR_BELOW_T0){
-				info->wireless_chg_state = STATE_BELOW_T0;
-			}
-			break;
-		case STATE_T1_TO_T2://15 ~ 36
-			input_current_limit = 2000000;
-			if(temp >= TEMPR_T1_TO_T2){
-				info->wireless_chg_state = STATE_T2_TO_T3;
-			}
-			else if(temp <= (TEMPR_T0_TO_T1 - 4)){
-				info->wireless_chg_state = STATE_T0_TO_T1;
-			}
-			break;
-		case STATE_T2_TO_T3://36 ~ 41
-			input_current_limit = 1500000;
-			if(temp >= TEMPR_T2_TO_T3){
-				info->wireless_chg_state = STATE_ABOVE_T3;
-			}
-			else if(temp <= (TEMPR_T1_TO_T2 - 4)){
-				info->wireless_chg_state = STATE_T1_TO_T2;
-			}
-			break;
-		case STATE_ABOVE_T3: // > 41
-			input_current_limit = 500000;
-			if(temp <= (TEMPR_T2_TO_T3 - 4)){
-				info->wireless_chg_state = STATE_T2_TO_T3;
-			}
-			break;
-	}
-	
-	pdata->input_current_limit = min(input_current_limit,pdata->input_current_limit);
-	
-	pr_err("gezi temp %d state %d curr %d %d\n",temp,info->wireless_chg_state,pdata->input_current_limit);
-}
-
-
-static void wireless_charge_select_current(struct mtk_charger *info)
-{
-	struct charger_data *pdata;
-	int temp = get_battery_temperature(info);
-	pdata = &info->chg_data[CHG1_SETTING];
-	
-
-	
-	if(temp >= 45){
-		pdata->input_current_limit = 500000;
-		pdata->charging_current_limit = 500000;
-	}
-	else if((temp >= 41) && (temp < 45)){
-		pdata->input_current_limit = 800000;
-		pdata->charging_current_limit = 800000;
-	}
-	else if((temp >= 38) && (temp < 41)){
-		pdata->input_current_limit = 1500000;
-		pdata->charging_current_limit = 1500000;
-	}
-	else if((temp >= 35) && (temp < 38)){
-		pdata->input_current_limit = 1700000;
-		pdata->charging_current_limit = 1700000;
-	}
-	else if((temp >= 15) && (temp < 35)){
-		pdata->input_current_limit = 2000000;
-		pdata->charging_current_limit = 2000000;
-	}
-	else if((temp >= 0) && (temp < 15)){
-		pdata->input_current_limit = 1500000;
-		pdata->charging_current_limit = 1500000;
-	}
-	else{
-		pdata->input_current_limit = 500000;
-		pdata->charging_current_limit = 500000;
-	}
-	pr_err("gezi temp %d curr %d %d\n",temp,pdata->input_current_limit,pdata->charging_current_limit);
-}
-*/
 static bool select_charging_current_limit(struct mtk_charger *info,
 	struct chg_limit_setting *setting)
 {
@@ -414,7 +274,7 @@ static bool select_charging_current_limit(struct mtk_charger *info,
 		else {
 				if (info->sw_jeita.sm == TEMP_T0_TO_T1) {
 					pdata->input_current_limit = 500000;
-					pdata->charging_current_limit = 500000;
+					pdata->charging_current_limit = 500000;//prize start
 				}
 				else if (info->sw_jeita.sm == TEMP_T1_TO_T2) {
 					pdata->input_current_limit = 1320000;
@@ -450,11 +310,9 @@ static bool select_charging_current_limit(struct mtk_charger *info,
 	}
 	printk("PRIZE master  charge current %d:%d\n",pdata->input_current_limit,pdata->charging_current_limit);	
 	//prize add by sunshuai for Bright screen current limit  for master charge	2019-0429 end
-#endif
+#endif//prize end
 
 	sc_select_charging_current(info, pdata);
-
-
 
 	if (pdata->thermal_charging_current_limit != -1) {
 		if (pdata->thermal_charging_current_limit <=
@@ -665,7 +523,7 @@ static int do_algorithm(struct mtk_charger *info)
 	info->is_chg_done = chg_done;
 
 	if (is_basic == true) {
-		
+		//prize begin
 		//charger_dev_get_input_current(info->chg1_dev, &curr);
 		//pr_err("gezi charger_dev_get_input_current = %d\n",curr);
 		//if(curr == 100000){
@@ -675,6 +533,7 @@ static int do_algorithm(struct mtk_charger *info)
 		//}
 		
 		charger_dev_set_charging_current(info->chg1_dev,pdata->charging_current_limit);
+		//prize end
 		chr_debug("%s:old_cv=%d,cv=%d, vbat_mon_en=%d\n",
 			__func__,
 			info->old_cv,
@@ -705,9 +564,8 @@ static int do_algorithm(struct mtk_charger *info)
 	else {
 		alg = get_chg_alg_by_name("pe5");
 		ret = chg_alg_is_algo_ready(alg);
-		if (!(ret == ALG_READY || ret == ALG_RUNNING)){
+		if (!(ret == ALG_READY || ret == ALG_RUNNING))
 			charger_dev_enable(info->chg1_dev, true);
-		}
 	}
 
 	if (info->chg1_dev != NULL)

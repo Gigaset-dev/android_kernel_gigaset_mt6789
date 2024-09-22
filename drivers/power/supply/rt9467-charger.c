@@ -305,6 +305,8 @@ struct rt9467_chg_data {
 #endif /* CONFIG_MTK_CHARGER */
 };
 
+static int rt9467_enable_charging(struct charger_device *chg_dev, bool en);
+
 static void linear_range_get_selector_within(const struct linear_range *r,
 					     unsigned int val,
 					     unsigned int *selector)
@@ -569,6 +571,8 @@ static int rt9467_chg_prop_is_writeable(struct power_supply *psy,
 	return 0;
 }
 
+static bool __rt9467_is_charging_enable(struct rt9467_chg_data *data);
+
 static int rt9467_psy_get_status(struct rt9467_chg_data *data,
 				 union power_supply_propval *val)
 {
@@ -581,6 +585,9 @@ static int rt9467_psy_get_status(struct rt9467_chg_data *data,
 
 	switch (status) {
 	case RT9467_STAT_READY:
+		if(atomic_read(&data->attach) && __rt9467_is_charging_enable(data))
+			val->intval = POWER_SUPPLY_STATUS_CHARGING;
+		else
 		val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		break;
 	case RT9467_STAT_PROGRESS:
@@ -763,8 +770,8 @@ static int __rt9467_set_ieoc(struct rt9467_chg_data *data, unsigned int ieoc)
 	unsigned int sel = 0;
 
 	/* IEOC workaround */
-	if (data->ieoc_wkard)
-		ieoc += 100000; /* 100mA */
+	//if (data->ieoc_wkard)
+	//	ieoc += 100000; /* 100mA */
 
 	linear_range_get_selector_within(rt9467_lranges + RT9467_RANGE_IEOC,
 					 ieoc, &sel);
@@ -829,14 +836,15 @@ static int __rt9467_set_ichg(struct rt9467_chg_data *data, unsigned int ichg)
 		return ret;
 
 	/* Workaround to mask IEOC accurate */
-	if (ichg < 900000 && !data->ieoc_wkard) { /* 900mA */
+/*
+	if (ichg < 900000 && !data->ieoc_wkard) { 
 		ret = __rt9467_set_ieoc(data, data->ieoc + 100000);
 		data->ieoc_wkard = true;
 	} else if (ichg >= 900000 && data->ieoc_wkard) {
 		data->ieoc_wkard = false;
 		ret = __rt9467_set_ieoc(data, data->ieoc - 100000);
 	}
-
+*/
 	return ret;
 }
 
@@ -1105,6 +1113,21 @@ relax_and_wait:
 	return ret;
 }
 
+static bool __rt9467_is_charging_enable(struct rt9467_chg_data *data)
+{
+	//struct rt9467_chg_data *data = charger_get_data(chg_dev);
+	unsigned int val;
+	int ret;
+
+	ret = regmap_field_read(data->rm_field[F_CHG_EN], &val);
+	if (ret)
+		return ret;
+
+	//*en = val;
+	dev_info(data->dev, "%s en = %d\n", __func__, val);
+	return !!val;
+}
+
 static void rt9467_chg_bc12_work_func(struct work_struct *work)
 {
 	int ret;
@@ -1182,6 +1205,12 @@ out:
 	if (bc12_ctrl && (rt9467_chg_enable_bc12(data, bc12_en) < 0))
 		dev_err(data->dev, "Failed to set bc12 = %d\n", bc12_en);
 
+	//__rt9467_dump_register(data);
+	if(__rt9467_is_charging_enable(data)){
+		rpt_psy = true;
+	}
+	
+	pr_err("gezi----%s-----bc12_ctrl:%d rpt_psy:%d\n",__func__,bc12_ctrl,rpt_psy);
 	if (rpt_psy)
 		power_supply_changed(data->psy);
 }
@@ -1190,6 +1219,7 @@ static void rt9467_psy_attach_pre_process(struct rt9467_chg_data *data,
 					 enum rt9467_attach_trigger trig,
 					 bool attach)
 {
+	int ret = 0;//drv huangjiwu  for charger  yichang start
 	dev_err(data->dev, "trig=%s,attach=%d\n",
 		 rt9467_attach_trig_names[trig], attach);
 	/* if attach trigger is not match, ignore it */
@@ -1201,6 +1231,14 @@ static void rt9467_psy_attach_pre_process(struct rt9467_chg_data *data,
 	atomic_set(&data->attach, attach);
 	if (!queue_work(data->wq, &data->bc12_work))
 		dev_notice(data->dev, "bc12 work already queued\n");
+	
+	//drv huangjiwu  for charger  yichang start
+	ret = rt9467_enable_charging(data->chg_dev, true);
+	if(ret)
+	{
+		dev_err(data->dev, "rt9467_enable_charging failed\n");
+	}
+	//drv huangjiwu  for charger  yichang start
 }
 
 static void rt9467_chg_pwr_rdy_process(struct rt9467_chg_data *data)
@@ -1559,6 +1597,7 @@ static int __rt9467_dump_register(struct rt9467_chg_data *data)
 	} regs[] = {
 		{ .reg = RT9467_REG_CHG_CTRL1, .name = "CHG_CTRL1" },
 		{ .reg = RT9467_REG_CHG_CTRL2, .name = "CHG_CTRL2" },
+		{ .reg = RT9467_REG_CHG_CTRL6, .name = "CHG_CTRL6" }, // drv add huangjiwu, dump charge ic log
 		{ .reg = RT9467_REG_CHG_STATC, .name = "CHG_STATC" },
 		{ .reg = RT9467_REG_CHG_STAT, .name = "CHG_STAT" },
 	};
@@ -1628,6 +1667,11 @@ static void rt9467_init_setting_work_handler(struct work_struct *work)
 	enum power_supply_property psp = POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT;
 #endif /* CONFIG_MTK_CHARGER  */
 
+	/* disable USBCHGEN */
+	ret = regmap_field_write(data->rm_field[F_USBCHGEN], false);
+	if (ret)
+		dev_err(data->dev, "Failed to disable usbchgen\n");
+
 	ret = rt9467_disable_auto_sensing(data);
 	if (ret)
 		dev_err(data->dev, "Failed to disable auto sensing\n");
@@ -1663,6 +1707,8 @@ static void rt9467_init_setting_work_handler(struct work_struct *work)
 	}
 #endif /* CONFIG_MTK_CHARGER  */
 
+	__rt9467_set_ieoc(data, 150000);
+	
 	/* unmask pwrdy, mivr */
 	ret = regmap_write(data->regmap, RT9467_REG_CHG_STATC_CTRL, 0x3f);
 	if (ret)
@@ -1709,15 +1755,19 @@ static int rt9467_enable_charging(struct charger_device *chg_dev, bool en)
 	return regmap_field_write(data->rm_field[F_CHG_EN], en);
 }
 
-
+// drv mod huangjiwu, fix rt9467 Q1 breakdown, 20230912 start
+static int rt9467_enable_power_path(struct charger_device *chg_dev, bool en);
 static int rt9467_enable_hz(struct charger_device *chg_dev, bool en)
 {
 	struct rt9467_chg_data *data = charger_get_data(chg_dev);
 
 	dev_info(data->dev, "%s: en = %d\n", __func__, en);
-	return regmap_field_write(data->rm_field[F_HZ], en);
-}
 
+	rt9467_enable_power_path(chg_dev, !en);
+	//return regmap_field_write(data->rm_field[F_HZ], en);
+	return 0;
+}
+// drv mod huangjiwu, fix rt9467 Q1 breakdown, 20230912 end
 static int rt9467_is_charging_enable(struct charger_device *chg_dev, bool *en)
 {
 	struct rt9467_chg_data *data = charger_get_data(chg_dev);

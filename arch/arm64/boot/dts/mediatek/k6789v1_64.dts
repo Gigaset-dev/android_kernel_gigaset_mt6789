@@ -45,29 +45,29 @@
 		sm,shutdown-delay-enable;
 		sm,rtrace = <1400>;
 		battery_params {
-	    	battery,id = <0>;
-	    	//1st battery
-			battery0,param_version = <4>;							
-	    	battery0,max_voltage_uv = <4400000>;
-	        battery0,battery_type = <4400 0x0 0x2601>;
-	    	battery0,battery_table0 = <0x1400 0x1B70 0x1C2D 0x1CB2 0x1D18 0x1D61 0x1D80 0x1D88 0x1D93 0x1DBA 0x1DF2 0x1E18 0x1E45 0x1E82 0x1EC3 0x1F22 0x1FA3 0x1FE7 0x205C 0x20F1 0x219A 0x2229 0x22A6 0x2400>;
-	    	battery0,battery_table1 = <0x0000 0x0080 0x0199 0x0299 0x03B3 0x04B3 0x064C 0x0866 0x0C19 0x0EB3 0x1400 0x194C 0x1E80 0x2919 0x30E6 0x38CC 0x3E19 0x4366 0x4899 0x5080 0x5866 0x5EB3 0x6400 0x64E6>;
+		battery,id = <0>;
+		//1st battery
+			battery0,param_version = <4>;
+		battery0,max_voltage_uv = <4400000>;
+		battery0,battery_type = <4400 0x0 0x2601>;
+		battery0,battery_table0 = <0x1400 0x1B70 0x1C2D 0x1CB2 0x1D18 0x1D61 0x1D80 0x1D88 0x1D93 0x1DBA 0x1DF2 0x1E18 0x1E45 0x1E82 0x1EC3 0x1F22 0x1FA3 0x1FE7 0x205C 0x20F1 0x219A 0x2229 0x22A6 0x2400>;
+		battery0,battery_table1 = <0x0000 0x0080 0x0199 0x0299 0x03B3 0x04B3 0x064C 0x0866 0x0C19 0x0EB3 0x1400 0x194C 0x1E80 0x2919 0x30E6 0x38CC 0x3E19 0x4366 0x4899 0x5080 0x5866 0x5EB3 0x6400 0x64E6>;
 			battery0,battery_table2 = <0x2D46 0x1F24 0x191C 0x1416 0x1213 0x1011 0x0F0F 0x0E0E>;
-			battery0,alpha = <0x00CC>; 							
-			battery0,beta = <0x0025>;							
-			battery0,rs = <0x005F>;								
-			battery0,rs_value = <0x0050 0x010A 0x3800 0x0048>; 
-			battery0,vit_period = <0x315A>; 					
-			battery0,volt_cal = <0x8000>; 						
-			battery0,mix_value = <0x0003>; 						
-			battery0,curr_offset = <0x000>; 					
-			battery0,curr_slope = <0x8080>; 					
-			battery0,topoff_soc = <7 600 100>;						
-			battery0,temp_std = <25>; 							
-			battery0,temp_offset = <0 11 1 0 8 (-1)>; 			
-			battery0,temp_cal = <0 6 1 11 (-1) 0 6 1 9 1>;		
-			battery0,ext_temp_cal = <0 2 1 2 1 1 2 3 2 3>;		
-			battery0,tem_poff = <3400 100>;						
+			battery0,alpha = <0x00CC>;
+			battery0,beta = <0x0025>;
+			battery0,rs = <0x005F>;
+			battery0,rs_value = <0x0050 0x010A 0x3800 0x0048>;
+			battery0,vit_period = <0x315A>;
+			battery0,volt_cal = <0x8000>;
+			battery0,mix_value = <0x0003>;
+			battery0,curr_offset = <0x000>;
+			battery0,curr_slope = <0x8080>;
+			battery0,topoff_soc = <7 600 100>;
+			battery0,temp_std = <25>;
+			battery0,temp_offset = <0 11 1 0 8 (-1)>;
+			battery0,temp_cal = <0 6 1 11 (-1) 0 6 1 9 1>;
+			battery0,ext_temp_cal = <0 2 1 2 1 1 2 3 2 3>;
+			battery0,tem_poff = <3400 100>;
 	        battery0,thermal_table = <0x435B 0x3E57 0x3963 0x3486 0x2FC5 0x2B1B 0x2688 0x2200 0x1DA3 0x1932
 										0x1534 0x1148 0x0D46 0x096E 0x05A0 0x01F4 0xF62D 0xF2BC 0xEF68 0xEC08
 										0xE8E0 0xE5D2 0xE2DC 0xDFFC 0xDD33 0xDA83 0xD7E5 0xD55E 0xD2EF 0xD092
@@ -80,7 +80,7 @@
 										0x9665 0x9621 0x95DF 0x959F 0x9561 0x9525 0x94EB 0x94B3 0x947C 0x9447
 										0x9414>;			//NTC 10K/ PU 100k table -20~80
 	    };
-	};	
+	};
 };
 
 
@@ -396,6 +396,118 @@
 	};
 };
 
+&i2c2 {
+        clock-frequency = <500000>;
+        sc89601a_chg: chg@6B {
+            compatible = "sc,sc89601a_charger";
+            reg = <0x6B>;
+            status = "okay";
+            charger_name = "primary_chg";
+            eint_name = "chr_stat";
+            sc,intr-gpio = <&pio 4 0>;
+            sc,chg-en-gpio = <&pio 49 0>;
+            sc,sc89601a,usb-vlim = <4600>;
+            sc,sc89601a,usb-ilim = <500>;
+            sc,sc89601a,usb-vreg = <4400>;
+            sc,sc89601a,usb-ichg = <500>;
+            sc,sc89601a,precharge-current = <180>;
+            sc,sc89601a,termination-current = <500>;
+            sc,sc89601a,boost-voltage = <5150>;
+            sc,sc89601a,boost-current = <1200>;
+        };
+
+
+		sc8551-charger@66{
+			compatible = "sc,sc8551-standalone";
+			reg = <0x66>;
+			sc,sc8551,irq-gpio = <&pio 12 0>;
+			/*sc,sc8551,bat-ovp-disable = <0>;
+			sc,sc8551,bat-ocp_disable = <0>;
+			sc,sc8551,bus-ocp-disable = <0>;*/
+
+			sc,sc8551,bat-ovp-threshold = <4525>;
+			sc,sc8551,bat-ocp-threshold = <8000>;
+
+			sc,sc8551,bus-ovp-threshold = <12000>;
+			sc,sc8551,bus-ocp-threshold = <3750>;
+
+			sc,sc8551,ac-ovp-threshold = <12000>;
+			sc,sc8551,sense-resistor-mohm = <5>;
+		};
+
+
+};
+
+
+&i2c7 {
+		sc8551-charger@66{
+			compatible = "sc,sc8551-standalone";
+			reg = <0x66>;
+			sc,sc8551,irq-gpio = <&pio 12 0>;
+			/*sc,sc8551,bat-ovp-disable = <0>;
+			sc,sc8551,bat-ocp_disable = <0>;
+			sc,sc8551,bus-ocp-disable = <0>;*/
+
+			sc,sc8551,bat-ovp-threshold = <4525>;
+			sc,sc8551,bat-ocp-threshold = <8000>;
+
+			sc,sc8551,bus-ovp-threshold = <12000>;
+			sc,sc8551,bus-ocp-threshold = <3750>;
+
+			sc,sc8551,ac-ovp-threshold = <12000>;
+			sc,sc8551,sense-resistor-mohm = <5>;
+		};
+};
+
+&mtk_gauge {
+	charger = <&sc89601a_chg>;
+};
+
+&extcon_usb {
+	charger = <&sc89601a_chg>;  // lipengpeng 20220601 start
+};
+
+&charger {
+	charger = <&sc89601a_chg>;
+	battery_cv = <4400000>;
+	max_charger_voltage = <10000000>;
+	min_charger_voltage = <4600000>;
+
+	/* sw jeita */
+	/* enable_vbat_mon = <1>; */
+	enable_sw_jeita;
+	jeita_temp_above_t4_cv = <4100000>;
+	jeita_temp_t3_to_t4_cv = <4100000>;
+	jeita_temp_t2_to_t3_cv = <4400000>;
+	jeita_temp_t1_to_t2_cv = <4400000>;
+	jeita_temp_t0_to_t1_cv = <4400000>;
+	jeita_temp_below_t0_cv = <4000000>;
+	temp_t4_thres = <50>;
+	temp_t4_thres_minus_x_degree = <47>;
+	temp_t3_thres = <45>;
+	temp_t3_thres_minus_x_degree = <39>;
+	temp_t2_thres = <15>;
+	temp_t2_thres_plus_x_degree = <20>;
+	temp_t1_thres = <0>;
+	temp_t1_thres_plus_x_degree = <6>;
+	temp_t0_thres = <(-5)>;
+	temp_t0_thres_plus_x_degree = <(-2)>;
+	temp_neg_10_thres = <(-10)>;
+
+	/* battery temperature protection */
+	enable_min_charge_temp;
+	min_charge_temp = <(-5)>;
+	min_charge_temp_plus_x_degree = <(-2)>;
+	max_charge_temp = <50>;
+	max_charge_temp_minus_x_degree = <47>;
+
+	/* charging current */
+	usb_charger_current = <500000>;
+	ac_charger_current = <2000000>;
+	ac_charger_input_current = <2000000>;
+	charging_host_charger_current = <1500000>;
+};
+
 /*
 &mtk_leds {
 	compatible = "mediatek,i2c-leds";
@@ -501,13 +613,14 @@
 			};
 		};
 	};
-	
+
 	panel2@0 {
-		compatible = "truly,td4330,vdo";
+		compatible = "qcg,nt36672e,vdo,60hz";
 		reg = <1>;
 		pm-enable-gpios = <&pio 12 0>;
 		reset-gpios = <&pio 85 0>;
 		bias-gpios = <&pio 108 0>,<&pio 109 0>;
+		vbus-gpio = <&pio 43 0x0>;
 		gate-ic = <0>;
 		pinctrl-names = "default";
 		port {
@@ -738,13 +851,13 @@
 		rename-flag= <1>;
 		status = "okay";
 	};
-	
+
 	I2C_LCD_BIAS:I2C_LCD_BIAS@3e {
 		compatible = "mediatek,I2C_LCD_BIAS";
 		reg = <0x3e>;
 		status = "okay";
 	};
-	
+
 };
 
 &sound {
@@ -786,174 +899,6 @@
 	};
 };
 
-&i2c9 {
-	
-	aw2016@64 {/* add for breath led. */
-		compatible = "awinic,aw2016_led";
-		reg = <0x64>;
-
-		aw2016,red {
-			aw2016,name = "green";
-			aw2016,id = <0>;
-			aw2016,imax = <5>;
-			aw2016,led-current = <10>;
-			aw2016,max-brightness = <255>;
-			aw2016,rise-time-ms = <0>;
-			aw2016,hold-time-ms = <4>;
-			aw2016,fall-time-ms = <0>;
-			aw2016,off-time-ms = <8>;
-		};
-/*
-		aw2016,green {
-			aw2016,name = "green";
-			aw2016,id = <1>;
-			aw2016,imax = <5>;
-			aw2016,led-current = <10>;
-			aw2016,max-brightness = <255>;
-			aw2016,rise-time-ms = <0>;
-			aw2016,hold-time-ms = <4>;
-			aw2016,fall-time-ms = <0>;
-			aw2016,off-time-ms = <8>;
-		};
-		
-		aw2016,blue {
-			aw2016,name = "blue";
-			aw2016,id = <2>;
-			aw2016,imax = <5>;
-			aw2016,led-current = <10>;
-			aw2016,max-brightness = <255>;
-			aw2016,rise-time-ms = <6>;
-			aw2016,hold-time-ms = <0>;
-			aw2016,fall-time-ms = <6>;
-			aw2016,off-time-ms = <4>;
-		};
-*/
-	};
-
-};
-
-/*******************************************
-* nfc st21 end
-*******************************************/
-
-/*******************************************
-* typec wireless start 
-*******************************************/	
-
-&pio {
-        charger_otg_pins_default: charger_otg_default {
-        };
-        charger_otg_off:  charger_otg_off {
-            pins_cmd_dat {
-                        pinmux = <PINMUX_GPIO44__FUNC_GPIO44>;
-                        slew-rate = <1>;
-                        output-low;
-                };
-        };
-        charger_otg_on:  charger_otg_on {
-            pins_cmd_dat {
-                        pinmux = <PINMUX_GPIO44__FUNC_GPIO44>;
-                        slew-rate = <1>;
-                        output-high;
-                };
-        };
-      wireless_5725_off:  wireless_5725_off {
-            pins_cmd_dat {
-                        pinmux = <PINMUX_GPIO42__FUNC_GPIO42>;
-                        slew-rate = <1>;
-                        output-high;
-                };
-        };
-        wireless_5725_on:  wireless_5725_on {
-            pins_cmd_dat {
-                        pinmux = <PINMUX_GPIO42__FUNC_GPIO42>;
-                        slew-rate = <1>;
-                        output-low;
-                };
-        };
-//REVERE_CHARGING_MODE start 
-		charger_otg_mode_on:  charger_otg_mode_on {
-            pins_cmd_dat {
-                        pinmux = <PINMUX_GPIO64__FUNC_GPIO64>;
-                        slew-rate = <1>;
-                        output-high;
-                };
-        };
-        charger_otg_mode_off:  charger_otg_mode_off {
-            pins_cmd_dat {
-                        pinmux = <PINMUX_GPIO64__FUNC_GPIO64>;
-                        slew-rate = <1>;
-                        output-low;
-                };
-        };
-//REVERE_CHARGING_MODE end
-
-//prize add by lipengpeng 20210416 start BPI_BUS4  GPIO45
-		charger_test_on:  charger_test_on {
-            pins_cmd_dat {
-                        pinmux = <PINMUX_GPIO45__FUNC_GPIO45>;
-                        slew-rate = <1>;
-                        output-high;
-                };
-        };
-        charger_test_off:  charger_test_off {
-            pins_cmd_dat {
-                        pinmux = <PINMUX_GPIO45__FUNC_GPIO45>;
-                        slew-rate = <1>;
-                        output-low;
-                };
-        };
-//prize add by lipengpeng 20210416 start BPI_BUS4  GPIO150
-};
-&i2c3 {
-	wireless_chg_rx@2b {
-		compatible = "maxictech,mt5725-15w";
-		reg = <0x2b>;
-		irq-gpio = <&pio 14 0>;   //EINT_WPC       S9:GPIO84 WPC_GPIO84_CHARGE_INT
-		//trxset_gpio = <&pio 42 0>;//DC_EN       WPC_GPIO88_DC_EN S9:GPIO88
-		//otgen_gpio = <&pio 44 0>;  //           WPC_GPIO87_OTG_EN  S9:GPIO87
-		statu_gpio = <&pio 27 0>;//WRX_EN         WPC_GPIO73_WRX_EN  S9:GPIO73
-		chipen_gpio = <&pio 45 0>;//CHARGE_EN     WPC_GPIO85_RSV0&CHARGE_EN S9:GPIO85
-		//rx_power_capability = <10>;
-		//one_pin_ctl = <1>;
-		rx_power_capability = <15>;
-	   one_pin_ctl = <0>;
-	   pinctrl-names = "default", "charger_otg_off", "charger_otg_on",
-				 "wireless_5725_off", "wireless_5725_on","charger_otg_mode_on","charger_otg_mode_off","test_gpio","test_off";
-	   pinctrl-0 = <&charger_otg_pins_default>;
-	   pinctrl-1 = <&charger_otg_off>;//WPC_OTG_EN
-	   pinctrl-2 = <&charger_otg_on>;//WPC_OTG_EN
-	   pinctrl-3 = <&wireless_5725_off>;//WPC_OTG_EN2
-	   pinctrl-4 = <&wireless_5725_on>;//WPC_OTG_EN2
-	   pinctrl-5 = <&charger_otg_mode_on>;//WPC_OTG_mode_on
-	   pinctrl-6 = <&charger_otg_mode_off>;//WPC_OTG_mode_off
-	   pinctrl-7 = <&charger_test_on>;//WPC_OTG_mode_on
-	   pinctrl-8 = <&charger_test_off>;//WPC_OTG_mode_off
-	};
-	   
-};
-/*******************************************
-* typec wireless end 
-*******************************************/	
-
-&i2c9{
-	status = "okay";
-	aw210xx_led@20 {
-		compatible = "awinic,aw210xx_led";
-		reg = <0x20>;
-		enable-gpio = <&pio 157 0>;
-		global_current = <0x66>;
-		osc_clk = <1>;
-		br_res = <1>;
-		status = "okay";
-		aw210xx,led {
-			aw210xx,name = "aw210xx_led";
-			aw210xx,imax = <1>;
-			aw210xx,brightness = <128>;
-			aw210xx,max_brightness = <255>;
-		};
-	};
-};
 
 /* CONSYS GPIO standardization */
 &pio {
@@ -1020,21 +965,181 @@
 };
 /* CONSYS end */
 
+&i2c9 {
+	
+	aw2016@64 {/* add for breath led. */
+		compatible = "awinic,aw2016_led";
+		reg = <0x64>;
+
+		aw2016,red {
+			aw2016,name = "green";
+			aw2016,id = <0>;
+			aw2016,imax = <5>;
+			aw2016,led-current = <10>;
+			aw2016,max-brightness = <255>;
+			aw2016,rise-time-ms = <0>;
+			aw2016,hold-time-ms = <4>;
+			aw2016,fall-time-ms = <0>;
+			aw2016,off-time-ms = <8>;
+		};
+/*
+		aw2016,green {
+			aw2016,name = "green";
+			aw2016,id = <1>;
+			aw2016,imax = <5>;
+			aw2016,led-current = <10>;
+			aw2016,max-brightness = <255>;
+			aw2016,rise-time-ms = <0>;
+			aw2016,hold-time-ms = <4>;
+			aw2016,fall-time-ms = <0>;
+			aw2016,off-time-ms = <8>;
+		};
+		
+		aw2016,blue {
+			aw2016,name = "blue";
+			aw2016,id = <2>;
+			aw2016,imax = <5>;
+			aw2016,led-current = <10>;
+			aw2016,max-brightness = <255>;
+			aw2016,rise-time-ms = <6>;
+			aw2016,hold-time-ms = <0>;
+			aw2016,fall-time-ms = <6>;
+			aw2016,off-time-ms = <4>;
+		};
+*/
+	};
+
+};
+
+/*******************************************
+* typec wireless start
+*******************************************/
+
+&pio {
+        charger_otg_pins_default: charger_otg_default {
+        };
+        charger_otg_off:  charger_otg_off {
+            pins_cmd_dat {
+                        pinmux = <PINMUX_GPIO44__FUNC_GPIO44>;
+                        slew-rate = <1>;
+                        output-low;
+                };
+        };
+        charger_otg_on:  charger_otg_on {
+            pins_cmd_dat {
+                        pinmux = <PINMUX_GPIO44__FUNC_GPIO44>;
+                        slew-rate = <1>;
+                        output-high;
+                };
+        };
+      wireless_5725_off:  wireless_5725_off {
+            pins_cmd_dat {
+                        pinmux = <PINMUX_GPIO42__FUNC_GPIO42>;
+                        slew-rate = <1>;
+                        output-high;
+                };
+        };
+        wireless_5725_on:  wireless_5725_on {
+            pins_cmd_dat {
+                        pinmux = <PINMUX_GPIO42__FUNC_GPIO42>;
+                        slew-rate = <1>;
+                        output-low;
+                };
+        };
+//REVERE_CHARGING_MODE start
+		charger_otg_mode_on:  charger_otg_mode_on {
+            pins_cmd_dat {
+                        pinmux = <PINMUX_GPIO64__FUNC_GPIO64>;
+                        slew-rate = <1>;
+                        output-high;
+                };
+        };
+        charger_otg_mode_off:  charger_otg_mode_off {
+            pins_cmd_dat {
+                        pinmux = <PINMUX_GPIO64__FUNC_GPIO64>;
+                        slew-rate = <1>;
+                        output-low;
+                };
+        };
+//REVERE_CHARGING_MODE end
+
+//prize add by lipengpeng 20210416 start BPI_BUS4  GPIO45
+		charger_test_on:  charger_test_on {
+            pins_cmd_dat {
+                        pinmux = <PINMUX_GPIO45__FUNC_GPIO45>;
+                        slew-rate = <1>;
+                        output-high;
+                };
+        };
+        charger_test_off:  charger_test_off {
+            pins_cmd_dat {
+                        pinmux = <PINMUX_GPIO45__FUNC_GPIO45>;
+                        slew-rate = <1>;
+                        output-low;
+                };
+        };
+//prize add by lipengpeng 20210416 start BPI_BUS4  GPIO150
+};
+&i2c3 {
+	wireless_chg_rx@2b {
+		compatible = "maxictech,mt5725-15w";
+		reg = <0x2b>;
+		irq-gpio = <&pio 14 0>;   //EINT_WPC       S9:GPIO84 WPC_GPIO84_CHARGE_INT
+		//trxset_gpio = <&pio 42 0>;//DC_EN       WPC_GPIO88_DC_EN S9:GPIO88
+		//otgen_gpio = <&pio 44 0>;  //           WPC_GPIO87_OTG_EN  S9:GPIO87
+		statu_gpio = <&pio 27 0>;//WRX_EN         WPC_GPIO73_WRX_EN  S9:GPIO73
+		chipen_gpio = <&pio 45 0>;//CHARGE_EN     WPC_GPIO85_RSV0&CHARGE_EN S9:GPIO85
+		//rx_power_capability = <10>;
+		//one_pin_ctl = <1>;
+		rx_power_capability = <15>;
+	   one_pin_ctl = <0>;
+	   pinctrl-names = "default", "charger_otg_off", "charger_otg_on",
+				 "wireless_5725_off", "wireless_5725_on","charger_otg_mode_on","charger_otg_mode_off","test_gpio","test_off";
+	   pinctrl-0 = <&charger_otg_pins_default>;
+	   pinctrl-1 = <&charger_otg_off>;//WPC_OTG_EN
+	   pinctrl-2 = <&charger_otg_on>;//WPC_OTG_EN
+	   pinctrl-3 = <&wireless_5725_off>;//WPC_OTG_EN2
+	   pinctrl-4 = <&wireless_5725_on>;//WPC_OTG_EN2
+	   pinctrl-5 = <&charger_otg_mode_on>;//WPC_OTG_mode_on
+	   pinctrl-6 = <&charger_otg_mode_off>;//WPC_OTG_mode_off
+	   pinctrl-7 = <&charger_test_on>;//WPC_OTG_mode_on
+	   pinctrl-8 = <&charger_test_off>;//WPC_OTG_mode_off
+	};
+
+};
+&i2c9{
+	status = "okay";
+	aw210xx_led@20 {
+		compatible = "awinic,aw210xx_led";
+		reg = <0x20>;
+		enable-gpio = <&pio 157 0>;
+		global_current = <0x66>;
+		osc_clk = <1>;
+		br_res = <1>;
+		status = "okay";
+		aw210xx,led {
+			aw210xx,name = "aw210xx_led";
+			aw210xx,imax = <1>;
+			aw210xx,brightness = <128>;
+			aw210xx,max_brightness = <255>;
+		};
+	};
+};
 /* prize pengzhipeng modify  add key 301, 20200103 begin */
 &keypad {
 
-	mediatek,hw-init-map2 = <114 301 0 0 0 0 0 0 0 0 0 0 0 0 0 0
-	 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 
+	mediatek,hw-init-map = <114 381 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+	 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 	 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 >;
 
 };
 /* prize pengzhipeng modify  add key 301, 20200103 end */
 
-//prize add by lipengpeng 20220704 start 
+//prize add by lipengpeng 20220704 for tee start 
 &utos {
 	microtrust,real-drv = <1>;
 };
-//prize add by lipengpeng 20220704 end
+//prize add by lipengpeng 20220704 for tee end
 
 #include <k6789v1_64/cust.dtsi>
 /*End of this file, DO NOT ADD ANYTHING HERE*/

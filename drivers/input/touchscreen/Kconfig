@@ -132,6 +132,19 @@ config TOUCHSCREEN_ATMEL_MXT
 	  To compile this driver as a module, choose M here: the
 	  module will be called atmel_mxt_ts.
 
+config TOUCHSCREEN_MTK_GT1151
+	bool "GT1151 for Mediatek package"
+	default n
+	help
+	Say Y here if you have GT1151 touch panel.
+
+	If unsure, say N.
+
+	To compile this dirver as a module, choose M here: the
+	module will be called.
+
+source "drivers/input/touchscreen/GT1151/Kconfig"
+
 config TOUCHSCREEN_MTK_TUI_COMMON_API
         tristate "Tui common api ko for Mediatek package"
         default n
@@ -142,6 +155,7 @@ config TOUCHSCREEN_MTK_TUI_COMMON_API
 
           To compile this dirver as a module, choose M here: the
           module will be called.
+
 
 config TOUCHSCREEN_ATMEL_MXT_T37
 	bool "Support T37 Diagnostic Data"
@@ -1352,7 +1366,7 @@ config TOUCHSCREEN_MTK_TOUCH
          Set touch IC name if you have touch panel.
 
          To compile this dirver for used touch IC.
-      
+
 config TOUCHSCREEN_MT6983_ALPHA_SUPPORT
 	tristate "Specify Alpha Touch Platform is mt6983"
 	help
@@ -1368,8 +1382,34 @@ config TOUCHSCREEN_MT6895_ALPHA_SUPPORT
 	  To compile this dirver for used touch IC.
 	  Set Y or M to select this feature for specific platform-mt6895,
 	  and set N to disable.
-endif
 
+config TOUCHSCREEN_HIMAX_CHIPSET
+	bool "Himax touchpanel CHIPSET"
+	help
+	  Say Y here if you have a Himax CHIPSET touchscreen.
+	  HIMAX controllers are multi touch controllers which can
+	  report 10 touches at a time.
+
+          If unsure, say N.
+
+source "drivers/input/touchscreen/hxchipset/Kconfig"
+source "drivers/input/touchscreen/GT9966/Kconfig"
+
+endif
+#drv add by pengzhipeng 20230316 start
+config TOUCHSCREEN_SYNA_TCM2
+	tristate "Synaptics TCM Touchscreen Driver Generation2"
+	depends on INPUT
+	help
+	  Say Y here if you have a Synaptics Touchscreen.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called synaptics_tcm.
+
+source "drivers/input/touchscreen/synaptics_tcm2/Kconfig"
+#drv add by pengzhipeng 20230316 end
 #prize add by lipengpeng 20220518 start 
 config TOUCHSCREEN_FTS
     bool "Focaltech Touchscreen"
@@ -1395,6 +1435,16 @@ config TOUCHSCREEN_CHIPONR_TDDI
       
 #prize add by lipengpeng 20220518 end
 
+#drv add by wangwei1 20230520 start
+config TOUCHSCREEN_HYNITRON_TS
+    bool "hynitorn Ts for TOUCHSCREEN"
+    depends on I2C
+    default n
+    help
+      Say Y here if you have hynitorn touch panel.
+      If unsure, say N.
+#drv add by wangwei1 20230520 end
+
 #/*prize add by liuxuhui for glove mode control---20220728---start*/
 config PRIZE_SMART_COVER_COMMON_NODE
 	tristate "prize smart cover common node"
@@ -1406,4 +1456,3 @@ config PRIZE_SMART_COVER_COMMON_NODE
 	  To compile this dirver as a module, choose M here: the
 	  module will be called.
 #/*prize add by liuxuhui for glove mode control---20220728---end*/
-

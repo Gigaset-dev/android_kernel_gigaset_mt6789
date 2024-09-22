@@ -50,6 +50,8 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_AK5558
 	imply SND_SOC_ALC5623
 	imply SND_SOC_ALC5632
+	imply SND_SOC_AW87XXX
+	imply SND_SOC_AW883XX
 	imply SND_SOC_BT_SCO
 	imply SND_SOC_BD28623
 	imply SND_SOC_CQ0093VC
@@ -164,13 +166,18 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_RT1015P
 	imply SND_SOC_RT1305
 	imply SND_SOC_RT1308
+	imply SND_SOC_RT5509
 	imply SND_SOC_RT5512
 #prize add by lipengpeng 20220606 start
 	imply SND_SOC_AW8839X
 #prize add by lipengpeng 20220606 end
+	imply SND_SOC_FS1599
 	imply SND_SOC_RT5514
 	imply SND_SOC_RT5616
 	imply SND_SOC_RT5631
+#prize add by KLJ 20230925 start
+	imply SND_SMARTPA_AW881XX_V1_3_0
+#prize add by KLJ  20230925 end
 	imply SND_SOC_RT5640
 	imply SND_SOC_RT5645
 	imply SND_SOC_RT5651
@@ -215,6 +222,8 @@ config SND_SOC_ALL_CODECS
         imply SND_SOC_AA006
 	imply SND_SOC_BB007
 	imply SND_SOC_TFA9879
+	imply SND_SOC_FS1894U
+	imply SND_SOC_AD10
 	imply SND_SOC_TLV320ADCX140
 	imply SND_SOC_TLV320AIC23_I2C
 	imply SND_SOC_TLV320AIC23_SPI
@@ -261,6 +270,9 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_WM8776
 	imply SND_SOC_WM8782
 	imply SND_SOC_WM8804_I2C
+#prize added by pengzhipeng, FSA4480, 20221103-start
+	imply SND_SOC_FSA4480_I2C
+#prize added by pengzhipeng, FSA4480, 20221103-end
 	imply SND_SOC_WM8804_SPI
 	imply SND_SOC_WM8900
 	imply SND_SOC_WM8903
@@ -535,6 +547,30 @@ config SND_SOC_ALC5623
 config SND_SOC_ALC5632
 	tristate
 	depends on I2C
+	
+config SND_SOC_AW87XXX
+	tristate "SoC Audio for awinic AW87XXX series"
+	depends on I2C
+	help
+	  This option enables support for AW87XXX series Smart PA.
+	  
+config SND_SOC_AW87XXX_V2_13_0
+	tristate "SoC Audio for awinic AW87XXX series"
+	depends on I2C
+	help
+	  This option enables support for AW87XXX series Smart PA.
+	  
+config SND_SOC_AW87XXX_DUAL
+	tristate "SoC Audio for awinic AW87XXX Dual series"
+	depends on SND_SOC_AW87XXX || SND_SOC_AW87XXX_V2_13_0
+	help
+	  This option enables support for AW87XXX dual series Smart PA.
+	  
+config SND_SOC_AW883XX
+	tristate "SoC Audio for awinic aw883xx series"
+	depends on I2C
+	help
+	  This option enables support for aw883xx series Smart PA.
 
 config SND_SOC_BD28623
 	tristate "ROHM BD28623 CODEC"
@@ -671,6 +707,7 @@ config SND_SOC_CS4349
 
 config SND_SOC_CS47L15
 	tristate
+	depends on MFD_CS47L15
 
 config SND_SOC_CS47L24
 	tristate
@@ -678,15 +715,19 @@ config SND_SOC_CS47L24
 
 config SND_SOC_CS47L35
 	tristate
+	depends on MFD_CS47L35
 
 config SND_SOC_CS47L85
 	tristate
+	depends on MFD_CS47L85
 
 config SND_SOC_CS47L90
 	tristate
+	depends on MFD_CS47L90
 
 config SND_SOC_CS47L92
 	tristate
+	depends on MFD_CS47L92
 
 # Cirrus Logic Quad-Channel ADC
 config SND_SOC_CS53L30
@@ -864,7 +905,6 @@ config SND_SOC_MAX98095
 
 config SND_SOC_MAX98357A
 	tristate "Maxim MAX98357A CODEC"
-	depends on GPIOLIB
 
 config SND_SOC_MAX98371
 	tristate
@@ -1106,7 +1146,6 @@ config SND_SOC_RT1015
 
 config SND_SOC_RT1015P
 	tristate
-	depends on GPIOLIB
 
 config SND_SOC_RT1305
 	tristate
@@ -1120,6 +1159,16 @@ config SND_SOC_RT1308_SDW
 	tristate "Realtek RT1308 Codec - SDW"
 	depends on I2C && SOUNDWIRE
 	select REGMAP_SOUNDWIRE
+
+config SND_SOC_RT5509
+	tristate "Richtek RT5509 speaker amplifier"
+	depends on I2C
+	select MTK_SUBPMIC_MISC
+	help
+	  Config of RT5509. It is a Smart power
+	  amplifier which contain speaker protection,
+	  multi-band DRC, equalizer function. It would
+	  be set to yes if device with RT5509 on it.
 
 config SND_SOC_RT5512
 	tristate "Mediatek RT5512 speaker amplifier"
@@ -1395,6 +1444,21 @@ config SND_SOC_AA006
 config SND_SOC_TFA9879
 	tristate "NXP Semiconductors TFA9879 amplifier"
 	depends on I2C
+
+config SND_SOC_FS1894U
+	tristate "FourSemi fs16xx Codec Driver"
+	depends on I2C
+#	default y
+	help
+	  for FourSemi True Smart Amplifier.
+
+config SND_SOC_AD10
+	tristate "Support AD10 driver"
+	depends on I2C
+	help
+	  This option enables support for AD10 boards.
+	  Speaker amp use FourSemi FS1894 codec,
+	  This only using on special project phone.
 
 config SND_SOC_BB007
 	tristate "Support BB007 driver"
@@ -1805,7 +1869,21 @@ config SND_SOC_MC13783
 config SND_SOC_ML26124
 	tristate
 	depends on I2C
-
+	
+#prize added by pengzhipeng, fs1599, 20221103-start
+config SND_SOC_FS1599
+    tristate "SoC Audio for awinic FS1599 series"
+    depends on I2C
+    default n
+    help
+        This option enables support for FS1599 series Smart PA.
+#prize added by pengzhipeng, fs1599, 20221103-end
+#prize added by pengzhipeng, FSA4480, 20221103-start
+config SND_SOC_FSA4480_I2C
+	tristate "SoC Audio for awinic FSA4480 series"
+	help
+        This option enables support for FSA4480.
+#prize added by pengzhipeng, FSA4480, 20221103-start
 config SND_SOC_MT6366
 	tristate "MediaTek MT6366 Codec driver"
 	depends on MFD_MT6366
@@ -1824,6 +1902,23 @@ config SND_SOC_MT6338
 	  three DAC for downlink path(handset,
 	  headset, lineout).
 
+config SND_SOC_MT6358_ACCDET
+	tristate "MediaTek MT6358 ACCDET driver"
+	depends on MFD_MT6397
+	help
+	  ACCDET means Accessory Detection technology,
+	  MediaTek develop it for ASoC codec soc-jack
+	  detection mechanism. Select N if you don't
+	  have jack on board.
+
+config SND_SOC_MT6357_ACCDET
+	tristate "MediaTek MT6357 ACCDET driver"
+	default MFD_MT6397
+	help
+	  ACCDET means Accessory Detection technology, MediaTek develop it
+	  for ASoC codec soc-jack detection mechanism.
+	  Select N if you don't have jack on board.
+
 config SND_SOC_MT6338_ACCDET
 	tristate "MediaTek MT6338 ACCDET driver"
 	depends on MFD_MT6338
@@ -1832,6 +1927,9 @@ config SND_SOC_MT6338_ACCDET
 	  MediaTek develop it for ASoC codec soc-jack
 	  detection mechanism. Select N if you don't
 	  have jack on board.
+
+config SND_SOC_CS35L45
+	tristate "cirrus Semiconductors cs35l45 amplifier"
 
 config SND_SOC_MT6351
 	tristate "MediaTek MT6351 Codec"
@@ -1949,5 +2047,14 @@ config SND_SOC_NAU8825
 config SND_SOC_TPA6130A2
 	tristate "Texas Instruments TPA6130A2 headphone amplifier"
 	depends on I2C
+#prize add by wuhui 20210623 start
+config SND_SMARTPA_AW881XX_V1_3_0
+        tristate "SoC Audio for awinic aw881xx series"
+        depends on I2C
+        default n
+        help
+          This option enables support for aw881xx series Smart PA.
+	   
+#prize add by wuhui 20210623 end
 
 endmenu

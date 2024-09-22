@@ -316,7 +316,6 @@ struct ir_raw_event {
 #define IR_MAX_DURATION         500000000	/* 500 ms */
 #define IR_DEFAULT_TIMEOUT	MS_TO_NS(125)
 /* irtx Unable to send long code 20230317 end */
-
 void ir_raw_event_handle(struct rc_dev *dev);
 int ir_raw_event_store(struct rc_dev *dev, struct ir_raw_event *ev);
 int ir_raw_event_store_edge(struct rc_dev *dev, bool pulse);

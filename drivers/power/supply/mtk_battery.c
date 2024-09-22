@@ -289,13 +289,14 @@ static int battery_psy_get_property(struct power_supply *psy,
 	//int curr_now = 0, curr_avg = 0;
 	struct mtk_battery *gm;
 	struct battery_data *bs_data;
+	//prize begin
 	union power_supply_propval prop;
 	struct power_supply *bms_psy = NULL;
 	bms_psy = power_supply_get_by_name("bms");
 	if (IS_ERR_OR_NULL(bms_psy)) {
 		pr_err("%s Couldn't get bms_psy\n", __func__);
 	}
-	
+	//prize end
 	gm = (struct mtk_battery *)power_supply_get_drvdata(psy);
 	bs_data = &gm->bs_data;
 
@@ -313,7 +314,7 @@ static int battery_psy_get_property(struct power_supply *psy,
 		val->intval = bs_data->bat_health;
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
-/*
+/*//prize begin
 		ret = gauge_get_property(GAUGE_PROP_BATTERY_EXIST,
 			&bs_data->bat_present);
 
@@ -331,6 +332,7 @@ static int battery_psy_get_property(struct power_supply *psy,
 		} else {
 			val->intval = 0;
 		}
+//prize end
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = bs_data->bat_technology;
@@ -341,6 +343,7 @@ static int battery_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		/* 1 = META_BOOT, 4 = FACTORY_BOOT 5=ADVMETA_BOOT */
 		/* 6= ATE_factory_boot */
+		//prize begin
 		/*if (gm->bootmode == 1 || gm->bootmode == 4
 			|| gm->bootmode == 5 || gm->bootmode == 6) {
 			val->intval = 75;
@@ -484,7 +487,8 @@ static int battery_psy_get_property(struct power_supply *psy,
 				val->intval = prop.intval;
 				//pr_err("%s:%d\n", __func__,ret);
 				val->intval = check_cap_level(val->intval);
-			}	
+			}
+		//prize end
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW:
 		/* full or unknown must return 0 */
@@ -670,7 +674,7 @@ static void mtk_battery_external_power_changed(struct power_supply *psy)
 		} else
 			gm->b_EOC = false;
 		
-		pr_err("gezi %s------------------------%d\n", __func__,__LINE__);
+		pr_err("gezi %s------------------------%d\n", __func__,__LINE__);//prize
 		battery_update(gm);
 
 		/* check charger type */
@@ -2210,7 +2214,8 @@ void battery_update(struct mtk_battery *gm)
 	struct power_supply *bat_psy = bat_data->psy;
 
 	if (gm->is_probe_done == false || bat_psy == NULL) {
-		bm_err("[%s]battery is not rdy:probe:%d\n",__func__, gm->is_probe_done);
+		bm_err("[%s]battery is not rdy:probe:%d\n",
+			__func__, gm->is_probe_done);
 		return;
 	}
 
@@ -2650,7 +2655,7 @@ int battery_get_property(enum battery_property bp,
 
 	psy = power_supply_get_by_name("battery");
 	if (psy == NULL){
-		pr_err("gezi--------%s------get battery psy failed....\n",__func__);
+		pr_err("gezi--------%s------get battery psy failed....\n",__func__);//prize
 		return -ENODEV;
 	}
 
@@ -3201,7 +3206,7 @@ int next_waketime(int polling)
 	else
 		return 10;
 }
-static int get_sm5602_soc(struct mtk_battery *gm)
+static int get_sm5602_soc(struct mtk_battery *gm)//prize
 {
 	int ret = 0;
 	union power_supply_propval prop;
@@ -3224,7 +3229,7 @@ static int shutdown_event_handler(struct mtk_battery *gm)
 	static int ui_zero_time_flag;
 	static int down_to_low_bat;
 	int now_current = 0;
-#if IS_ENABLED(CONFIG_BATTERY_SM5602)
+#if IS_ENABLED(CONFIG_BATTERY_SM5602)//prize
 	int current_ui_soc = get_sm5602_soc(gm);
 	int current_soc = get_sm5602_soc(gm);
 #else
@@ -3707,12 +3712,13 @@ int battery_init(struct platform_device *pdev)
 		battery_algo_init(gm);
 		bm_err("[%s]: enable Kernel mode Gauge\n", __func__);
 	}
-	
+	//prize begin
 	gm->bms_psy = power_supply_get_by_name("bms");
 	
 	if (IS_ERR_OR_NULL(gm->bms_psy)) {
 		pr_err("%s Couldn't get bms_psy\n", __func__);
 	}
+	//prize end
 	
 
 	return 0;

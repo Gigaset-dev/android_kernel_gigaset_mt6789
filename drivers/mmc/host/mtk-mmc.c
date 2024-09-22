@@ -377,6 +377,8 @@ static inline void msdc_dma_setup(struct msdc_host *host, struct msdc_dma *dma,
 	struct scatterlist *sg;
 	struct mt_gpdma_desc *gpd;
 	struct mt_bdma_desc *bd;
+	struct mt_bdma_desc l_bd;
+	struct mt_bdma_desc *p_bd;
 
 	sg = data->sg;
 
@@ -396,31 +398,40 @@ static inline void msdc_dma_setup(struct msdc_host *host, struct msdc_dma *dma,
 		dma_len = sg_dma_len(sg);
 
 		/* init bd */
-		bd[j].bd_info &= ~BDMA_DESC_BLKPAD;
-		bd[j].bd_info &= ~BDMA_DESC_DWPAD;
-		bd[j].ptr = lower_32_bits(dma_address);
+		p_bd = &l_bd;
+		memset(p_bd, 0, sizeof(struct mt_bdma_desc));
+
+		p_bd->next = bd[j].next;
+		p_bd->bd_info &= ~BDMA_DESC_BLKPAD;
+		p_bd->bd_info &= ~BDMA_DESC_DWPAD;
+		p_bd->ptr = lower_32_bits(dma_address);
 		if (host->dev_comp->support_64g) {
-			bd[j].bd_info &= ~BDMA_DESC_PTR_H4;
-			bd[j].bd_info |= (upper_32_bits(dma_address) & 0xf)
+			p_bd->bd_info &= ~BDMA_DESC_PTR_H4;
+			p_bd->bd_info |= (upper_32_bits(dma_address) & 0xf)
 					 << 28;
 		}
 
 		if (host->dev_comp->support_64g) {
-			bd[j].bd_data_len &= ~BDMA_DESC_BUFLEN_EXT;
-			bd[j].bd_data_len |= (dma_len & BDMA_DESC_BUFLEN_EXT);
+			p_bd->bd_data_len &= ~BDMA_DESC_BUFLEN_EXT;
+			p_bd->bd_data_len |= (dma_len & BDMA_DESC_BUFLEN_EXT);
 		} else {
-			bd[j].bd_data_len &= ~BDMA_DESC_BUFLEN;
-			bd[j].bd_data_len |= (dma_len & BDMA_DESC_BUFLEN);
+			p_bd->bd_data_len &= ~BDMA_DESC_BUFLEN;
+			p_bd->bd_data_len |= (dma_len & BDMA_DESC_BUFLEN);
 		}
 
 		if (j == data->sg_count - 1) /* the last bd */
-			bd[j].bd_info |= BDMA_DESC_EOL;
+			p_bd->bd_info |= BDMA_DESC_EOL;
 		else
-			bd[j].bd_info &= ~BDMA_DESC_EOL;
+			p_bd->bd_info &= ~BDMA_DESC_EOL;
 
 		/* checksume need to clear first */
-		bd[j].bd_info &= ~BDMA_DESC_CHECKSUM;
-		bd[j].bd_info |= msdc_dma_calcs((u8 *)(&bd[j]), 16) << 8;
+		p_bd->bd_info &= ~BDMA_DESC_CHECKSUM;
+		p_bd->bd_info |= msdc_dma_calcs((u8 *) p_bd, 16) << 8;
+
+		/* re-store value to bd[j] */
+		bd[j].bd_info = p_bd->bd_info;
+		bd[j].ptr = p_bd->ptr;
+		bd[j].bd_data_len = p_bd->bd_data_len;
 	}
 
 	sdr_set_field(host->base + MSDC_DMA_CFG, MSDC_DMA_CFG_DECSEN, 1);
@@ -1025,6 +1036,11 @@ static bool msdc_cmd_done(struct msdc_host *host, int events,
 			cmd->error = -EILSEQ;
 			host->error |= REQ_CMD_EIO;
 			host->need_tune = TUNE_CMD_CRC;
+			if (!(mmc_from_priv(host)->retune_crc_disable)
+					&& cmd->opcode != MMC_SEND_TUNING_BLOCK
+					&& cmd->opcode != MMC_SEND_TUNING_BLOCK_HS200
+					&& cmd->opcode != MMC_SEND_STATUS)
+				mmc_retune_needed(mmc_from_priv(host));
 		} else if (events & MSDC_INT_CMDTMO) {
 			cmd->error = -ETIMEDOUT;
 			host->error |= REQ_CMD_TMO;
@@ -1193,6 +1209,7 @@ static inline bool msdc_op_cmdq_on_tran(struct mmc_command *cmd)
 static unsigned int msdc_cmdq_command_start(struct msdc_host *host,
 	struct mmc_command *cmd, unsigned long timeout)
 {
+	unsigned long flags;
 	unsigned long tmo;
 
 	cmd->error = 0;
@@ -1203,10 +1220,16 @@ static unsigned int msdc_cmdq_command_start(struct msdc_host *host,
 			!msdc_cmd_is_ready(host, host->mrq, cmd)) {
 			dev_err(host->dev, "cmd_busy timeout: before CMD<%d>",
 				 cmd->opcode);
-			cmd->error = (unsigned int)-ETIMEDOUT;
+			cmd->error = (unsigned int) -ETIMEDOUT;
 			return cmd->error;
 		}
 	}
+
+	/* disable cmd interrupts for cq cmd */
+	spin_lock_irqsave(&host->lock, flags);
+	host->use_cmd_intr = false;
+	sdr_clr_bits(host->base + MSDC_INTEN, cmd_ints_mask);
+	spin_unlock_irqrestore(&host->lock, flags);
 
 	sdr_set_field(host->base + EMMC51_CFG0, EMMC51_CMDQ_MASK,
 			(0x81) | (cmd->opcode << 1));
@@ -1260,12 +1283,12 @@ static unsigned int msdc_cmdq_command_resp_polling(struct msdc_host *host,
 		if (events & MSDC_INT_CMDRDY) {
 			cmd->resp[0] = readl(host->base + SDC_RESP0);
 		} else if (events & MSDC_INT_RSPCRCERR) {
-			cmd->error = (unsigned int)-EILSEQ;
+			cmd->error = (unsigned int) -EILSEQ;
 			dev_err(host->dev,
 				"[%s]: XXX CMD<%d> MSDC_INT_RSPCRCERR Arg<0x%.8x>",
 				__func__, cmd->opcode, cmd->arg);
 		} else if (events & MSDC_INT_CMDTMO) {
-			cmd->error = (unsigned int)-ETIMEDOUT;
+			cmd->error = (unsigned int) -ETIMEDOUT;
 			dev_err(host->dev, "[%s]: XXX CMD<%d> MSDC_INT_CMDTMO Arg<0x%.8x>",
 				__func__, cmd->opcode, cmd->arg);
 		}
@@ -1397,14 +1420,16 @@ static void msdc_data_xfer_next(struct msdc_host *host,
 		}
 	}
 #endif
-	if (mmc_op_multi(mrq->cmd->opcode) && mrq->stop && !mrq->stop->error &&
-	    !mrq->sbc) {
-		msdc_start_command(host, mrq, mrq->stop);
-		if (!host->use_cmd_intr)
-			msdc_command_resp_polling(host, mrq,
-				mrq->stop, CMD_TIMEOUT);
-	} else
-		msdc_request_done(host, mrq);
+	if (mrq && mrq->cmd) {
+		if (mmc_op_multi(mrq->cmd->opcode)
+			&& mrq->stop && !mrq->stop->error && !mrq->sbc) {
+			msdc_start_command(host, mrq, mrq->stop);
+			if (!host->use_cmd_intr)
+				msdc_command_resp_polling(host, mrq,
+					mrq->stop, CMD_TIMEOUT);
+		} else
+			msdc_request_done(host, mrq);
+	}
 }
 
 static bool msdc_data_xfer_done(struct msdc_host *host, u32 events,
@@ -1450,7 +1475,9 @@ static bool msdc_data_xfer_done(struct msdc_host *host, u32 events,
 			dev_dbg(host->dev, "interrupt events: %x\n", events);
 			msdc_reset_hw(host);
 
-			if (mrq->data->flags & MMC_DATA_WRITE)
+			if (mrq && mrq->data->flags & MMC_DATA_WRITE)
+				host->need_tune = TUNE_DATA_WRITE;
+			else if (data->flags & MMC_DATA_WRITE)
 				host->need_tune = TUNE_DATA_WRITE;
 			else
 				host->need_tune = TUNE_DATA_READ;
@@ -1466,10 +1493,14 @@ static bool msdc_data_xfer_done(struct msdc_host *host, u32 events,
 				data->error = -EILSEQ;
 			}
 
-			dev_info(host->dev, "%s: cmd=%d; blocks=%d",
-				__func__, mrq->cmd->opcode, data->blocks);
-			dev_info(host->dev, "data_error=%d xfer_size=%d\n",
-				(int)data->error, data->bytes_xfered);
+			if (mrq && mrq->cmd)
+				dev_info(host->dev, "%s: cmd=%d blocks=%u data_error=%d xfer_size=%d",
+						__func__, mrq->cmd->opcode, data->blocks,
+						data->error, data->bytes_xfered);
+			else
+				dev_info(host->dev, "%s: flags=0x%x blocks=%u data_error=%d xfer_size=%d",
+						__func__, data->flags, data->blocks,
+						data->error, data->bytes_xfered);
 		}
 
 		msdc_data_xfer_next(host, mrq, data);
@@ -3098,19 +3129,19 @@ static void sdcard_oc_handler(struct work_struct *work)
 }
 
 #if IS_ENABLED(CONFIG_MMC_MTK_SW_CQHCI)
-void msdc_swcq_dump(struct mmc_host *mmc)
+static void msdc_swcq_dump(struct mmc_host *mmc)
 {
 	struct msdc_host *host = mmc_priv(mmc);
 
 	msdc_dump_info(NULL, 0, NULL, host);
 }
 
-void  msdc_swcq_err_handle(struct mmc_host *mmc)
+static void  msdc_swcq_err_handle(struct mmc_host *mmc)
 {
 
 }
 
-void msdc_swcq_prepare_tuning(struct mmc_host *mmc)
+static void msdc_swcq_prepare_tuning(struct mmc_host *mmc)
 {
 #if IS_ENABLED(CONFIG_MMC_AUTOK)
 	struct msdc_host *host = mmc_priv(mmc);

@@ -285,7 +285,7 @@ uint32_t hal_tui_deactivate(void)
 	 * on the appropriate framebuffer device
 	 */
 
-#ifdef TUI_ENABLE_TOUCH
+#if 0//prize-del TUI_ENABLE_TOUCH-pengzhipeng-20230102
 	tpd_enter_tui();
 #endif
 #ifdef TUI_LOCK_I2C
@@ -330,7 +330,7 @@ uint32_t hal_tui_activate(void)
 	 * on the appropriate framebuffer device
 	 */
 	/* Clear linux TUI flag */
-#ifdef TUI_ENABLE_TOUCH
+#if 0//prize-del TUI_ENABLE_TOUCH-pengzhipeng-20230102
 	tpd_exit_tui();
 #endif
 

@@ -35,6 +35,14 @@ config LEDS_AW210XX
 	  this option enables support for the AW210XXRGB LED connected
 	  through I2C. Say Y to enable support for the AW210XX LED
 	  light automatically.
+	  
+config LEDS_AW22127
+	tristate "LED Support for AW22127"
+	depends on LEDS_CLASS && I2C
+	help
+	  this option enables support for the AW22127 LED connected
+	  through I2C. Say Y to enable support for the AW22127 LED
+	  light automatically.
 
 #liaojie prize exergen 20210128 start
 config PRIZE_EXERGEN
@@ -44,6 +52,19 @@ config PRIZE_EXERGEN
           Say y here if you have prize exergen.
           If unsure, say N.
 
+#
+# Qcom AWINIC_HAPTIC_HV Driver
+#
+
+config AWINIC_HAPTIC_HV
+	tristate "AWINIC_HAPTIC_HV driver"
+	depends on I2C
+	help
+	  Say Y here if you have Awinic AW869X/AW869XX haptic controller
+	  chip in your system.
+	  If unsure, say N.
+	  To compile this driver as a module, choose M here: the
+	  module will be called awinic_haptic_hv.
 config PRIZE_EXERGEN_SELECT_LIST
 		string "sensor type"
 		help
@@ -63,29 +84,40 @@ config PRIZE_TYPEC_POSITIVE_NEGATIVE
 	help
 	  hardware_info. If configures to be n, means devices doesn't support
 	  hardwareinfo functionality.
-	  
-#prize add by lipengpeng 20230207 start
-config PRIZE_UFS_LIFE_SUPPORT
-	tristate "typec pt ne"
+#hjw 	
+config PRIZE_TYPEC_CHG_DET
+	tristate "typec typec neg"
 	default n
 	help
 	  hardware_info. If configures to be n, means devices doesn't support
 	  hardwareinfo functionality.
-	  
-#prize add by lipengpeng 20230207 end 
-config PRIZE_DMR009
-	tristate "dmr099 driver"
+  
+config PRIZE_ENDOSCOPE	
+	bool "endoscope enable"
 	default n
 	help
-	  hardware_info. If configures to be n, means devices doesn't support
-	  hardwareinfo functionality.
+	  Select Y to enable prize endoscope enable
+	  
+#drv add by situziyin 20230309 start
+config PRIZE_PIXEL_MANAGER	
+	tristate "pixel manager enable"
+	default n
+	help
+	  Select m to enable prize pixel manager
+#drv add by situziyin 20230309 end
 
-#prize add by liuxuhui for modify send lcm param to light sensor
-config PRIZE_PIXEL_MANAGER      
-        tristate "pixel manager enable"
-        default n
-        help
-          Select m to enable prize pixel manager
+config PRIZE_COMMON_NODE
+	tristate "common node"
+	default n
+	help
+	  common_node. If configures to be n, means devices doesn't support
+	  common_node functionality.
+ 
+config PRIZE_DIGITAL_LCD
+  tristate "digital lcd"
+  default n
+  help
+     digital lcd driver.
 
 #DRV added by chenjiaxi, add lpddr 8802 info (for ufs kernel-5.10), start
 config PRIZE_HARDWARE_LPDDR_INFO
@@ -95,3 +127,51 @@ config PRIZE_HARDWARE_LPDDR_INFO
 	  hardware lpddr info. If configures to be n, means devices doesn't support
 	  hardware lpddr info functionality.
 #DRV added by chenjiaxi, add lpddr 8802 info (for ufs kernel-5.10), end
+
+#drv added by wangwei1, secondary screen driver, 20230606-start
+config PRIZE_LCD_GC9A01
+		tristate "PRIZE_LCD_GC9A01"
+		default n
+		help
+			PRIZE_LCD_GC9A01
+
+config PRIZE_LCD_GC9A01_240
+		tristate "PRIZE_LCD_GC9A01_240"
+		default n
+		help
+			PRIZE_LCD_GC9A01_240
+#drv added by wangwei1, secondary screen driver, 20230606-end
+
+#DRV added by xudongfang ,add ufs health info start
+config PRIZE_HARDWARE_INFO_UFS_HEALTH
+        tristate "hardware ufs health info"
+        default n
+        help
+          hardware ufs health info. If configures to be n, means devices doesn't support
+          hardware ufs health info functionality.
+#DRV added by xudongfang ,add ufs health info end
+
+#drv add by liuxuhui for sensor hall start --- 20231123
+config PRIZE_HALL
+    tristate "SPRIZE_HALL Driver"
+    default n
+    help
+      PRIZE_HALL.
+#drv add by liuxuhui for sensor hall end --- 20231123
+
+#drv add by yaozhipeng for sensor 3d hall start --- 20240130
+config 3D_HALL_IST8309
+	depends on I2C
+    tristate "3D_HALL Driver"
+    help
+      3D_HALL.
+#drv add by yaozhipeng for sensor 3d hall end --- 20240130
+
+#drv added by chenjiaxi, add miniscreen driver, start
+config DRV_MINISCREEN
+	tristate "DRV_MINISCREEN"
+	default n
+	help
+	  DRV_MINISCREEN
+source "drivers/misc/mediatek/prize/miniscreen/Kconfig"
+#drv added by chenjiaxi, add miniscreen driver, end

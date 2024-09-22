@@ -67,6 +67,7 @@ int get_uisoc(struct mtk_charger *info)
 	union power_supply_propval prop;
 	struct power_supply *bat_psy = NULL;
 	int ret;
+//prize begin
 #if 1
 	struct power_supply *bms_psy = NULL;
 	bms_psy = power_supply_get_by_name("bms");
@@ -80,6 +81,7 @@ int get_uisoc(struct mtk_charger *info)
 		return ret;
 	}
 #endif
+//prize end
 	bat_psy = info->bat_psy;
 
 	if (bat_psy == NULL || IS_ERR(bat_psy)) {
@@ -96,7 +98,9 @@ int get_uisoc(struct mtk_charger *info)
 			POWER_SUPPLY_PROP_CAPACITY, &prop);
 		ret = prop.intval;
 	}
-	chr_debug("%s:%d\n", __func__,ret);
+
+	chr_debug("%s:%d\n", __func__,
+		ret);
 	return ret;
 }
 
@@ -105,6 +109,7 @@ int get_battery_voltage(struct mtk_charger *info)
 	union power_supply_propval prop;
 	struct power_supply *bat_psy = NULL;
 	int ret;
+//prize begin
 #if 1
 	struct power_supply *bms_psy = NULL;
 	bms_psy = power_supply_get_by_name("bms");
@@ -118,6 +123,7 @@ int get_battery_voltage(struct mtk_charger *info)
 		return ret;
 	}
 #endif
+//prize end
 	bat_psy = info->bat_psy;
 
 	if (bat_psy == NULL || IS_ERR(bat_psy)) {
@@ -175,6 +181,7 @@ int get_battery_current(struct mtk_charger *info)
 	struct power_supply *bat_psy = NULL;
 	int ret = 0;
 	int tmp_ret = 0;
+//prize begin
 #if 1
 	struct power_supply *bms_psy = NULL;
 	bms_psy = power_supply_get_by_name("bms");
@@ -188,6 +195,7 @@ int get_battery_current(struct mtk_charger *info)
 		return ret;
 	}
 #endif
+//prize end
 
 	bat_psy = info->bat_psy;
 
@@ -250,7 +258,7 @@ int get_vbus(struct mtk_charger *info)
 
 	return vchr;
 }
-
+//prize begin
 int get_ibat(struct mtk_charger *info)
 {
 	int ret = 0;
@@ -288,6 +296,7 @@ int get_ibat(struct mtk_charger *info)
 	return ibat / 1000;
 */	
 }
+//prize end
 
 int get_ibus(struct mtk_charger *info)
 {
@@ -426,7 +435,7 @@ int get_usb_type(struct mtk_charger *info)
 		ret = power_supply_get_property(chg_psy,
 			POWER_SUPPLY_PROP_USB_TYPE, &prop2);
 	}
-	chr_err("%s online:%d usb_type:%d\n", __func__,
+	chr_debug("%s online:%d usb_type:%d\n", __func__,
 		prop.intval,
 		prop2.intval);
 	return prop2.intval;

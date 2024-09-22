@@ -22,8 +22,8 @@
 
 #include "extcon-mtk-usb.h"
 
-#include "../../../power/supply/mtk_charger.h"
-#include "../../../power/supply/sm5602_fg.h"
+//#include "../../../power/supply/mtk_charger.h"//prize
+#include "../../../power/supply/sm5602_fg.h"//prize
 
 #if IS_ENABLED(CONFIG_TCPC_CLASS)
 #include "tcpm.h"
@@ -35,8 +35,8 @@ static const unsigned int usb_extcon_cable[] = {
 	EXTCON_NONE,
 };
 
-struct mtk_extcon_info * g_extcon = NULL;
-static struct delayed_work delay_work_t;
+struct mtk_extcon_info * g_extcon = NULL;//prize
+static struct delayed_work delay_work_t;//prize
 	
 static void mtk_usb_extcon_update_role(struct work_struct *work)
 {
@@ -86,7 +86,6 @@ static void mtk_usb_extcon_update_role(struct work_struct *work)
 	kfree(role);
 }
 
-
 static int mtk_usb_extcon_set_role(struct mtk_extcon_info *extcon,
 						unsigned int role)
 {
@@ -108,7 +107,7 @@ static int mtk_usb_extcon_set_role(struct mtk_extcon_info *extcon,
 }
 
 
-int sc89601a_set_roal(int a)
+int sc89601a_set_roal(int a)//prize
 {
 	if(!g_extcon){
 		pr_err("gezi g_extcon is NULL,return..........\n");
@@ -164,15 +163,19 @@ static void mtk_usb_extcon_psy_detector(struct work_struct *work)
 
 	/* Workaround for PR_SWAP, IF tcpc_dev, then do not switch role. */
 	/* Since we will set USB to none when type-c plug out */
+#if IS_ENABLED(CONFIG_TCPC_CLASS)
 	if (extcon->tcpc_dev) {
 		if (usb_is_online(extcon) && extcon->c_role == USB_ROLE_NONE)
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_DEVICE);
 	} else {
+#endif
 		if (usb_is_online(extcon))
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_DEVICE);
 		else
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_NONE);
+#if IS_ENABLED(CONFIG_TCPC_CLASS)
 	}
+#endif
 
 }
 
@@ -217,36 +220,57 @@ static int mtk_usb_extcon_psy_init(struct mtk_extcon_info *extcon)
 	return ret;
 }
 
-
+#if 1//prize IS_ENABLED(CONFIG_CHARGER_RT9458)
+/* ADAPT_CHARGER_V1 */
+#include <charger_class.h>
 static struct charger_device *primary_charger;
 
-static int mtk_usb_extcon_set_vbus_v1(bool is_on) {
+static int mtk_usb_extcon_set_vbus_v1(struct mtk_extcon_info *extcon, bool is_on)
+{
+	struct device *dev = extcon->dev;
 	if (!primary_charger) {
 		primary_charger = get_charger_by_name("primary_chg");
 		if (!primary_charger) {
-			pr_info("%s: get primary charger device failed\n", __func__);
+			dev_info(dev, "%s : get primary charger device failed\n", __func__);
 			return -ENODEV;
 		}
 	}
-
+#if IS_ENABLED(CONFIG_MTK_GAUGE_VERSION) && (CONFIG_MTK_GAUGE_VERSION == 30)
+	dev_info(dev, "%s vbus turn %s\n", __func__, is_on ? "on" : "off");
 	if (is_on) {
 		charger_dev_enable_otg(primary_charger, true);
-		charger_dev_set_boost_current_limit(primary_charger,1500000);
+		charger_dev_set_boost_current_limit(primary_charger,
+			1500000);
+		#if 0
+		{// # workaround
+			charger_dev_kick_wdt(primary_charger);
+			enable_boost_polling(true);
+		}
+		#endif
+	} else {
+		charger_dev_enable_otg(primary_charger, false);
+		#if 0
+			//# workaround
+			enable_boost_polling(false);
+		#endif
+	}
+#else
+	if (is_on) {
+		charger_dev_enable_otg(primary_charger, true);
+		charger_dev_set_boost_current_limit(primary_charger,
+			1500000);
 	} else {
 		charger_dev_enable_otg(primary_charger, false);
 	}
-	return 0;
+#endif
+		return 0;
 }
-
+#endif
 
 static int mtk_usb_extcon_set_vbus(struct mtk_extcon_info *extcon,
 							bool is_on)
 {
-	//struct regulator *vbus = extcon->vbus;
-	struct device *dev = extcon->dev;
-	//int ret;
-
-	dev_info(dev, "vbus turn %s\n", is_on ? "on" : "off");
+	int ret;
 
 //prize add by lipengpeng 20210308 start	
 #if IS_ENABLED(CONFIG_PRIZE_MT5725_SUPPORT_15W)
@@ -262,13 +286,18 @@ static int mtk_usb_extcon_set_vbus(struct mtk_extcon_info *extcon,
 #endif
 //prize add by lipengpeng 20210308 end
 
-#if 1
-	mtk_usb_extcon_set_vbus_v1(is_on);
+#if 1//prize IS_ENABLED(CONFIG_CHARGER_RT9458)
+	ret = mtk_usb_extcon_set_vbus_v1(extcon, is_on);
 #else
-		/* vbus is optional */
+	struct regulator *vbus = extcon->vbus;
+	struct device *dev = extcon->dev;
+
+	/* vbus is optional */
 	if (!vbus || extcon->vbus_on == is_on)
 		return 0;
-	
+
+	dev_info(dev, "vbus turn %s\n", is_on ? "on" : "off");
+
 	if (is_on) {
 		if (extcon->vbus_vol) {
 			ret = regulator_set_voltage(vbus,
@@ -296,11 +325,12 @@ static int mtk_usb_extcon_set_vbus(struct mtk_extcon_info *extcon,
 	} else {
 		regulator_disable(vbus);
 	}
-#endif
 
 	extcon->vbus_on = is_on;
 
-	return 0;
+	ret = 0;
+#endif
+	return ret;
 }
 
 #if IS_ENABLED(CONFIG_TCPC_CLASS)
@@ -350,12 +380,12 @@ static int mtk_extcon_tcpc_notifier(struct notifier_block *nb,
 		dev_info(dev, "%s dr_swap, new role=%d\n",
 				__func__, noti->swap_state.new_role);
 		if (noti->swap_state.new_role == PD_ROLE_UFP &&
-				extcon->c_role != USB_ROLE_DEVICE) {
+				extcon->c_role == USB_ROLE_HOST) {//prize
 			dev_info(dev, "switch role to device\n");
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_NONE);
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_DEVICE);
 		} else if (noti->swap_state.new_role == PD_ROLE_DFP &&
-				extcon->c_role != USB_ROLE_HOST) {
+				extcon->c_role == USB_ROLE_DEVICE) {//prize
 			dev_info(dev, "switch role to host\n");
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_NONE);
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_HOST);
@@ -534,9 +564,11 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct mtk_extcon_info *extcon;
+#if IS_ENABLED(CONFIG_TCPC_CLASS)
 	const char *tcpc_name;
+#endif
 	int ret;
-      printk("gezi---------mtk_usb_extcon_probe\n");
+      printk("gezi---------mtk_usb_extcon_probe\n");//prize
 	extcon = devm_kzalloc(&pdev->dev, sizeof(*extcon), GFP_KERNEL);
 	if (!extcon)
 		return -ENOMEM;
@@ -624,7 +656,7 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, extcon);
 	
-	g_extcon = extcon;
+	g_extcon = extcon;//prize
 
 	return 0;
 }
@@ -659,7 +691,7 @@ static struct platform_driver mtk_usb_extcon_driver = {
 	},
 };
 
-static void delay_work_work(struct work_struct *work)
+static void delay_work_work(struct work_struct *work)//prize
 {
 	platform_driver_register(&mtk_usb_extcon_driver);
 }
@@ -667,17 +699,17 @@ static void delay_work_work(struct work_struct *work)
 
 static int __init mtk_usb_extcon_init(void)
 {
-	printk("gezi---------mtk_usb_extcon_init\n");
+	printk("gezi---------mtk_usb_extcon_init\n");//prize
 	 
-	INIT_DELAYED_WORK(&delay_work_t, delay_work_work);
+	INIT_DELAYED_WORK(&delay_work_t, delay_work_work);//prize
 	
-	schedule_delayed_work(&delay_work_t, msecs_to_jiffies(5000));
+	schedule_delayed_work(&delay_work_t, msecs_to_jiffies(5000));//prize
 	
 	return 0;
 	 
-	//return platform_driver_register(&mtk_usb_extcon_driver);
+	//return platform_driver_register(&mtk_usb_extcon_driver);//prize
 }
-late_initcall_sync(mtk_usb_extcon_init);
+late_initcall_sync(mtk_usb_extcon_init);//prize
 
 static void __exit mtk_usb_extcon_exit(void)
 {

@@ -126,7 +126,6 @@ static struct imgsensor_info_struct imgsensor_info = {
 	.min_gain = 64,
 	.max_gain = 768,
 	.min_gain_iso = 100,
-	.exp_step = 1,
 	.gain_step = 1,
 	.gain_type = 4,
 	.margin = 16,
@@ -387,7 +386,7 @@ kal_uint16 addr_data_pair_init_gc02m1[] = {
 	/*system*/
 	0xfc, 0x01,
 	0xf4, 0x41,
-	0xf5, 0xe3, // c0->e3 For YH&YJ&YK&YC
+	0xf5, 0xc0,
 	0xf6, 0x44,
 	0xf8, 0x38,
 	0xf9, 0x82,
@@ -447,7 +446,7 @@ kal_uint16 addr_data_pair_init_gc02m1[] = {
 	/*analog voltage*/
 	0x39, 0x07,
 	0x43, 0x04,
-	0x46, 0x4a,  // 2a->4a For YH&YJ&YK&YC
+	0x46, 0x2a,
 	0x7c, 0xa0,
 	0xd0, 0xbe,
 	0xd1, 0x60, 
@@ -478,7 +477,7 @@ kal_uint16 addr_data_pair_init_gc02m1[] = {
 
 	/*ISP*/
 	0xfe, 0x01,
-	0x53, 0x54,  // 44->54 For YH&YJ&YK&YC
+	0x53, 0x44,
 	0x87, 0x53,
 	0x89, 0x03,
 
@@ -1302,7 +1301,6 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
 		break;
 	case SENSOR_FEATURE_GET_MIN_SHUTTER_BY_SCENARIO:
 		*(feature_data + 1) = imgsensor_info.min_shutter;
-		*(feature_data + 2) = imgsensor_info.exp_step;
 		break;
 	case SENSOR_FEATURE_GET_BINNING_TYPE:
 		switch (*(feature_data + 1)) {

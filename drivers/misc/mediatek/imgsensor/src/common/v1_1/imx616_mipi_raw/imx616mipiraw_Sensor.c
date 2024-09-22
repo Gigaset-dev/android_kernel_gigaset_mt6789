@@ -49,7 +49,6 @@
 #include "imx616mipiraw_Sensor.h"
 //#include "imx616_eeprom.h"
 //#define XUNHU_LPS_TEKHW_SUPPORT
-static kal_uint32 streaming_control(kal_bool enable);
 #ifdef XUNHU_LPS_TEKHW_SUPPORT
 #include <teksunhw.h>/*add by xunhu andy andy20160720 at 22:49*/
 static int tekhw_imx616_mirror = 0xff;/*add by xunhu andy andy20160720 at 22:48*/
@@ -79,6 +78,7 @@ static BYTE imx616_lrc_data[LRC_SIZE] = { 0 };
 #endif
 
 //extern bool imx616_read_otp_lrc(BYTE* data);
+static kal_uint32 streaming_control(kal_bool enable);
 
 static struct imgsensor_info_struct imgsensor_info = {
 	.sensor_id = IMX616_SENSOR_ID,
@@ -1909,6 +1909,17 @@ static void custom3_setting(void)
 * GLOBALS AFFECTED
 *
 *************************************************************************/
+ #define MODULE_ID_OFFSET_IMX616 0x0003
+ static kal_uint16 read_module_id_imx616(void)
+{
+	kal_uint16 get_byte = 0;
+	char pusendcmd[2] = {(char)(MODULE_ID_OFFSET_IMX616 >> 8), (char)(MODULE_ID_OFFSET_IMX616 & 0xFF)};
+
+	iReadRegI2C(pusendcmd, 2, (u8 *)&get_byte, 1, 0xA0/*EEPROM_READ_ID*/);
+	pr_err("the module id is %d\n", get_byte);
+	return get_byte;
+}
+
 static kal_uint32 get_imgsensor_id(UINT32 *sensor_id)
 {
     kal_uint8 i = 0;
@@ -1916,7 +1927,8 @@ static kal_uint32 get_imgsensor_id(UINT32 *sensor_id)
     /*sensor have two i2c address 0x34 & 0x20,
      *we should detect the module used i2c address
      */
-
+	printk("read_module_id_imx616=%d\n",read_module_id_imx616());
+	
     while (imgsensor_info.i2c_addr_table[i] != 0xff) {
         spin_lock(&imgsensor_drv_lock);
         imgsensor.i2c_write_id = imgsensor_info.i2c_addr_table[i];
@@ -2067,7 +2079,7 @@ static kal_uint32 close(void)
 {
 	LOG_INF("E\n");
 	/*No Need to implement this function*/
-	streaming_control(KAL_FALSE);
+    streaming_control(KAL_FALSE);
 	return ERROR_NONE;
 }	/*	close  */
 

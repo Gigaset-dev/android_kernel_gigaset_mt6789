@@ -1,0 +1,10 @@
+#include "fingerprint_setting.h"
+
+#if defined(CONFIG_MTK_FINGERPRINT_FORTSENSE)
+#include "./fortsense_driver_all_in_one/fortsense_driver_all_in_one.dtsi"
+#endif
+
+
+#if FT9391_TEE
+#include "./ft9391_tee/ft9391_tee.dtsi"
+#endif

@@ -189,3 +189,6 @@ obj-$(CONFIG_GNSS)		+= gnss/
 obj-$(CONFIG_INTERCONNECT)	+= interconnect/
 obj-$(CONFIG_COUNTER)		+= counter/
 obj-$(CONFIG_MOST)		+= most/
+# begin, prize-lifenfen-20180117, add for resmon
+obj-m             += resmon/
+# end, prize-lifenfen-20180117, add for resmon

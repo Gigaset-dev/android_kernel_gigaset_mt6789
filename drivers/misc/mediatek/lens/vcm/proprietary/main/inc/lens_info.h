@@ -54,8 +54,8 @@
 // prize add by linchong 20210630 start
 #define AFDRV_GT9767AF "GT9767AF"
 // prize add by linchong 20210630 end
-#define AFDRV_GT9768AF "GT9768AF"
 #define AFDRV_GT9778AF "GT9778AF"
+#define AFDRV_GT9768AF "GT9768AF"
 #define AFDRV_LC898122AF "LC898122AF"
 #define AFDRV_LC898212AF "LC898212AF"
 #define AFDRV_LC898212XDAF "LC898212XDAF"
@@ -73,6 +73,8 @@
 #define AFDRV_DW9718TAF "DW9718TAF"
 /*Prize add by zhuzhengjiang 20220716 start*/
 #define AFDRV_AW8601CSR "AW8601CSR"
+#define AFDRV_GT9764BAF "GT9764BAF"
+#define AFDRV_PD9402A "PD9402A"
 /*Prize add by zhuzhengjiang 20220716 end*/
 
 #define CONVERT_CCU_TIMESTAMP 0x1000

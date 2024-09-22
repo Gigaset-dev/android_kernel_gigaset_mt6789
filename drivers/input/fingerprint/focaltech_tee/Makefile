@@ -29,11 +29,12 @@ endif
 ccflags-y += -D__FF_EARLY_LOG_LEVEL=2
 
 # Source files. $(CONFIG_FOCALTECH_FINGERPRINT)
+#prize add for fingerprint 
 obj-m := focaltech_fp.o 
 focaltech_fp-y += ff_ctl.o plat-mt6762.o
 
 
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/$(MTK_PLATFORM)/include/
-
+#prize add for fingerprint
 

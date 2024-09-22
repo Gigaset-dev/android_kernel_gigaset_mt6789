@@ -596,7 +596,7 @@ static struct drm_display_mode default_mode = {
 #if defined(CONFIG_MTK_PANEL_EXT)
 static struct mtk_panel_params ext_params = {
 	.physical_width_um = 69500,
-	.physical_height_um = 154440,
+	.physical_height_um = 15444,
 	.pll_clk = 540,
 	.vfp_low_power = 36,
 	.cust_esd_check = 0,

@@ -31,6 +31,11 @@
 #include "../mediatek/mediatek_v2/mtk_drm_graphics_base.h"
 #endif
 
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
+#include "../../../misc/mediatek/prize/hardware_info/hardware_info.h"
+extern struct hardware_info current_lcm_info;
+#endif
+
 #include "../../../misc/mediatek/gate_ic/gate_i2c.h"
 
 /* enable this to check panel self -bist pattern */
@@ -708,6 +713,12 @@ static int jdi_probe(struct mipi_dsi_device *dsi)
 
 	pr_info("%s- jdi,nt36672e,vdo,60hz\n", __func__);
 	pr_err("gezi %s---------------------------%d\n", __func__,__LINE__);
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
+	strcpy(current_lcm_info.chip,"ICNL9911C");
+	strcpy(current_lcm_info.id,"0x50");
+	strcpy(current_lcm_info.vendor,"holitech");
+	strcpy(current_lcm_info.more,"720x1560");
+#endif
 	return ret;
 }
 

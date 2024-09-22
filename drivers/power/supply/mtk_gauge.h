@@ -104,6 +104,11 @@ enum gauge_property {
 	GAUGE_PROP_VBAT2_DETECT_COUNTER,
 	GAUGE_PROP_BAT_TEMP_FROZE_EN,
 	GAUGE_PROP_BAT_EOC,
+	//drv huangjiwu for pimc vbus start
+#if IS_ENABLED(CONFIG_READ_PMIC_VBUS)
+	GAUGE_PROP_VBUS_VOLTAGE,
+#endif
+//drv huangjiwu for pimc vbus endif
 	GAUGE_PROP_MAX,
 };
 
@@ -245,7 +250,11 @@ struct mtk_gauge {
 	struct iio_channel *chan_bif;
 	struct iio_channel *chan_ptim_bat_voltage;
 	struct iio_channel *chan_ptim_r;
-
+	//drv huangjiwu for pimc vbus start
+#if IS_ENABLED(CONFIG_READ_PMIC_VBUS)
+	struct iio_channel *chan_vbus_voltage;
+#endif
+//drv huangjiwu for pimc vbus end
 	struct mtk_gauge_sysfs_field_info *attr;
 	struct zcv_data zcv_info;
 

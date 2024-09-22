@@ -29,13 +29,6 @@
 /* goodix fb test */
 // #include "../../../video/fbdev/core/fb_firefly.h"
 
-//prize added by xuejian tp info, 20221026-start
-#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
-#include "../../../misc/mediatek/prize/hardware_info/hardware_info.h"
-extern struct hardware_info current_tp_info;
-struct goodix_ic_info tp_info_chip_ver;
-#endif
-
 #define GOODIX_DEFAULT_CFG_NAME		"goodix_cfg_group.cfg"
 #define GOOIDX_INPUT_PHYS			"goodix_ts/input0"
 
@@ -2161,19 +2154,6 @@ upgrade:
 		goto uninit_fw;
 	}
 
-//prize added by xuejian tp info, 20221026-start
-#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
-	tp_info_chip_ver = cd->ic_info;
-	//sprintf(current_tp_info.chip,"FW:0x%x", tp_info_chip_ver.version.config_id);
-	sprintf(current_tp_info.chip,"FW:0x%x Firmware:0x%02x%02x%02x%02x", 
-					tp_info_chip_ver.version.config_version, 
-					cd->fw_version.patch_vid[0], 
-					cd->fw_version.patch_vid[1], 
-					cd->fw_version.patch_vid[2], 
-					cd->fw_version.patch_vid[3]);
-#endif
-//prize added by xuejian tp info, 20221026-end	
-
 	/* the recomend way to update ic config is throuth ISP,
 	 * if not we will send config with interactive mode
 	 */
@@ -2312,14 +2292,6 @@ static int goodix_ts_probe(struct platform_device *pdev)
 
 	/* Try start a thread to get config-bin info */
 	goodix_start_later_init(core_data);
-//prize added by xuejian tp info, 20221026-start
-#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
-  //  sprintf(current_tp_info.chip,"FW:0x%x", tp_info_chip_ver.version.config_id);
-    strcpy(current_tp_info.id,"GT9916");
-    strcpy(current_tp_info.vendor,"GOODIX");
-    sprintf(current_tp_info.more,"%d*%d",1080,2400);
-#endif
-//prize added by xuejian tp info, 20221026-end
 
 	ts_info("goodix_ts_core probe success");
 	return 0;

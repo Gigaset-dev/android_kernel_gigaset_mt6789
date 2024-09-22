@@ -1008,7 +1008,7 @@ static void oom_kill_process(struct oom_control *oc, const char *message)
 	static DEFINE_RATELIMIT_STATE(oom_rs, DEFAULT_RATELIMIT_INTERVAL,
 					      DEFAULT_RATELIMIT_BURST);
     // prize zengke 20180620 add for ddr test,ignore memtest thread-----begin
-    if (strstr("memtester", victim->comm) || strstr("pri.factorytest", victim->comm))
+    if (strstr("memtester", victim->comm) || strstr("com.pri.factorytest", victim->comm))
             return;
     // prize zengke 20180620 add for ddr test,ignore memtest thread-----end
 

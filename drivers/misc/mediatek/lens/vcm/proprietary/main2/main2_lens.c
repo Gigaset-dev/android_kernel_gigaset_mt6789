@@ -103,6 +103,10 @@ static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
 	{1, AFDRV_BU64748AF, bu64748af_SetI2Cclient_Main2,
 	 bu64748af_Ioctl_Main2, bu64748af_Release_Main2,
 	 bu64748af_GetFileName_Main2, NULL},
+	// prize add by zhuzhengjiang for af start
+    {1, AFDRV_AW86017CSRAF, AW86017CSRAF_SetI2Cclient, AW86017CSRAF_Ioctl,
+	 AW86017CSRAF_Release, AW86017CSRAF_GetFileName, NULL},
+	// prize add by zhuzhengjiang for af end
 };
 
 static struct stAF_DrvList *g_pstAF_CurDrv;

@@ -25,4 +25,8 @@
 
 #define AW3644_DTNAME_I2C "mediatek,strobe_main"
 #define AW3644_DTNAME     "mediatek,flashlights_aw3644"
+/*prize add by zhuzhengjiang for flash start*/
+#define AW36515_DTNAME     "mediatek,flashlights_aw36515"
+#define AW36515_DTNAME_I2C "mediatek,strobe_main"
+/*prize add by zhuzhengjiang for flash end*/
 #endif /* _FLASHLIGHT_DT_H */

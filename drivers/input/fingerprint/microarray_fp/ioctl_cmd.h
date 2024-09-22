@@ -59,6 +59,7 @@
 #define SYNC					_IO(MA_IOC_MAGIC, 45)
 #define SYNC2					_IO(MA_IOC_MAGIC, 46)
 #define GET_SCREEN_STATUS		_IOR(MA_IOC_MAGIC, 47, unsigned int)
-
+#define MA_RESET                _IOW(MA_IOC_MAGIC, 48, unsigned int)
+#define GET_MA_RESET_STATE      _IOR(MA_IOC_MAGIC, 49, unsigned int)
 #endif /* __IOCTL_CMD_H__ */
 

@@ -1,0 +1,1 @@
+source "drivers/misc/mediatek/nfc_tms/nfc/nfc_driver/Kconfig"

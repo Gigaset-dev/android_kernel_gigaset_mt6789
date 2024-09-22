@@ -1,0 +1,9 @@
+#
+# TMS eSE device
+#
+
+config TMS_ESE_DEVICE
+    tristate "TMS ESE Driver"
+    depends on SPI && TMS_DEVICE
+    help
+        Say Y here if you have SPI device.

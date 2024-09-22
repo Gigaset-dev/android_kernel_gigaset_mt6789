@@ -1,0 +1,56 @@
+
+#include "./mt6789/boardsetting.h"
+
+/* prize modify by liaoxingen, for finger start */
+&SPI_INDEX {
+	mediatek,pad-select = <0>;
+	focaltech_fpspi@0 {
+		compatible = "focaltech,fpspi";
+		reg = <0>;
+		spi-max-frequency = <4000000>;
+		status = "okay";
+	};
+};
+
+&focaltech_fp{
+	status = "okay";
+	interrupt-parent = <&pio>;
+	interrupts = <FP_IRQ_PIN IRQ_TYPE_EDGE_RISING FP_IRQ_PIN 0>;
+
+	focaltech_fp,power-always-on;
+	focaltech_fp,use-pinctrl;
+	pinctrl-names = "ff_pins_reset_low","ff_pins_reset_high","ff_pins_irq_as_int","ff_pins_power_low","ff_pins_power_high";
+	pinctrl-0 = <&fp_pins_rst_output0>;
+	pinctrl-1 = <&fp_pins_rst_output1>;
+	pinctrl-2 = <&fp_pins_eint>;
+	pinctrl-3 = <&fp_pins_power_output0>;
+	pinctrl-4 = <&fp_pins_power_output1>;
+};
+
+&pio {
+    fp_pins_rst_output0: fprstout0 {
+        pins_cmd_dat {
+            pinmux = <FPC_PINS_RST>;
+            output-low;
+        };
+    };
+    fp_pins_rst_output1: fprstout1 {
+        pins_cmd_dat {
+            pinmux = <FPC_PINS_RST>;
+            output-high;
+        };
+    };
+    fp_pins_eint: fpeint {
+        pins_cmd_dat {
+            pinmux = <FPC_PINS_EINT_AS_INT>;
+			slew-rate = <0>;
+			bias-disable;
+        };
+    };
+    fp_pins_power_output0: fppwrout0 {
+
+    };
+    fp_pins_power_output1: fppwrout1 {
+
+    };
+};

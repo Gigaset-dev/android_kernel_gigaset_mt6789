@@ -604,6 +604,19 @@ done:
 
 	return 0;
 }
+/* prize add by liaoxingen for for G5GF, refer to x9, 20230207 start */
+atomic_t gEsdStatus;
+int mtk_drm_esd_check_status(void)
+{
+	return 	atomic_read(&gEsdStatus);
+}
+EXPORT_SYMBOL(mtk_drm_esd_check_status);
+void mtk_drm_esd_set_status(int status)
+{
+	atomic_set(&gEsdStatus, status);
+}
+EXPORT_SYMBOL(mtk_drm_esd_set_status);
+/* prize add by liaoxingen for for G5GF, refer to x9, 20230207 end */
 
 static int mtk_drm_esd_check_worker_kthread(void *data)
 {
@@ -709,7 +722,7 @@ static int mtk_drm_esd_check_worker_kthread(void *data)
 				if (!ret) /* success */
 					break;
 			}
-
+			mtk_drm_esd_set_status(1);   /* prize add by liaoxingen for for G5GF, refer to x9, 20230207 */
 			DDPPR_ERR(
 				"[ESD%u]esd check fail, will do esd recovery. te timeout:%d try=%d\n",
 				crtc_idx, te_timeout, i);
@@ -733,6 +746,7 @@ static int mtk_drm_esd_check_worker_kthread(void *data)
 			break;
 		} else if (recovery_flg) {
 			DDPINFO("[ESD%u] esd recovery success\n", crtc_idx);
+			mtk_drm_esd_set_status(0);  /* prize add by liaoxingen for for G5GF, 20230207 */
 			recovery_flg = 0;
 		}
 		mtk_drm_trace_end();
@@ -866,6 +880,7 @@ void mtk_disp_chk_recover_init(struct drm_crtc *crtc)
 	struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct mtk_ddp_comp *output_comp;
 
+	mtk_drm_esd_set_status(0);	 /* prize add by liaoxingen for for G5GF, refer to x9, 20230207 */
 	output_comp = (mtk_crtc) ? mtk_ddp_comp_request_output(mtk_crtc) : NULL;
 
 	/* only support ESD check for DSI output interface */

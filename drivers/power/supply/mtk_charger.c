@@ -63,6 +63,8 @@
 
 #include "mtk_charger.h"
 #include "mtk_battery.h"
+
+//prize begin
 #include "mtk_pe.h"
 
 #include "pd_pe_policy.h"
@@ -84,6 +86,7 @@ extern int get_wireless_charge_current(struct charger_data *pdata);
 
 //#endif
 extern int mt5725_wireless_init(void);
+//prize end
 struct tag_bootmode {
 	u32 size;
 	u32 tag;
@@ -849,7 +852,7 @@ static ssize_t pd_type_show(struct device *dev, struct device_attribute *attr,
 
 static DEVICE_ATTR_RO(pd_type);
 
-
+//prize begin
 static int pdpe_get_state(struct mtk_charger *info)
 {
 	int ret = 0;
@@ -888,6 +891,7 @@ static bool is_pump_express(struct mtk_charger *info,bool ori)
 	
 	return ori;
 }
+//prize end
 
 static ssize_t Pump_Express_show(struct device *dev,
 				 struct device_attribute *attr, char *buf)
@@ -912,7 +916,7 @@ static ssize_t Pump_Express_show(struct device *dev,
 			break;
 		}
 	}
-	is_ta_detected = is_pump_express(pinfo,is_ta_detected);
+	is_ta_detected = is_pump_express(pinfo,is_ta_detected);//prize
 	chr_err("%s: idx = %d, detect = %d\n", __func__, i, is_ta_detected);
 	return sprintf(buf, "%d\n", is_ta_detected);
 }
@@ -1964,7 +1968,7 @@ static ssize_t sc_ibat_limit_store(
 }
 static DEVICE_ATTR_RW(sc_ibat_limit);
 
-
+//prize begin
 static ssize_t show_cmd_charge_disable(struct class *class, struct class_attribute *attr,	char *buf)
 {
 	struct mtk_charger *info = NULL;
@@ -2060,7 +2064,7 @@ static ssize_t store_cmd_charge_disable(struct class *class, struct class_attrib
 
 	return count;
 }
-
+//prize end
 
 int mtk_chg_enable_vbus_ovp(bool enable)
 {
@@ -2086,7 +2090,7 @@ int mtk_chg_enable_vbus_ovp(bool enable)
 	if (enable)
 		sw_ovp = pinfo->data.max_charger_voltage_setting;
 	else
-		sw_ovp = 15500000;
+		sw_ovp = 15500000;//prize
 
 	/* Enable/Disable SW OVP status */
 	pinfo->data.max_charger_voltage = sw_ovp;
@@ -2532,6 +2536,7 @@ static bool charger_init_algo(struct mtk_charger *info)
 	return true;
 }
 
+//prize begin
 static int pdpe_update_boot_mode(struct mtk_charger *info,int boot_mode)
 {
 	int ret = 0;
@@ -2549,7 +2554,7 @@ static int pdpe_update_boot_mode(struct mtk_charger *info,int boot_mode)
 	
     return ret;
 }
-
+//prize end
 
 static int mtk_charger_force_disable_power_path(struct mtk_charger *info,
 	int idx, bool disable);
@@ -2709,7 +2714,7 @@ static void kpoc_power_off_check(struct mtk_charger *info)
 	/* 8 = KERNEL_POWER_OFF_CHARGING_BOOT */
 	/* 9 = LOW_POWER_OFF_CHARGING_BOOT */
 	
-	pdpe_update_boot_mode(info,boot_mode);
+	pdpe_update_boot_mode(info,boot_mode);//prize
 	
 	if (boot_mode == 8 || boot_mode == 9) {
 		vbus = get_vbus(info);
@@ -2971,6 +2976,7 @@ static void mtk_charger_init_timer(struct mtk_charger *info)
 
 }
 
+//prize begin
 static struct class * hd8040_class;
 
 static struct class_attribute hd8040_class_attrs[] = {
@@ -2996,6 +3002,7 @@ static int cmd_charge_disable_sysfs_create(void)
 	return ret;
 	
 }
+//prize end
 
 static int mtk_charger_setup_files(struct platform_device *pdev)
 {
@@ -3412,6 +3419,7 @@ int psy_charger_set_property(struct power_supply *psy,
 			info->enable_hv_charging = false;
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
+	//prize begin
 		if(get_MT5725_status() ==0){
 			info->chg_data[idx].thermal_charging_current_limit = val->intval;
 		}
@@ -3426,6 +3434,7 @@ int psy_charger_set_property(struct power_supply *psy,
 		else{
 			info->chg_data[idx].thermal_input_current_limit = -1;
 		}
+	//prize end
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
 		if (val->intval > 0)
@@ -3586,6 +3595,7 @@ int chg_alg_event(struct notifier_block *notifier,
 	return NOTIFY_DONE;
 }
 
+//prize begin
 static int bms_get_property(struct power_supply *psy,
 	enum power_supply_property psp, union power_supply_propval *val)
 {
@@ -3652,7 +3662,7 @@ static int charger_disp_notifier_callback(struct notifier_block *nb,
 	return 0;
 }
 #endif
-
+//prize end
 
 //prize add by lipengpeng 20210621 start 
 //#if IS_ENABLED(CONFIG_PRIZE_MT5725_SUPPORT_15W)
@@ -3671,7 +3681,7 @@ static int mtk_charger_probe(struct platform_device *pdev)
 	struct mtk_charger *info = NULL;
 	int i;
 	char *name = NULL;
-	int ret=0;
+	int ret=0;//prize
 
 	chr_err("%s: starts\n", __func__);
 
@@ -3836,7 +3846,7 @@ static int mtk_charger_probe(struct platform_device *pdev)
 	usbpd_pm_init();
 //#endif
 //prize add by lipengpeng 20210621 end 
-
+//prize begin
 	info->pdpe_psy = power_supply_get_by_name("pdpe-state");
 	if(info->pdpe_psy == NULL){
 		pr_err("gezi get info->pdpe_psy failed\n");
@@ -3858,6 +3868,7 @@ static int mtk_charger_probe(struct platform_device *pdev)
 		pr_err("gezi screen monitor register success.\n");
 	}
 #endif
+//prize end
 	
 	kthread_run(charger_routine_thread, info, "charger_thread");
 

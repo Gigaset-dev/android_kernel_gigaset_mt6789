@@ -1,0 +1,1 @@
+#define FT9391_TEE 1

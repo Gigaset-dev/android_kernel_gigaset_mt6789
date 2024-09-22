@@ -212,10 +212,18 @@ config BATTERY_LEGO_EV3
 	help
 	  Say Y here to enable support for the LEGO MINDSTORMS EV3 battery.
 
+config BATTERY_MT6357
+	tristate "MT6357 fuel gauge support"
+	depends on MFD_MT6397
+	help
+	  Say Y to enable support for MT6357 battery driver.
+	  it measure battery current and temperature to provide
+	  battery information , It issues interrupt when trigger
+	  threshold is met.
+
 config BATTERY_MT6358
 	tristate "MT6358 fuel gauge support"
 	depends on MFD_MT6397
-	default m
 	help
 	  Say Y to enable support for MT6358 battery driver.
 	  it measure battery current and temperature to provide
@@ -225,11 +233,19 @@ config BATTERY_MT6358
 config BATTERY_MT6359P
 	tristate "MT6359P fuel gauge support"
 	depends on MFD_MT6397
-	default m
 	help
 	  Say Y to enable support for MT6359P battery driver.
 	  it measure battery current and temperature to provide
 	  battery information , It issues interrupt when trigger
+	  threshold is met.
+
+config BATTERY_MM8013
+	tristate "MM8013 gauge ic support"
+	default m
+	help
+	  Say Y to enable support for MM8013 gauge driver.
+	  it measure battery current and temperature to provide
+	  battery information, It issues interrupt when trigger
 	  threshold is met.
 
 config BATTERY_PMU
@@ -710,6 +726,17 @@ config CHARGER_BQ25980
 	  Say Y to enable support for the TI BQ25980, BQ25975 and BQ25960
 	  series of fast battery chargers.
 
+config CHARGER_BQ2589X
+	tristate "TI BQ2589X battery charger driver"
+	depends on I2C
+	depends on GPIOLIB || COMPILE_TEST
+	select REGMAP_I2C
+	help
+	  This adds support for charger IC bq2589x.
+	  Say Y to include support for Texas Instruments
+	  bq2589x charger IC Battery Charger. The base name for this driver is
+	  'bq2589x_charger.c'.
+
 config CHARGER_SMB347
 	tristate "Summit Microelectronics SMB3XX Battery Charger"
 	depends on I2C
@@ -851,6 +878,20 @@ config CHARGER_MT6362
 	  It supports BC1.2 and OTG boost.
 	  The driver can also be build as a module.
 	  If so, the module will be called mt6362_chg
+
+config CHARGER_MT6370
+	tristate "MediaTek MT6370 Charger Driver"
+	depends on MFD_MT6370
+	depends on REGULATOR
+	select LINEAR_RANGES
+	help
+	  Say Y here to enable MT6370 Charger Part.
+	  The device supports High-Accuracy Voltage/Current Regulation,
+	  Average Input Current Regulation, Battery Temperature Sensing,
+	  Over-Temperature Protection, DPDM Detection for BC1.2.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called "mt6370-charger".
 
 config CHARGER_MT6375
 	tristate "MT6375 charger driver"

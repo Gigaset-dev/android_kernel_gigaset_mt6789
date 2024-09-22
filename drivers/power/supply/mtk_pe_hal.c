@@ -160,12 +160,12 @@ int pe_hal_get_ibat(struct chg_alg_device *alg)
 	if (bat_psy == NULL || IS_ERR(bat_psy)) {
 		pr_err("%s retry to get pe->bat_psy\n", __func__);
 		//bat_psy = devm_power_supply_get_by_phandle(&pe->pdev->dev, "gauge");
-		bat_psy = power_supply_get_by_name("bms");
+		bat_psy = power_supply_get_by_name("bms");//prize
 		pe->bat_psy = bat_psy;
 	}
 
 	if (bat_psy == NULL || IS_ERR(bat_psy)) {
-		pr_err("%s Couldn't get bat_psy\n", __func__);
+		pr_notice("%s Couldn't get bat_psy\n", __func__);
 		ret = 0;
 	} else {
 		ret = power_supply_get_property(bat_psy,
@@ -174,7 +174,8 @@ int pe_hal_get_ibat(struct chg_alg_device *alg)
 		ret = prop.intval;
 	}
 
-	pr_err("%s:%d\n", __func__, ret);
+	pr_debug("%s:%d\n", __func__,
+		ret);
 	return ret;
 }
 
@@ -255,7 +256,7 @@ int pe_hal_get_uisoc(struct chg_alg_device *alg)
 	if (bat_psy == NULL || IS_ERR(bat_psy)) {
 		pr_notice("%s retry to get pe->bat_psy\n", __func__);
 		//bat_psy = devm_power_supply_get_by_phandle(&pe->pdev->dev, "gauge");
-		bat_psy = power_supply_get_by_name("bms");
+		bat_psy = power_supply_get_by_name("bms");//prize
 		pe->bat_psy = bat_psy;
 	}
 
@@ -268,7 +269,8 @@ int pe_hal_get_uisoc(struct chg_alg_device *alg)
 		ret = prop.intval;
 	}
 
-	pe_err("%s:%d\n", __func__,ret);
+	pe_dbg("%s:%d\n", __func__,
+		ret);
 	return ret;
 }
 
@@ -396,7 +398,7 @@ int pe_hal_set_charging_current(struct chg_alg_device *alg,
 
 	if (alg == NULL)
 		return -EINVAL;
-#if IS_ENABLED(CONFIG_PRIZE_CHARGE_CTRL_POLICY)
+#if IS_ENABLED(CONFIG_PRIZE_CHARGE_CTRL_POLICY)//prize
 		if (g_charge_is_screen_on){
 			if(ua > 1500000){
 				ua = 1500000;
@@ -417,7 +419,7 @@ int pe_hal_set_input_current(struct chg_alg_device *alg,
 
 	if (alg == NULL)
 		return -EINVAL;
-#if IS_ENABLED(CONFIG_PRIZE_CHARGE_CTRL_POLICY)
+#if IS_ENABLED(CONFIG_PRIZE_CHARGE_CTRL_POLICY)//prize
 		if (g_charge_is_screen_on){
 			if(ua > 1500000){
 				ua = 1500000;

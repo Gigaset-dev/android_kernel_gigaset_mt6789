@@ -14,6 +14,10 @@
 #include <uapi/linux/sched/types.h>
 #include <linux/sched_clock.h>
 #include <linux/log2.h>
+//drv add by situziyin 20230517 start
+#include <drm/drm_panel.h>
+#include <mtk_disp_notify.h>
+//drv add by situziyin 20230517 end
 
 struct pixel_data {
     int16_t pixelA;
@@ -24,6 +28,7 @@ struct pixel_data {
 
 static int dev_major;
 static struct class *pixel_manager_class;
+static struct notifier_block fb_notifier;	//drv add by situziyin 20230517
 
 static int pixel_manager_open(struct inode *inode, struct file *filp)
 {
@@ -142,6 +147,30 @@ void get_pix_rgb(int16_t *R, int16_t *G, int16_t *B)
 }
 EXPORT_SYMBOL_GPL(get_pix_rgb);
 
+void reset_pix_rgb(void)
+{
+	memset(&g_pix_param, -1 , sizeof(g_pix_param));
+}
+EXPORT_SYMBOL_GPL(reset_pix_rgb);
+
+//drv add by situziyin 20230517 start
+static int pixel_manager_fb_notifier_cb(struct notifier_block *nb,
+		unsigned long action, void *data)
+{
+	int disp_blank_powerdown = MTK_DISP_BLANK_POWERDOWN;
+	int disp_blank = MTK_DISP_EVENT_BLANK;
+	int transition = *(int *)data;
+	
+	if (action == disp_blank) {
+		if (transition == disp_blank_powerdown) {
+			reset_pix_rgb();
+			pr_info("reset pixel\n");
+		}
+	}
+	return 0;
+}
+//drv add by situziyin 20230517 end
+
 static const struct file_operations pixel_manager_fops = {
 	.owner          = THIS_MODULE,
 	.open           = pixel_manager_open,
@@ -175,11 +204,24 @@ static int __init pixel_manager_init(void)
 		ret = PTR_ERR(dev);
 		goto err_class;
 	}
+	
+	//drv add by situziyin 20230517 start
+	fb_notifier.notifier_call = pixel_manager_fb_notifier_cb;
+	ret = mtk_disp_notifier_register("pix_manager", &fb_notifier);
+	if (ret < 0) {
+		pr_err("Fail to register FB notifier client\n");
+		goto err_device;
+	}
+	//drv add by situziyin 20230517 end
 
 	memset(&g_pix_param, -1, sizeof(g_pix_param));
 
 	return 0;
 
+//drv add by situziyin 20230517 start
+err_device:
+	device_destroy(pixel_manager_class, MKDEV(dev_major, 0));
+//drv add by situziyin 20230517 end
 err_class:
 	class_destroy(pixel_manager_class);
 err_chredev:
@@ -190,6 +232,7 @@ err_exit:
 
 static void __exit pixel_manager_exit(void)
 {
+	mtk_disp_notifier_unregister(&fb_notifier);	//drv add by situziyin 20230517
 	device_destroy(pixel_manager_class, MKDEV(dev_major, 0));
 	class_destroy(pixel_manager_class);
 	unregister_chrdev(dev_major, "pix_manager");

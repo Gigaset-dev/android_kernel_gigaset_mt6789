@@ -536,7 +536,15 @@ static inline int imgsensor_check_is_alive(struct IMGSENSOR_SENSOR *psensor)
 	MUINT32 retLen = sizeof(MUINT32);
 	struct IMGSENSOR *pimgsensor = &gimgsensor;
 	struct IMGSENSOR_SENSOR_INST *psensor_inst = &psensor->inst;
-
+// prize add by zhuzhengjiang for camera resolution info start
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
+	struct SENSOR_WINSIZE_INFO_STRUCT *sensorWindow = NULL;
+	MUINT8 *pFeaturePara = NULL;
+	MUINT32 scenario = MSDK_SCENARIO_ID_CAMERA_CAPTURE_JPEG; /*capture mode*/
+	unsigned long long FeaturePara[2] = {0};
+	MSDK_SENSOR_FEATURE_ENUM FeatureId = SENSOR_FEATURE_GET_CROP_INFO;
+#endif
+// prize add by zhuzhengjiang for camera resolution info end
 	IMGSENSOR_PROFILE_INIT(&psensor_inst->profile_time);
 	ret = imgsensor_hw_power(&pimgsensor->hw,
 			psensor,
@@ -561,20 +569,35 @@ static inline int imgsensor_check_is_alive(struct IMGSENSOR_SENSOR *psensor)
 		if(psensor->inst.sensor_idx >= 0 && psensor->inst.sensor_idx < 5)
 		{
 
-				strcpy(current_camera_info[psensor->inst.sensor_idx].chip,psensor_inst->psensor_list->name);
+    			strcpy(current_camera_info[psensor->inst.sensor_idx].chip,psensor_inst->psensor_list->name);
     			sprintf(current_camera_info[psensor->inst.sensor_idx].id,"0x%04x",sensorID);
     			strcpy(current_camera_info[psensor->inst.sensor_idx].vendor,"unknow");
 
-			if (1){
-				MSDK_SENSOR_RESOLUTION_INFO_STRUCT sensorResolution;
-				imgsensor_sensor_get_resolution(psensor,&sensorResolution);
-				if (sensorID == 0x30a){
-					sprintf(current_camera_info[2].more,"%d*%d",sensorResolution.SensorFullWidth,sensorResolution.SensorFullHeight);
 
-				}else{
-					sprintf(current_camera_info[psensor->inst.sensor_idx].more,"%d*%d",sensorResolution.SensorFullWidth,sensorResolution.SensorFullHeight);
-				}
-			}
+    			//MSDK_SENSOR_RESOLUTION_INFO_STRUCT sensorResolution;
+    			//imgsensor_sensor_get_resolution(psensor,&sensorResolution);
+    			//sprintf(current_camera_info[psensor->inst.sensor_idx].more,"%d*%d",sensorResolution.SensorFullWidth,sensorResolution.SensorFullHeight);
+
+
+    			sensorWindow = kmalloc(
+    			    sizeof(struct SENSOR_WINSIZE_INFO_STRUCT),
+    			    GFP_KERNEL);
+    			if(sensorWindow != NULL){
+    			    memset(sensorWindow,
+    			        0x0,
+    			        sizeof(struct SENSOR_WINSIZE_INFO_STRUCT));
+
+    			    FeaturePara[0] = scenario;
+    			    FeaturePara[1] = (uintptr_t)sensorWindow;
+    			    pFeaturePara = (MUINT8*)FeaturePara;
+    			    imgsensor_sensor_feature_control(psensor,FeatureId,pFeaturePara,NULL);
+    			    sprintf(current_camera_info[psensor->inst.sensor_idx].more,"%d*%d",sensorWindow->full_w,sensorWindow->full_h);
+    			    kfree(sensorWindow);
+    			} else {
+    			    kfree(sensorWindow);
+    			    PK_PR_ERR(" ioctl allocate sensorWindow mem failed\n");
+    			}
+
 		}
 		#endif
 //prize add by lipengpeng 20220711 end

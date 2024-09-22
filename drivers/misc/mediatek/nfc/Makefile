@@ -12,4 +12,6 @@
 #
 
 obj-$(CONFIG_NFC_ST21NFC)		+= st21nfc/
+# prize add py dengzhiyuan 20230726 start
 #obj-$(CONFIG_NFC_ST54_SPI)		+= st54spi.o
+# prize add py dengzhiyuan 20230726 end

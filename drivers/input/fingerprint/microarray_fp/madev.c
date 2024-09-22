@@ -9,32 +9,19 @@
  */
 #include "madev.h"
 
-#ifdef TEE_ID_COMPATIBLE_MICROTRUST
-//#include <fp_vendor.h>
-//#include "teei_fp.h"
+// #ifdef TEE_ID_COMPATIBLE_MICROTRUST
+//prize add by lipengpeng 20220630 start 
+#include "../../../tee/teei/400/tz_driver/include/teei_fp.h"
 //#include "tee_client_api.h"
-
-/**
- * This type contains a Universally Unique Resource Identifier (UUID) type as
- * defined in RFC4122. These UUID values are used to identify Trusted
- * Applications.
- */
+// #include "teei_fp.h"
+//prize add by lipengpeng 20220630 end
 struct TEEC_UUID {
-    uint32_t timeLow;
-    uint16_t timeMid;
-    uint16_t timeHiAndVersion;
-    uint8_t clockSeqAndNode[8];
-};
-
-extern struct TEEC_UUID uuid_fp;
-#endif
-
-//prize add by wangyongsheng 20210329 start
-#if defined(CONFIG_PRIZE_HARDWARE_INFO)
-#include "../../../misc/mediatek/prize/hardware_info/hardware_info.h"
-extern struct hardware_info current_fingerprint_info;
-#endif
-//prize add by wangyongsheng 20210329 end
+     uint32_t timeLow;
+     uint16_t timeMid;
+     uint16_t timeHiAndVersion;
+     uint8_t clockSeqAndNode[8];
+ };
+// #endif
 
 //spdev use for recording the data for other use
 static unsigned int irq, ret;
@@ -50,7 +37,7 @@ static DECLARE_WAIT_QUEUE_HEAD(gWaitq);
 static DECLARE_WAIT_QUEUE_HEAD(U1_Waitq);
 static DECLARE_WAIT_QUEUE_HEAD(U2_Waitq);
 #ifdef CONFIG_PM_WAKELOCKS
-struct wakeup_source gProcessWakeLock;
+struct wakeup_source *gProcessWakeLock;
 #else
 struct wake_lock gProcessWakeLock;
 #endif
@@ -73,8 +60,10 @@ static u8* stxb;
 static u8* srxb;
 
 #define IMAGE_SIZE 13312
-#define IMAGE_DMA_SIZE 32*1024
-
+#define IMAGE_DMA_SIZE 40*1024
+	
+struct TEEC_UUID vendor_uuid = {0xedcf9395, 0x3518, 0x9067, { 0x61, 0x4c, 0xaf, 0xae, 0x29, 0x09, 0x77, 0x5b }};
+		
 static void mas_work(struct work_struct *pws) {
     smas->f_irq = 1;
     wake_up(&gWaitq);
@@ -84,6 +73,12 @@ static void mas_work(struct work_struct *pws) {
 }
 
 static irqreturn_t mas_interrupt(int irq, void *dev_id) {
+
+#ifdef CONFIG_PM_WAKELOCKS
+            __pm_wakeup_event(gProcessWakeLock, 5000);
+#else
+	    wake_lock_timeout(&gProcessWakeLock, 5 * HZ);
+#endif
 #ifdef DOUBLE_EDGE_IRQ
 	if(mas_get_interrupt_gpio(0)==1){
 		//TODO IRQF_TRIGGER_RISING
@@ -105,48 +100,31 @@ static irqreturn_t mas_interrupt(int irq, void *dev_id) {
  * @len 长度
  * @返回值：0成功，否则失败
  */
- //prize ---huangjiwu---for kaiji read id fail start
- static int mas_sync(u8 *tx, u8 *rx, u32 spilen)
-{
-	struct spi_message m;
-	struct spi_transfer t = {
-		.tx_buf = tx,
-		.rx_buf = rx,
-		.len = spilen,
-	};
-	spi_message_init(&m);
-	spi_message_add_tail(&t, &m);
-	return spi_sync(smas->spi, &m);
-}
-
-
-static int init_spi(struct spi_device *spi)
-{
-	int ret;
-	
-	spi->bits_per_word = 8;
-	spi->mode = SPI_MODE_0;
-    spi->max_speed_hz = 6 * 1000 * 1000;
-	
-	ret = spi_setup(spi);
-	if(ret != 0)
-	{
-		MALOGD("spi_setup is fail !\n");
-		return -1;
-	}
-	smas->spi = spi;		
-	//smas->smas.spi = spi;
-	spi_set_drvdata(spi, smas);
-	return 0;
-
-}
-#if 0
 int mas_sync(u8 *txb, u8 *rxb, int len) {
     int ret = 0;
+#if 1
+	
+        struct spi_message m;
+        struct spi_transfer t = {
+                .tx_buf = txb,
+                .rx_buf = rxb,
+                .len = len,
+                .speed_hz = smas->spi->max_speed_hz,
+        };
+	mutex_lock(&dev_lock);
+	// len = (len + 1023) << 10 >> 10;
+	// t.len = len;
+        spi_message_init(&m);
+        spi_message_add_tail(&t, &m);
+        ret= spi_sync(smas->spi,&m);
+    	mutex_unlock(&dev_lock);
 
+        return ret;
+#else
+	
 
 	mutex_lock(&dev_lock);
-    ret = mas_select_transfer(smas->spi, len);
+    mas_select_transfer(smas->spi, len);
     smas->xfer.tx_nbits=SPI_NBITS_SINGLE;
     smas->xfer.tx_buf = txb;
     smas->xfer.rx_nbits=SPI_NBITS_SINGLE;
@@ -162,10 +140,9 @@ int mas_sync(u8 *txb, u8 *rxb, int len) {
 
  	return ret;
 	
-
-}
 #endif
- //prize ---huangjiwu---for kaiji read id fail end
+}
+
 
 
 /* 读数据
@@ -201,13 +178,13 @@ static void mas_set_input(void) {
     set_bit(EV_KEY, input->evbit);
     //set_bit(EV_ABS, input->evbit);
     set_bit(EV_SYN, input->evbit);
-    set_bit(FINGERPRINT_SWIPE_UP, input->keybit); //单触
-    set_bit(FINGERPRINT_SWIPE_DOWN, input->keybit);
-    set_bit(FINGERPRINT_SWIPE_LEFT, input->keybit);
-    set_bit(FINGERPRINT_SWIPE_RIGHT, input->keybit);
+    // set_bit(FINGERPRINT_SWIPE_UP, input->keybit); //单触
+    // set_bit(FINGERPRINT_SWIPE_DOWN, input->keybit);
+    // set_bit(FINGERPRINT_SWIPE_LEFT, input->keybit);
+    // set_bit(FINGERPRINT_SWIPE_RIGHT, input->keybit);
     set_bit(FINGERPRINT_TAP, input->keybit);
-    set_bit(FINGERPRINT_DTAP, input->keybit);
-    set_bit(FINGERPRINT_LONGPRESS, input->keybit);
+    // set_bit(FINGERPRINT_DTAP, input->keybit);
+    // set_bit(FINGERPRINT_LONGPRESS, input->keybit);
     
     set_bit(KEY_POWER, input->keybit);
 
@@ -232,7 +209,7 @@ static long mas_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
     switch(cmd){
         case TIMEOUT_WAKELOCK:                                                       //延时锁    timeout lock
 #ifdef CONFIG_PM_WAKELOCKS
-            __pm_wakeup_event(&gProcessWakeLock, 5000);
+            __pm_wakeup_event(gProcessWakeLock, 5000);
 #else
 	    wake_lock_timeout(&gProcessWakeLock, 5 * HZ);
 #endif
@@ -269,7 +246,6 @@ static long mas_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
             input_report_key(smas->input, FINGERPRINT_TAP, 0);
             input_sync(smas->input);                                                     //tap up
             break;
-		#if 0   //prize hjw  --key start
         case SINGLE_TAP:
             input_report_key(smas->input, FINGERPRINT_TAP, 1);
             input_sync(smas->input);
@@ -312,8 +288,6 @@ static long mas_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
             input_report_key(smas->input, FINGERPRINT_SWIPE_RIGHT, 0);
             input_sync(smas->input);
             break;
-		#endif
-//prize hjw  --key start
         case SET_MODE:
             mutex_lock(&ioctl_lock);
             ret = copy_from_user(&ma_drv_reg, (unsigned int*)arg, sizeof(unsigned int));
@@ -341,6 +315,12 @@ static long mas_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
 		case SCREEN_OFF:
 			mas_switch_power(0);
 			break;
+		case MA_RESET:
+			mas_finger_set_reset(arg);
+			break;
+		case GET_MA_RESET_STATE:
+			break;
+            
         case SET_SPI_SPEED:
             ret = copy_from_user(&ma_speed, (unsigned int*)arg, sizeof(unsigned int));
             ma_spi_change(smas->spi, ma_speed, 0);
@@ -637,7 +617,7 @@ static int init_interrupt(void)
 #ifdef DOUBLE_EDGE_IRQ
 	ret = request_irq(irq, mas_interrupt, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, tname, NULL);
 #else
-    ret = request_irq(irq, mas_interrupt, IRQF_TRIGGER_RISING | IRQF_ONESHOT, tname, NULL);
+    ret = request_irq(irq, mas_interrupt, IRQF_TRIGGER_RISING, tname, NULL);
 #endif
 	if(ret<0){
         MALOGE("request_irq");
@@ -673,7 +653,9 @@ static int init_vars(void)
     memset(srxb,0x00,get_order(IMAGE_DMA_SIZE));
 
 #ifdef CONFIG_PM_WAKELOCKS
-    wakeup_source_init(&gProcessWakeLock, "microarray_process_wakelock");
+    //wakeup_source_init(&gProcessWakeLock, "microarray_process_wakelock");
+	//wakeup_source_add(&gProcessWakeLock, "microarray_process_wakelock");
+	gProcessWakeLock = wakeup_source_register(NULL,"microarray_process_wakelock");
 #else
     wake_lock_init(&gProcessWakeLock, WAKE_LOCK_SUSPEND, "microarray_process_wakelock");
 #endif
@@ -690,24 +672,78 @@ static int deinit_vars(void)
 {
     destroy_workqueue(gWorkq);
     //wake_lock_destroy(&gProcessWakeLock);
+	wakeup_source_unregister(gProcessWakeLock);
     return 0;
 }
- //prize ---huangjiwu---for kaiji read id fail start
-#if 0
+
 static int init_spi(struct spi_device *spi){
-	int ret = 0;
     smas->spi = spi;
     smas->spi->max_speed_hz = SPI_SPEED;
-	ret =mas_set_spi_controller_data(smas->spi);
-   INIT_LIST_HEAD(&smas->dev_entry);
-    return ret;
+    spi_setup(spi);
+    INIT_LIST_HEAD(&smas->dev_entry);
+    return 0;
 }
-#endif
- //prize ---huangjiwu---for kaiji read id fail end
 
 static int deinit_spi(struct spi_device *spi){
     smas->spi = NULL;
     return 0;
+}
+int sp_mode_read_chipid(void)
+{
+	uint8_t write_buffer[5] = {0, 0, 0, 0,0};
+	uint8_t read_buffer[5] = {0, 0, 0, 0,0};
+	uint8_t chipid = 0;
+	
+	write_buffer[0] = 0x70;	//read drv
+    write_buffer[1] = 0;
+    write_buffer[2] = 0;
+    write_buffer[3] = 0;
+    write_buffer[4] = 0;
+#ifdef TEE_ID_COMPATIBLE_TRUSTKERNEL
+    mas_tee_spi_transfer(write_buffer, read_buffer, 5);
+#else
+    mas_sync(write_buffer, read_buffer, 5);
+#endif
+	msleep(3);
+	
+	write_buffer[0] = 0x90;		//read drv
+    write_buffer[1] = 0x08;
+    write_buffer[2] = 0;
+    write_buffer[3] = 0;
+    write_buffer[4] = 0;
+	
+#ifdef TEE_ID_COMPATIBLE_TRUSTKERNEL
+    mas_tee_spi_transfer(write_buffer, read_buffer, 5);
+#else
+    mas_sync(write_buffer, read_buffer, 5);
+#endif
+	chipid = read_buffer[3];
+	printk("sp mode read chip id %d", chipid);
+	
+	return chipid;
+}
+
+int sp_mode_read_chipid_e026(void)
+{
+	uint8_t write_buffer[5] = {0, 0, 0, 0,0};
+	uint8_t read_buffer[5] = {0, 0, 0, 0,0};
+	uint8_t chipid = 0;
+	
+	write_buffer[0] = 0x90;		//read drv
+    write_buffer[1] = 0x0b;
+    write_buffer[2] = 0;
+    write_buffer[3] = 0;
+    write_buffer[4] = 0;
+	
+#ifdef TEE_ID_COMPATIBLE_TRUSTKERNEL
+    mas_tee_spi_transfer(write_buffer, read_buffer, 5);
+#else
+    mas_sync(write_buffer, read_buffer, 5);
+#endif
+	chipid = read_buffer[3];
+	printk("sp mode e026 read chip id %d", chipid);
+	
+	return chipid;
 }
 /*
  * init_connect function to check whether the chip is microarray's 
@@ -716,6 +752,7 @@ static int deinit_spi(struct spi_device *spi){
  */
 int init_connect(void){
     int i;
+    int chipid = 0;
     MALOGD("start");
     for(i=0; i<4; i++){
     	stxb[0] = 0x8c;
@@ -739,7 +776,11 @@ int init_connect(void){
 #endif
         if(ret!=0) MALOGW("do init_connect failed!");
 		printk("guq srxb[3] = %d srxb[2] = %d\n", srxb[3], srxb[2]);
-        if(srxb[3] == 0x41 || srxb[3] == 0x45 || srxb[3] == 0x69) return 1;
+        if(srxb[3] == 0x41 || srxb[3] == 0x45) return 1;
+		chipid = sp_mode_read_chipid();
+		if(chipid == 32 || chipid == 26) return 1;
+		chipid = sp_mode_read_chipid_e026();
+		if(chipid == 74) return 1;
     }
     MALOGD("end");
     return 0;   
@@ -792,50 +833,27 @@ int mas_plat_probe(struct platform_device *pdev) {
     MALOGD("start");
     ret = mas_finger_get_gpio_info(pdev);
     if(ret){
-        MALOGE("mas_plat_probe do mas_finger_get_gpio_info error\n");
-		goto free_masfinger;
+        MALOGE("mas_plat_probe do mas_finger_get_gpio_info");
     }
- //prize ---huangjiwu---for kaiji read id fail start
-	MALOGD("end");
-	return 0;
- //prize ---huangjiwu---for kaiji read id fail end
-free_masfinger:
-	return -1;
+    ret = mas_finger_set_gpio_info(1);
+    if(ret){
+        MALOGE("mas_plat_probe do mas_finger_set_gpio_info");
+    }
+    MALOGD("end");
+    return ret;
 }
 
 int mas_plat_remove(struct platform_device *pdev) {
     mas_finger_set_gpio_info(0);
     return 0;
 } 
-#if defined(CONFIG_PRIZE_FP_USE_VFP)
-int vfp_regulator_ctl(int enable)
-{
-	int ret =0;
-		if(enable){
-		   if (!IS_ERR_OR_NULL(smas->vdd_ldo)){
-				ret = regulator_enable(smas->vdd_ldo);
-				if (ret) {
-					MALOGE("Regulator vdd enable failed ret = %d\n", ret);
-					return ret;
-				}
-			};
-		}else{
-			ret = regulator_disable(smas->vdd_ldo);
-			if (ret) {
-				MALOGE("Regulator vdd disable failed ret = %d\n", ret);
-				return ret;
-			}
 
-		}
-	return ret;
-}
-#endif
 
 int mas_probe(struct spi_device *spi) {
 
     int ret = 0;
+	
 
- 
     MALOGD("start");
 
 	mas_do_some_for_probe(spi);
@@ -849,30 +867,6 @@ int mas_probe(struct spi_device *spi) {
     if(ret){
         goto err2;
     }
-#if defined(CONFIG_PRIZE_FP_USE_VFP)
-	smas->vdd_ldo = regulator_get(&smas->spi->dev, "VFP");
-	if (IS_ERR(smas->vdd_ldo)) {
-		ret = PTR_ERR(smas->vdd_ldo);
-		MALOGE("%s: Regulator get failed vdd ret = %d\n",__func__,ret);
-		//return ret;
-		goto free_regulator;
-	}
-	ret = regulator_set_voltage(smas->vdd_ldo, 2800000, 2800000);
-	if (ret) {
-		MALOGE("%s: Regulator set vdd val fail ret = %d\n",__func__,ret);
-		//return ret;
-		goto free_regulator;
-	}
-#endif
- //prize ---huangjiwu---for kaiji read id fail start
-	udelay(5000);
- //prize ---huangjiwu---for kaiji read id fail end
-	
-	ret = mas_finger_set_gpio_info(1);
-	if(ret){
-		MALOGE("mas_plat_probe do mas_finger_set_gpio_info");
-	}
-
 #ifdef READ_CHIP_ID
     mas_enable_spi_clock(smas->spi); 
     ret = init_connect();
@@ -883,14 +877,17 @@ int mas_probe(struct spi_device *spi) {
         goto err3;
     } else {
 #ifdef TEE_ID_COMPATIBLE_MICROTRUST
-	    struct TEEC_UUID vendor_uuid = {0xedcf9395, 0x3518, 0x9067, { 0x61, 0x4c, 0xaf, 0xae, 0x29, 0x09, 0x77, 0x5b }};
-	    memcpy(&uuid_fp, &vendor_uuid, sizeof(struct TEEC_UUID));
+	    // struct TEEC_UUID vendor_uuid = {0xedcf9395, 0x3518, 0x9067, { 0x61, 0x4c, 0xaf, 0xae, 0x29, 0x09, 0x77, 0x5b }};
+	    //memcpy(&uuid_ta, &vendor_uuid, sizeof(struct TEEC_UUID));
+		// memcpy(&uuid_fp, &vendor_uuid, sizeof(struct TEEC_UUID));
 #endif		
 	}
 #else
 	ret = 0;
 #endif
 
+	    //memcpy(&uuid_ta, &vendor_uuid, sizeof(struct TEEC_UUID));
+		memcpy(&uuid_fp, &vendor_uuid, sizeof(struct TEEC_UUID));
    MALOGD("start11111");
 
    
@@ -912,15 +909,8 @@ int mas_probe(struct spi_device *spi) {
 		ret = -ENODEV;
 		goto err6;
 	}
-	//prize add by wangyongsheng 20210329 start
-#if defined(CONFIG_PRIZE_HARDWARE_INFO)
-	sprintf(current_fingerprint_info.chip,"ICNF7152L");
-	//strcpy(current_fingerprint_info.id, GF_LINUX_VERSION);
-	strcpy(current_fingerprint_info.vendor,"mircoarray");
-	strcpy(current_fingerprint_info.more,"fingerprint");
-#endif
-	//prize add by wangyongsheng 20210329 end
 
+	
     MALOGD("end1111");
     return ret;
 
@@ -934,10 +924,6 @@ err4:
 err3:
     deinit_connect(); 
 #endif
-#if defined(CONFIG_PRIZE_FP_USE_VFP)
-free_regulator:
-	regulator_put(smas->vdd_ldo);
-#endif
 err2:
     deinit_spi(spi);
 err1:
@@ -947,11 +933,9 @@ err1:
 }
 
 int mas_remove(struct spi_device *spi) {
- //prize ---huangjiwu---for kaiji read id fail start
-    //deinit_file_node();
-    //deinit_interrupt();
-   // deinit_vars();
- //prize ---huangjiwu---for kaiji read id fail end
+    deinit_file_node();
+    deinit_interrupt();
+    deinit_vars();
     return 0;
 }
 
@@ -965,7 +949,6 @@ static int __init mas_init(void)
     if(ret){
 	   MALOGE("mas_get_platform");
     }
-	
     return ret;
 }
 
@@ -973,7 +956,7 @@ static void __exit mas_exit(void)
 {
 }
 
-module_init(mas_init);
+late_initcall_sync(mas_init);
 module_exit(mas_exit);
 
 MODULE_AUTHOR("Microarray");

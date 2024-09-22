@@ -2844,9 +2844,9 @@ static int rtc_ui_soc_get(struct mtk_gauge *gauge,
 	*val = rtc_ui_soc;
 
 	if (rtc_ui_soc > 100 || rtc_ui_soc < 0)
-		bm_err("[%s]ERR!rtc=0x%x,ui_soc=%d\n", rtc_value, rtc_ui_soc);
+		bm_err("[%s]ERR!rtc=0x%x,ui_soc=%d\n", __func__, rtc_value, rtc_ui_soc);
 	else
-		bm_debug("[%s]rtc=0x%x,ui_soc=%d\n", rtc_value, rtc_ui_soc);
+		bm_debug("[%s]rtc=0x%x,ui_soc=%d\n", __func__, rtc_value, rtc_ui_soc);
 
 	return 0;
 }
@@ -2943,7 +2943,28 @@ static int bat_vol_get(struct mtk_gauge *gauge,
 
 	return ret;
 }
+//drv huangjiwu for pimc vbus start
+#if IS_ENABLED(CONFIG_READ_PMIC_VBUS)
+static int vbus_voltage_adc_get(struct mtk_gauge *gauge,
+	struct mtk_gauge_sysfs_field_info *attr, int *val)
+{
+	int ret;
 
+	if (!IS_ERR(gauge->chan_vbus_voltage)) {
+		ret = iio_read_channel_processed(gauge->chan_vbus_voltage, val);
+		if (ret < 0)
+			bm_err("[%s]read fail,ret=%d\n", __func__, ret);
+	} else {
+		bm_err("[%s]chan error\n", __func__);
+		ret = -EOPNOTSUPP;
+	}
+
+	return ret;
+
+
+}
+#endif
+//drv huangjiwu for pimc vbus end
 static int battery_temperature_adc_get(struct mtk_gauge *gauge,
 	struct mtk_gauge_sysfs_field_info *attr, int *val)
 {
@@ -3467,7 +3488,7 @@ void dump_nag(struct mtk_gauge *gauge)
 		(INT_STATUS_NAG_C_DLTV_MASK << INT_STATUS_NAG_C_DLTV_SHIFT))
 		>> INT_STATUS_NAG_C_DLTV_SHIFT;
 
-	bm_err("nag %d %d %d %d %d %d %d %d %d\n",
+	bm_err("nag %d %d %d %d %d %d %d %d %d %d\n",
 		nag[0], nag[1], nag[2], nag[3], nag[4], nag[5],
 		nag[6], nag[7], nag[8], nag[9]);
 }
@@ -3642,6 +3663,11 @@ static struct mtk_gauge_sysfs_field_info mt6358_sysfs_field_tbl[] = {
 	GAUGE_SYSFS_FIELD_WO(
 		bat_temp_froze_en_set, GAUGE_PROP_BAT_TEMP_FROZE_EN),
 	GAUGE_SYSFS_FIELD_RO(battery_voltage_cali, GAUGE_PROP_BAT_EOC),
+//drv huangjiwu for pimc vbus start
+#if IS_ENABLED(CONFIG_READ_PMIC_VBUS)
+	GAUGE_SYSFS_FIELD_RO(vbus_voltage_adc_get, GAUGE_PROP_VBUS_VOLTAGE),
+#endif
+//drv huangjiwu for pimc vbus end
 };
 
 static struct attribute *mt6358_sysfs_attrs[GAUGE_PROP_MAX + 1];
@@ -4073,7 +4099,17 @@ static int mt6358_gauge_probe(struct platform_device *pdev)
 		bm_err("chan_ptim_r auxadc get fail, ret=%d\n",
 			ret);
 	}
-
+//drv huangjiwu for pimc vbus start
+#if IS_ENABLED(CONFIG_READ_PMIC_VBUS)
+	gauge->chan_vbus_voltage = devm_iio_channel_get(
+		&pdev->dev, "pmic_vbus_voltage");
+	if (IS_ERR(gauge->chan_vbus_voltage)) {
+		ret = PTR_ERR(gauge->chan_vbus_voltage);
+		bm_err("chan_vbus_voltage auxadc get fail, ret=%d\n",
+			ret);
+	}
+#endif
+//drv huangjiwu for pimc vbus end
 	gauge->hw_status.car_tune_value = 1000;
 	gauge->hw_status.r_fg_value = 50;
 	gauge->attr = mt6358_sysfs_field_tbl;

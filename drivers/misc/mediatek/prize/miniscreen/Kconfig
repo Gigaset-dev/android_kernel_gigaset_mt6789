@@ -1,0 +1,10 @@
+config DRV_MINISCREEN_LCD_DRV
+	string "drv miniscreen lcd drv"
+	help
+	  drv miniscreen lcd drv.
+
+config DRV_MINISCREEN_TP
+	tristate "drv miniscreen tp"
+	default n
+	help
+	  drv miniscreen tp.

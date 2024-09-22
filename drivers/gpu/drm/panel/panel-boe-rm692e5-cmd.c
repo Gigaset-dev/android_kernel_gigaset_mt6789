@@ -76,8 +76,8 @@ static unsigned int Gamma_to_level[] = {
 };
 /*PRIZE:Added by lvyuanchuan,X9-534,20230103 end*/
 //prize add by wangfei for lcd hardware info 20210726 start
-#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
-#include "../../../misc/mediatek/prize/hardware_info/hardware_info.h"
+#if defined(CONFIG_PRIZE_HARDWARE_INFO)
+#include "../../../misc/prize/hardware_info/hardware_info.h"
 extern struct hardware_info current_lcm_info;
 #endif
 //prize add by wangfei for lcd hardware info 20210726 end
@@ -825,7 +825,7 @@ static int lcm_setbacklight_cmdq(void *dsi, dcs_write_gce cb,
 
 	 if(level > 255)
 	 {
-	 	if(level == 260)
+	 	if(level == 4096)
 	 	{
 	 		printk("panel into HBM\n");
 			if (!cb)
@@ -833,7 +833,7 @@ static int lcm_setbacklight_cmdq(void *dsi, dcs_write_gce cb,
 			g_ctx->hbm_stat = true;
 			cb(dsi, handle, hbm_tb, ARRAY_SIZE(hbm_tb));
 	 	}
-	 	else if(level == 270)
+	 	else if(level == 4097)
 	 	{
 	 		/*PRIZE:Added by lvyuanchuan,X9-534,20230103*/
 	 		level_normal = bl_level * BLK_LEVEL_MAP3/255 + BLK_LEVEL_OFFSET;
@@ -1603,8 +1603,8 @@ static int lcm_probe(struct mipi_dsi_device *dsi)
 	ctx->hbm_en = false;
 	g_ctx->hbm_stat = false;
 
-#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
-    strcpy(current_lcm_info.chip,"rm692e5,cmd");
+#if defined(CONFIG_PRIZE_HARDWARE_INFO)
+    strcpy(current_lcm_info.chip,"rm692e5.cmd");
     strcpy(current_lcm_info.vendor,"Raydium");
     sprintf(current_lcm_info.id,"0x%02x",0x81);
     strcpy(current_lcm_info.more,"1080*2400");

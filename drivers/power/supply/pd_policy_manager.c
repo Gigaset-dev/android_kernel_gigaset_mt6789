@@ -1335,7 +1335,7 @@ static int usbpd_psy_notifier_cb(struct notifier_block *nb,
     usbpd_check_usb_psy(pdpm);
     usbpd_check_tcpc(pdpm);
 
-    if (!pdpm->cp_psy || !pdpm->usb_psy){
+    if (!pdpm->cp_psy || !pdpm->usb_psy || !pdpm->tcpc){
         return NOTIFY_OK;
 	}
 	

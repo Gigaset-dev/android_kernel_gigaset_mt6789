@@ -185,7 +185,12 @@ source "drivers/misc/mediatek/connectivity/Kconfig"
 source "drivers/misc/mediatek/conn_md/Kconfig"
 source "drivers/misc/mediatek/conn_scp/Kconfig"
 source "drivers/misc/mediatek/nfc/Kconfig"
+#drv add by yaozhipeng 20230921 start
+source "drivers/misc/mediatek/nfc_tms/Kconfig"
+#drv add by yaozhipeng 20230921 end
+#prize
 source "drivers/misc/mediatek/prize/Kconfig"
+#prize
 source "drivers/misc/mediatek/memory-amms/Kconfig"
 source "drivers/misc/mediatek/mddp/Kconfig"
 endmenu # Modem
@@ -204,6 +209,7 @@ source "drivers/misc/mediatek/irtx/Kconfig"
 source "drivers/misc/mediatek/pwm/Kconfig"
 source "drivers/misc/mediatek/sensor/Kconfig"
 source "drivers/misc/mediatek/gate_ic/Kconfig"
+source "drivers/misc/mediatek/lcd_bias/Kconfig"
 endmenu # Other Peripheral
 
 menu "Performance"
@@ -246,6 +252,9 @@ config FPGA_EARLY_PORTING
 	  platform and non-FPGA platform.
 	  Say Y here if you are doing FPGA early porting.
 	  If unsure, say N
+#prize add by zhaopengge 20221128 start
+#source "drivers/misc/mediatek/imgsensor/src/isp6s/camera_ldo/Kconfig"
+#prize add by zhaopengge 20221128 end
 endmenu # Misc
 
 menu "PPM V3"
@@ -311,6 +320,7 @@ config MTK_ENABLE_GMO
 
 config MTK_ENABLE_AGO
 	bool "Enable/Disable A-Go related feautre"
+	select ZRAM
 	select CRYPTO_LZ4
 	select DM_VERITY
 	select DM_ANDROID_VERITY_AT_MOST_ONCE_DEFAULT_ENABLED
@@ -331,4 +341,20 @@ config MTK_ENABLE_AGO
 	  Select "y" separately is not suggested.
 	  Select "n" by default.
 
+#drv add by wangwei1 20230510 start
+config LCD_BIAS
+	tristate "lcd bias Driver"
+	help
+	  Enables to support lcd bias. 
+	  If unsure, say N.
+#drv add by wangwei1 20230510 start
+#drv add by yaozhipeng 20230607 start
+config TMS_CHIP_SUPPORT
+	tristate "tms nfc"
+	default n
+	help
+	  hardware_info. If configures to be n, means devices doesn't support
+	  hardwareinfo functionality.
+	  
+#drv add by yaozhipeng 20230607 end 
 endmenu # Memory

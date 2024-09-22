@@ -15,9 +15,9 @@
 static int ret;
 //pin control sturct data, define using for the dts settings,
 struct pinctrl *mas_finger_pinctrl;
-struct pinctrl_state 		//*mas_finger_power2v8_on, *mas_finger_power2v8_off, 	//power2v8
-							//*mas_finger_power1v8_on, *mas_finger_power1v8_off,	//power1v8
-							*mas_finger_rst_on, *mas_finger_rst_off,			//rst
+struct pinctrl_state 		*mas_finger_power2v8_on, *mas_finger_power2v8_off, 	//power2v8
+							*mas_finger_power1v8_on, *mas_finger_power1v8_off,	//power1v8
+							*mas_finger_reset_on, *mas_finger_reset_off,	//reset
 							*mas_finger_eint_on, *mas_finger_eint_off,			//eint
 							*mas_spi_ck_on, *mas_spi_ck_off,					//for ck
 							*mas_spi_cs_on, *mas_spi_cs_off,					//for cs
@@ -33,12 +33,11 @@ static unsigned int finger_int_pin;
  */
 //#ifdef CONFIG_OF
 static struct of_device_id sof_match[] = {
-        { .compatible = MA_DTS_NAME, },		
-		{},		//this name is used for matching the dts device for settings the gpios
+        { .compatible = MA_DTS_NAME, },						//this name is used for matching the dts device for settings the gpios
+		{},
 };
 static struct of_device_id sof_dev_match[] = {
-       // { .compatible = "microarray,microarray-fp", },						//this name is used for matching the dts device for settings the gpios
-		{ .compatible = "prize,fingerprint", },
+        { .compatible = "microarray,microarray-fp", },						//this name is used for matching the dts device for settings the gpios
 		{},
 };
 MODULE_DEVICE_TABLE(of, sof_match);
@@ -50,10 +49,9 @@ static struct platform_driver spdrv = {
         .driver = {
                 .name  = MA_DRV_NAME,
                 .owner = THIS_MODULE,                   
-#ifdef CONFIG_OF
+//#ifdef CONFIG_OF
                 .of_match_table = sof_match,
-                //.of_match_table = of_match_ptr(sof_match),
-#endif
+//#endif
         }
 };
 /**
@@ -79,8 +77,9 @@ struct spi_driver sdrv = {
         .remove = mas_remove,
         .id_table = &sdev_id,
 };
+
+#ifdef TEE_ID_COMPATIBLE_TRUSTKERNEL
 //driver end
-#if 1//ndef CONFIG_OF
 static struct mt_chip_conf smt_conf = {
     .setuptime=15,
     .holdtime=15,
@@ -101,6 +100,7 @@ static struct mt_chip_conf smt_conf = {
     .ulthigh=0,
     .tckdly=0,
 };
+#endif
 
 struct spi_board_info smt_info[] __initdata = {
         [0] = {
@@ -109,54 +109,26 @@ struct spi_board_info smt_info[] __initdata = {
                 .bus_num = 0,
                 .chip_select = 0,
                 .mode = SPI_MODE_0,
-                .controller_data = &smt_conf,
+                //.controller_data = &smt_conf,
         },
 };
 //device end
- //prize ---huangjiwu---for kaiji read id fail start
-#if 0
-int mas_set_spi_controller_data(struct spi_device *spi)
-{
-	int ret	= 0;
-	spi->mode            = SPI_MODE_0;
-	spi->bits_per_word   = 8;
-	spi->max_speed_hz    = SPI_SPEED;
-	spi->controller_data = (void *)&smt_conf ;
-	//spi_setup(spi);
-	ret = spi_setup(spi);
 
-	if (ret < 0) {
-		printk("==wys==spi_setup failed!\n");
-		return ret;
-	}
-	//printk("===wys===mas_set_spi_controller_data===\n");
-	return ret;
-}
-#endif
- //prize ---huangjiwu---for kaiji read id fail end
 /**
  *  the spi struct date start,for getting the spi_device to set the spi clock enable end
  */
 
 
-int  mas_select_transfer(struct spi_device *spi, int len) {
-    static int mode = -1;
-	int ret = 0;
+void mas_select_transfer(struct spi_device *spi, int len) {
+  /*  static int mode = -1;
     int tmp = len>32? DMA_TRANSFER: FIFO_TRANSFER;
-    struct mt_chip_conf *conf = &smt_conf;
+    struct mt_chip_conf *conf = NULL;
     if(tmp!=mode) {
         conf = (struct mt_chip_conf *) spi->controller_data;
         conf->com_mod = tmp;
-        //spi_setup(spi);
-        ret = spi_setup(spi);
-
-		if (ret < 0) {
-			//printk("==wys=%s=spi_setup failed!\n",__func__);
-			return ret;
-		}
+        spi_setup(spi);
         mode = tmp;
-    }
-	return ret;
+    }*/
 }
 
 /*
@@ -165,7 +137,7 @@ int  mas_select_transfer(struct spi_device *spi, int len) {
 
 void ma_spi_change(struct spi_device *spi, unsigned int  speed, int flag)
 {
-    struct mt_chip_conf *mcc = (struct mt_chip_conf *)spi->controller_data;
+   /* struct mt_chip_conf *mcc = (struct mt_chip_conf *)spi->controller_data;
     if(flag == 0) { 
         mcc->com_mod = FIFO_TRANSFER;
     } else {
@@ -175,23 +147,20 @@ void ma_spi_change(struct spi_device *spi, unsigned int  speed, int flag)
     mcc->low_time = speed;
     if(spi_setup(spi) < 0){
         MALOGE("change the spi error!\n");
-    }    
+    }*/    
 }
 
-#endif
 
 int mas_do_some_for_probe(struct spi_device *spi){
 	return 0;
 }
 
 
-int __init mas_get_platform(void) {
+int mas_get_platform(void) {
     MALOGD("start!");
-	
 	ret = platform_driver_register(&spdrv);
 	if(ret){
-		printk("===wys===mas_get_platform= driver_register==error=\n");
-		return ret;
+		MALOGE("platform_driver_register");
 	}
     /*MALOGD("start board info");
 	ret = spi_register_board_info(smt_info, ARRAY_SIZE(smt_info));
@@ -202,10 +171,8 @@ int __init mas_get_platform(void) {
     MALOGD("start register spi");
 	ret = spi_register_driver(&sdrv);
 	if(ret) {
-		printk("==wys==spi_register_driver===error===\n");
-		return ret;
+		MALOGE("spi_register_driver");
 	}
-	
 	return ret;
 }
 
@@ -225,76 +192,112 @@ int mas_finger_get_gpio_info(struct platform_device *pdev){
 		return ret;
 	}
 
- 	mas_spi_mi_on = pinctrl_lookup_state(mas_finger_pinctrl, "fpc_mode_as_mi");
+/**		this is the demo, setup follow the requirement
+ *		mas_finger_eint_on = pinctrl_lookup_state(mas_finger_pinctrl, "finger_int_as_int");
+ *		if (IS_ERR(mas_finger_eint_on)) {
+ *			ret = PTR_ERR(mas_finger_eint_on);
+ *			dev_err(&pdev->dev, " Cannot find mas_finger pinctrl mas_finger_eint_on!\n");
+ *			return ret;
+ *		}
+ *      if needed, change the dts label and the pinctrl for the other gpio
+ */
+ 	
+
+ 	// mas_finger_power2v8_on = pinctrl_lookup_state(mas_finger_pinctrl, "finger_power_en1");
+	// if (IS_ERR(mas_finger_power2v8_on)) {
+		// ret = PTR_ERR(mas_finger_power2v8_on);
+		// dev_err(&pdev->dev, " Cannot find mas_finger_power2v8_on pinctrl!\n");
+		// return ret;
+	// }
+ 	// mas_finger_power2v8_off = pinctrl_lookup_state(mas_finger_pinctrl, "finger_power_en0");
+	// if (IS_ERR(mas_finger_power2v8_off)) {
+		// ret = PTR_ERR(mas_finger_power2v8_off);
+		// dev_err(&pdev->dev, " Cannot find mas_finger_power2v8_off pinctrl!\n");
+		// return ret;
+	// }
+
+	// mas_finger_power1v8_on = pinctrl_lookup_state(mas_finger_pinctrl, "finger_power_18v_en1");
+	// if (IS_ERR(mas_finger_power1v8_on)) {
+		// ret = PTR_ERR(mas_finger_power1v8_on);
+		// dev_err(&pdev->dev, " Cannot find mas_finger_power1v8_on pinctrl!\n");
+		// return ret;
+	// }
+
+	// mas_finger_power1v8_off = pinctrl_lookup_state(mas_finger_pinctrl, "finger_power_18v_en0");
+	// if (IS_ERR(mas_finger_power1v8_off)) {
+		// ret = PTR_ERR(mas_finger_power1v8_off);
+		// dev_err(&pdev->dev, " Cannot find mas_finger_power1v8_off pinctrl!\n");
+		// return ret;
+	// }
+	mas_finger_reset_on = pinctrl_lookup_state(mas_finger_pinctrl, "finger_reset_en1");
+	if (IS_ERR(mas_finger_reset_on)) {
+		ret = PTR_ERR(mas_finger_reset_on);
+		dev_err(&pdev->dev, " Cannot find mas_finger_reset_on pinctrl!\n");
+		return ret;
+	}
+
+	mas_finger_reset_off = pinctrl_lookup_state(mas_finger_pinctrl, "finger_reset_en0");
+	if (IS_ERR(mas_finger_reset_off)) {
+		ret = PTR_ERR(mas_finger_reset_off);
+		dev_err(&pdev->dev, " Cannot find mas_finger_reset_off pinctrl!\n");
+		return ret;
+	}
+
+ 	mas_spi_mi_on = pinctrl_lookup_state(mas_finger_pinctrl, "finger_spi0_mi_as_spi0_mi");
 	if (IS_ERR(mas_spi_mi_on)) {
 		ret = PTR_ERR(mas_spi_mi_on);
 		dev_err(&pdev->dev, " Cannot find mas_spi_mi_on pinctrl!\n");
 		return ret;
 	}
- 	mas_spi_mi_off = pinctrl_lookup_state(mas_finger_pinctrl, "fpc_miso_pull_down");
+ 	mas_spi_mi_off = pinctrl_lookup_state(mas_finger_pinctrl, "finger_spi0_mi_as_gpio");
 	if (IS_ERR(mas_spi_mi_off)) {
 		ret = PTR_ERR(mas_spi_mi_off);
 		dev_err(&pdev->dev, " Cannot find mas_spi_mi_off pinctrl!\n");
 		return ret;
 	}
- 	mas_spi_mo_on = pinctrl_lookup_state(mas_finger_pinctrl, "fpc_mode_as_mo");
+ 	mas_spi_mo_on = pinctrl_lookup_state(mas_finger_pinctrl, "finger_spi0_mo_as_spi0_mo");
 	if (IS_ERR(mas_spi_mo_on)) {
 		ret = PTR_ERR(mas_spi_mo_on);
 		dev_err(&pdev->dev, " Cannot find mas_spi_mo_on pinctrl!\n");
 		return ret;
 	}
 
-	mas_spi_mo_off = pinctrl_lookup_state(mas_finger_pinctrl, "fpc_mosi_pull_down");
+	mas_spi_mo_off = pinctrl_lookup_state(mas_finger_pinctrl, "finger_spi0_mo_as_gpio");
 	if (IS_ERR(mas_spi_mo_off)) {
 		ret = PTR_ERR(mas_spi_mo_off);
 		dev_err(&pdev->dev, " Cannot find mas_spi_mo_off!\n");
 		return ret;
 	}
 
-	mas_spi_ck_on = pinctrl_lookup_state(mas_finger_pinctrl, "fpc_mode_as_ck");
+	mas_spi_ck_on = pinctrl_lookup_state(mas_finger_pinctrl, "finger_spi0_clk_as_spi0_clk");
 	if (IS_ERR(mas_spi_ck_on)) {
 		ret = PTR_ERR(mas_spi_ck_on);
 		dev_err(&pdev->dev, " Cannot find mas_spi_ck_on pinctrl!\n");
 		return ret;
 	}
 
-	mas_spi_ck_off = pinctrl_lookup_state(mas_finger_pinctrl, "fpc_pins_clk_as_gpio");
+	mas_spi_ck_off = pinctrl_lookup_state(mas_finger_pinctrl, "finger_spi0_clk_as_gpio");
 	if (IS_ERR(mas_spi_ck_off)) {
 		ret = PTR_ERR(mas_spi_ck_off);
 		dev_err(&pdev->dev, " Cannot find mas_spi_ck_off pinctrl !\n");
 		return ret;
 	}
 
-	mas_spi_cs_on = pinctrl_lookup_state(mas_finger_pinctrl, "fpc_mode_as_cs");
+	mas_spi_cs_on = pinctrl_lookup_state(mas_finger_pinctrl, "finger_spi0_cs_as_spi0_cs");
 	if (IS_ERR(mas_spi_cs_on)) {
 		ret = PTR_ERR(mas_spi_cs_on);
 		dev_err(&pdev->dev, " Cannot find mas_spi_cs_on pinctrl!\n");
 		return ret;
 	}
 
-	mas_spi_cs_off = pinctrl_lookup_state(mas_finger_pinctrl, "fpc_pins_cs_low");
+	mas_spi_cs_off = pinctrl_lookup_state(mas_finger_pinctrl, "finger_spi0_cs_as_gpio");
 	if (IS_ERR(mas_spi_cs_off)) {
 		ret = PTR_ERR(mas_spi_cs_off);
 		dev_err(&pdev->dev, " Cannot find mas_spi_cs_off pinctrl!\n");
 		return ret;
 	}
-	
-	mas_finger_rst_on = pinctrl_lookup_state(mas_finger_pinctrl, "fpc_pins_rst_high");
-	if (IS_ERR(mas_finger_rst_on)) {
-		ret = PTR_ERR(mas_finger_rst_on);
-		dev_err(&pdev->dev, " Cannot find mas_finger_rst_on pinctrl!\n");
-		return ret;
-	}
 
-	mas_finger_rst_off = pinctrl_lookup_state(mas_finger_pinctrl, "fpc_pins_rst_low");
-	if (IS_ERR(mas_finger_rst_off)) {
-		ret = PTR_ERR(mas_finger_rst_off);
-		dev_err(&pdev->dev, " Cannot find mas_finger_rst_off pinctrl!\n");
-		return ret;
-	}
-
-
-	mas_finger_eint_on = pinctrl_lookup_state(mas_finger_pinctrl, "fpc_eint_as_int");
+	mas_finger_eint_on = pinctrl_lookup_state(mas_finger_pinctrl, "finger_int_as_int");
 	if (IS_ERR(mas_finger_eint_on)) {
 		ret = PTR_ERR(mas_finger_eint_on);
 		dev_err(&pdev->dev, " Cannot find mas_finger_eint_on pinctrl!\n");
@@ -340,35 +343,69 @@ int mas_finger_set_spi(int cmd){
 //#endif
 	return 0;
 }
-void mas_finger_reset(int enable)
-{
-	if(enable){
-		pinctrl_select_state(mas_finger_pinctrl, mas_finger_rst_on);
-		msleep(10);
-		pinctrl_select_state(mas_finger_pinctrl, mas_finger_rst_off);
-		msleep(20);
-		pinctrl_select_state(mas_finger_pinctrl, mas_finger_rst_on);
-	}else{
-		pinctrl_select_state(mas_finger_pinctrl, mas_finger_rst_off);
-	}
+
+
+int mas_finger_set_reset(int cmd)
+{ 
+#if 1
+    switch (cmd)
+        {
+        case 0 :
+            if( (!IS_ERR(mas_finger_reset_off)) )
+            {
+                pinctrl_select_state(mas_finger_pinctrl, mas_finger_reset_off);
+            }
+            else
+            {
+                MALOGE("mas_reset_gpio_slect_pinctrl cmd=0 err!");
+                return -1;
+            }
+            break;
+        case 1 :
+            if( (!IS_ERR(mas_finger_reset_on)) )
+            {
+                pinctrl_select_state(mas_finger_pinctrl, mas_finger_reset_on);
+            }
+            else
+            {
+                MALOGE("mas_reset_gpio_slect_pinctrl cmd=1 err!");
+                return -1;
+            }
+            break;
+        }
+#endif
+    return 0;
 }
+
 
 int mas_finger_set_power(int cmd)
 {
-	int ret = 0;
-	if(cmd){
-		#if defined(CONFIG_PRIZE_FP_USE_VFP)
-		ret = vfp_regulator_ctl(1);
-		#endif
-		mas_finger_reset(1);
-	}else{
-	#if defined(CONFIG_PRIZE_FP_USE_VFP)
-		ret = vfp_regulator_ctl(0);
-	#endif
-		mas_finger_reset(0);
-	}
 
-	return ret;
+	// pinctrl_select_state(mas_finger_pinctrl, mas_finger_power2v8_on);
+#if 0
+	switch (cmd)
+		{
+		case 0 : 		
+			if( (!IS_ERR(mas_finger_power2v8_off)) & (!IS_ERR(mas_finger_power1v8_off)) ){
+				pinctrl_select_state(mas_finger_pinctrl, mas_finger_power2v8_off);
+				//pinctrl_select_state(mas_finger_pinctrl, mas_finger_power1v8_off);
+			}else{
+				MALOGE("mas_power_gpio_slect_pinctrl cmd=0 err!");
+				return -1;
+			}
+		break;
+		case 1 : 		
+			if( (!IS_ERR(mas_finger_power2v8_on)) & (!IS_ERR(mas_finger_power1v8_on)) ){
+				pinctrl_select_state(mas_finger_pinctrl, mas_finger_power2v8_on);
+				//pinctrl_select_state(mas_finger_pinctrl, mas_finger_power1v8_on);
+			}else{
+				MALOGE("mas_power_gpio_slect_pinctrl cmd=1 err!");
+				return -1;
+			}
+		break;
+		}
+#endif
+	return 0;
 }
 
 /*
@@ -411,6 +448,7 @@ int mas_finger_set_gpio_info(int cmd){
     MALOGD("start!");
 	ret |= mas_finger_set_spi(cmd);
 	ret |= mas_finger_set_power(cmd);
+	ret |= mas_finger_set_reset(cmd);
 //	ret |= mas_finger_set_eint(cmd);
     MALOGD("end!");
 	return ret;
@@ -428,7 +466,7 @@ void mas_enable_spi_clock(struct spi_device *spi){
 	//enable_clk();
 #endif
 #endif
-	
+	    mt_spi_enable_master_clk(spi);
 }
 
 void mas_disable_spi_clock(struct spi_device *spi){
@@ -443,7 +481,7 @@ void mas_disable_spi_clock(struct spi_device *spi){
 	//disable_clk();
 #endif
 #endif
-
+    mt_spi_disable_master_clk(spi);
 }
 
 int mas_tee_spi_transfer(u8 *txb, u8 *rxb, int len) {
@@ -483,7 +521,7 @@ unsigned int mas_get_irq(struct device *dev){
  */
 int mas_get_interrupt_gpio(unsigned int index){
 	int val;
-	val = __gpio_get_value(finger_int_pin);
+	val = gpio_get_value(finger_int_pin);
 	//printk if need
 	return val;
 }

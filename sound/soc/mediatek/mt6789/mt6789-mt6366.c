@@ -23,6 +23,21 @@
 
 #include "../common/mtk-sp-spk-amp.h"
 
+/* prize added by pengzhipeng, fs1599, 20221103-start */
+#if IS_ENABLED(CONFIG_SND_SOC_FS1599)
+#include "../../codecs/fs1599/fsm_public.h"
+#endif
+/* prize added by pengzhipeng, fs1599, 20221103-end */
+
+/*add by anhengxuan for aw87xxx audio PA,20220402,start*/
+#ifdef CONFIG_SND_SOC_AW87XXX
+extern int aw87xxx_set_profile(int dev_index, char *profile);
+static char *aw_profile[] = {"Music", "Off"};
+enum aw87xxx_dev_index {
+ AW_DEV_0 = 0,
+};
+#endif
+/*add by anhengxuan for aw87xxx audio PA,20220402,end*/
 /*
  * if need additional control for the ext spk amp that is connected
  * after Lineout Buffer / HP Buffer on the codec, put the control in
@@ -91,15 +106,49 @@ static int mt6789_mt6366_spk_amp_event(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_dapm_context *dapm = w->dapm;
 	struct snd_soc_card *card = dapm->card;
-
+/*add by anhengxuan for aw87xxx audio PA,20220402,start*/
+#ifdef CONFIG_SND_SOC_AW87XXX
+	int ret;
+#endif
+/*add by anhengxuan for aw87xxx audio PA,20220402,end*/
 	dev_info(card->dev, "%s(), event %d\n", __func__, event);
 
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
 		/* spk amp on control */
+/* prize added by pengzhipeng, fs1599, 20221103-start */
+#if IS_ENABLED(CONFIG_SND_SOC_FS1599)
+		fsm_speaker_onn();
+#endif
+/* prize added by chenjiaxi, fs1599, 20221103-end */
+		/*add by pengzhipeng for aw87xxx audio PA,20220402,start*/
+#ifdef CONFIG_SND_SOC_AW87XXX
+	 ret = aw87xxx_set_profile(AW_DEV_0, aw_profile[0]);
+	 if (ret < 0) {
+	 pr_err("[Awinic] %s: set profile[%s] failed",
+	 __func__, aw_profile[0]);
+	 return ret;
+	 }
+#endif
+/*add by anhengxuan for aw87xxx audio PA,20220402,end*/
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
 		/* spk amp off control */
+/* prize added by pengzhipeng, fs1599, 20221103-start */
+#if IS_ENABLED(CONFIG_SND_SOC_FS1599)
+		fsm_speaker_off();
+#endif
+/* prize added by pengzhipeng, fs1599, 20221103-end */
+/*add by anhengxuan for aw87xxx audio PA,20220402,start*/
+#ifdef CONFIG_SND_SOC_AW87XXX
+	 ret = aw87xxx_set_profile(AW_DEV_0, aw_profile[1]);
+	 if (ret < 0) {
+	 pr_err("[Awinic] %s: set profile[%s] failed",
+	 __func__, aw_profile[1]);
+	 return ret;
+ }
+#endif
+/*add by anhengxuan for aw87xxx audio PA,20220402,end*/
 		break;
 	default:
 		break;
@@ -1224,6 +1273,12 @@ static int mt6789_mt6366_dev_probe(struct platform_device *pdev)
 	if (ret)
 		dev_err(&pdev->dev, "%s snd_soc_register_card fail %d\n",
 			__func__, ret);
+
+/* prize added for adding kcontrols of foursemi fs1599N pa start */
+#if IS_ENABLED(CONFIG_SND_SOC_FS1599)
+	fsm_add_card_controls(card);
+#endif
+/* prize added for adding kcontrols of foursemi fs1599N pa end */
 	return ret;
 }
 

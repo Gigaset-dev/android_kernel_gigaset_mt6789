@@ -40,9 +40,9 @@
 #define AW_READ_CHIPID_RETRIES 2
 #define AW_READ_CHIPID_RETRY_DELAY 1
 #define AW210XX_CFG_NAME_MAX	64
-
+//prize add by dengzhiyuan 202327 start
 static struct aw210xx * g_aw210xx = NULL;
-
+//prize add by dengzhiyuan 202327 end
 /******************************************************
  *
  * aw210xx led parameter
@@ -1048,7 +1048,7 @@ static int aw210xx_parse_dt(struct device *dev, struct aw210xx *aw210xx,
 
 	return 0;
 }
-
+//prize add by dengzhiyuan 202327 start
 static ssize_t gps_lna_store(struct class *class, struct class_attribute *attr,	const char *buf, size_t count)
 {
 
@@ -1118,7 +1118,7 @@ static void  hd8040_sysfs_destroy(void)
 	class_destroy(hd8040_class);
 
 }
-
+//prize add by dengzhiyuan 202327 end
 /******************************************************
  *
  * i2c driver
@@ -1180,11 +1180,11 @@ static int aw210xx_i2c_probe(struct i2c_client *i2c,
 		AW_ERR("error creating led class dev\n");
 		goto err_sysfs;
 	}
-	
+//prize add by dengzhiyuan 202327 start	
 	g_aw210xx = aw210xx;
 	
 	hd8040_sysfs_create();
-
+//prize add by dengzhiyuan 202327 end
 	AW_LOG("probe completed!\n");
 
 	return 0;
@@ -1204,7 +1204,9 @@ static int aw210xx_i2c_remove(struct i2c_client *i2c)
 	struct aw210xx *aw210xx = i2c_get_clientdata(i2c);
 
 	AW_LOG("enter\n");
+//prize add by dengzhiyuan 202327 start
 	hd8040_sysfs_destroy();
+//prize add by dengzhiyuan 202327 end
 	sysfs_remove_group(&aw210xx->cdev.dev->kobj, &aw210xx_attribute_group);
 	led_classdev_unregister(&aw210xx->cdev);
 	if (gpio_is_valid(aw210xx->enable_gpio))

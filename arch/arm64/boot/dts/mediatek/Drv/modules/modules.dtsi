@@ -1,0 +1,5 @@
+#include "modules_borad_setting.h"
+
+#if DRV_MODULES_FINGERPRINT
+#include "./fingerprint/fingerprint.dtsi"
+#endif

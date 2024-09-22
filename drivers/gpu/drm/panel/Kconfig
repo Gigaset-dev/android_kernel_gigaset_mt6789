@@ -824,6 +824,17 @@ config DRM_PANEL_ALPHA_JDI_NT36672E_VDO_60HZ
 	  resolution and uses 24-bits RGB per pixel. It provides a
 	  MIPI DSI interface to host.
 
+config DRM_PANEL_ALPHA_JDI_NT36672E_VDO_60HZ_QCG
+	tristate "ALPHA JDI FHD+ DPHY vdo mode 60HZ QCG panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for ALPHA JDI NT36672E
+	  DPHY vdo mode Full HD Plus 60HZ QCG panel. The panel has a 1080x2400
+	  resolution and uses 24-bits RGB per pixel. It provides a
+	  MIPI DSI interface to host.	  
+	  
 config DRM_PANEL_ALPHA_JDI_NT36672E_VDO_120HZ_HFP
 	tristate "ALPHA JDI FHD+ DPHY vdo mode 120HZ hfp panel"
 	depends on OF
@@ -1031,6 +1042,19 @@ config DRM_PANEL_EDO_HX5329_CMD_120
 	  and uses 24-bits RGB per pixel. It provides a MIPI DSI
 	  interface to host.
 
+#PRIZE:Modified by durunshen,config lcm driver,20230110 start
+config DRM_PANEL_TDDI_ILI7807S_VDO_BOE_120HZ_6382
+	tristate "TDDI FHD+ vdo mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for TDDI ILI7807S VDO
+	  mode Full HD Plus panel. The panel has a 1080x2460 resolution
+	  and uses 24-bits RGB per pixel. It provides a MIPI DSI interface
+	  to host.
+##PRIZE:Modified by durunshen,config lcm driver,20230110 end 
+	  
 #prize hjw  for panel 20220606 start
 config DRM_PANEL_CSOT_FT8756_VDO
 	tristate "TRULY  FHD+ video mode panel"
@@ -1066,6 +1090,42 @@ config DRM_PANEL_SHARP_R63417_CMD
 	  and uses 24-bits RGB per pixel. It provides a MIPI DSI interface
 	  to host.
 
+config DRM_PANEL_TRULY6517_ILI9882N_VDO
+	tristate "TRULY  HD+ video mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for.
+	  
+config DRM_PANEL_NT36672C_120HZ_VDO
+	tristate "TRULY  HD+ video mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for.
+
+# DRV added by chenjiaxi, add f1 tlsj lcm, start
+config DRM_PANEL_NT36672C_120HZ_VDO_BOE_YX
+	tristate "TRULY  HD+ video mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for.
+# DRV added by chenjiaxi, add f1 tlsj lcm, end
+	  
+# DRV added by chenjiaxi, add nt36672c dzx gms panel, start
+config DRM_PANEL_NT36672C_120HZ_VDO_GMS
+	tristate "TRULY  HD+ video mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for.
+# DRV added by chenjiaxi, add nt36672c dzx gms panel, end
+
 # DRV added by chenjiaxi, add boe rm692e5 cmd panel, start
 config DRM_PANEL_BOE_RM692E5_CMD_120HZ
 	tristate "TRULY  HD+ video mode panel"
@@ -1074,15 +1134,69 @@ config DRM_PANEL_BOE_RM692E5_CMD_120HZ
 	depends on BACKLIGHT_CLASS_DEVICE
 	help
 	  Say Y here if you want to enable support for.
-# DRV added by chenjiaxi, add boe rm692e5 cmd panel, end
-
-config DRM_PANEL_TRULY6517_ILI9882N_VDO
+	  
+config DRM_PANEL_BOE_RM692E5_CMD_120HZ_GMS
 	tristate "TRULY  HD+ video mode panel"
 	depends on OF
 	depends on DRM_MIPI_DSI
 	depends on BACKLIGHT_CLASS_DEVICE
 	help
 	  Say Y here if you want to enable support for.
+	  
+config DRM_PANEL_VISIONOX_RM692E0_DPHY_CMD_120HZ
+	tristate "TRULY  HD+ video mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for.
+
+# DRV added by wangwei1, add csot nt37701a cmd panel, start
+config DRM_PANEL_CSOT_NT37701A_DPHY_CMD_120HZ
+	tristate "TRULY  HD+ video mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for.
+# DRV added by wangwei1, add csot nt37701a cmd panel, end
+
+config DRM_PANEL_DAXIAN_SH8804B_DPHY_CMD_120HZ
+	tristate "HD+ video mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for.
+# DRV added by chenjiaxi, add boe rm692e5 cmd panel, end
+	  
+config DRM_PANEL_FT8720_120HZ_VDO
+	tristate "TRULY  HD+ video mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for.
+
+# DRV added by chenjiaxi, start
+config DRM_PANEL_BOE_ILI7807S_120HZ_VDO
+	tristate "BOE  HD+ video mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for.
+# DRV added by chenjiaxi, end
+
+# DRV added by pengzhipeng, start
+config DRM_PANEL_BOE_FT8725_120HZ_VDO
+	tristate "BOE  HD+ video mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for.
+# DRV added by pengzhipeng, end
 	  
 config DRM_PANEL_TRULY6517_ILI9881H_VDO
 	tristate "TRULY  HD+ video mode panel"
@@ -1119,5 +1233,31 @@ config DRM_MEDIATEK_PANEL
 	  support CMD and VDO mode, support high frame rate.
 	  and uses 24-bits RGB per pixel. It provides a MIPI DSI interface
 	  to host.
+
+#drv add by wangwei1 20240202 start
+config DRM_PANEL_COST_NT37705_DPHY_CMD_120HZ
+        tristate "truly & NT37705 fhdplus and  dphy cmd panel"
+        depends on OF
+        depends on DRM_MIPI_DSI
+        depends on BACKLIGHT_CLASS_DEVICE
+        help
+          Say Y here if you want to enable support for NT37705
+          fhdplus vdo panel. The panel has a 1080x2640 resolution
+          and uses 24-bits RGB per pixel. It provides a MIPI DSI
+          interface to host.
+#drv add by wangwei1 20240202 end
+
+#drv add by wangwei1 20230605 start
+config DRM_PANEL_ILI9882N_HDP_DSI_VDO_TRULY6517_Q29
+        tristate "truly & ili9882n fhdplus and  dphy vdo panel"
+        depends on OF
+        depends on DRM_MIPI_DSI
+        depends on BACKLIGHT_CLASS_DEVICE
+        help
+          Say Y here if you want to enable support for ili9882n
+          fhdplus vdo panel. The panel has a 1600x720 resolution
+          and uses 24-bits RGB per pixel. It provides a MIPI DSI
+          interface to host.
+#drv add by wangwei1 20230605 end
 
 endmenu

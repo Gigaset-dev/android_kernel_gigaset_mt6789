@@ -21,6 +21,16 @@ extern long AW8601CSR_Ioctl(struct file *a_pstFile, unsigned int a_u4Command,
 			   unsigned long a_u4Param);
 extern int AW8601CSR_Release(struct inode *a_pstInode, struct file *a_pstFile);
 extern int AW8601CSR_GetFileName(unsigned char *pFileName);
+#define PD9402A_SetI2Cclient PD9402A_SetI2Cclient_Main
+#define PD9402A_Ioctl PD9402A_Ioctl_Main
+#define PD9402A_Release PD9402A_Release_Main
+#define PD9402A_GetFileName PD9402A_GetFileName_Main
+extern int PD9402A_SetI2Cclient(struct i2c_client *pstAF_I2Cclient,
+				 spinlock_t *pAF_SpinLock, int *pAF_Opened);
+extern long PD9402A_Ioctl(struct file *a_pstFile, unsigned int a_u4Command,
+			   unsigned long a_u4Param);
+extern int PD9402A_Release(struct inode *a_pstInode, struct file *a_pstFile);
+extern int PD9402A_GetFileName(unsigned char *pFileName);
 /*Prize add by zhuzhengjiang 20220716*/
 
 #define AK7371AF_SetI2Cclient AK7371AF_SetI2Cclient_Main
@@ -270,6 +280,23 @@ extern int GT9767AF_PowerDown(struct i2c_client *pstAF_I2Cclient,
 				int *pAF_Opened);
 extern int GT9767AF_GetFileName(unsigned char *pFileName);
 // prize add by linchong 20210630 end
+
+/*prize add by zhuzhengjiang for lens:GT9764B 20230112 start*/
+#define GT9764BAF_SetI2Cclient GT9764BAF_SetI2Cclient_Main
+#define GT9764BAF_Ioctl GT9764BAF_Ioctl_Main
+#define GT9764BAF_Release GT9764BAF_Release_Main
+#define GT9764BAF_PowerDown GT9764BAF_PowerDown_Main
+#define GT9764BAF_GetFileName GT9764BAF_GetFileName_Main
+extern int GT9764BAF_SetI2Cclient(struct i2c_client *pstAF_I2Cclient,
+				spinlock_t *pAF_SpinLock, int *pAF_Opened);
+extern long GT9764BAF_Ioctl(struct file *a_pstFile, unsigned int a_u4Command,
+				unsigned long a_u4Param);
+extern int GT9764BAF_Release(struct inode *a_pstInode, struct file *a_pstFile);
+extern int GT9764BAF_PowerDown(struct i2c_client *pstAF_I2Cclient,
+				int *pAF_Opened);
+extern int GT9764BAF_GetFileName(unsigned char *pFileName);
+/*prize add by zhuzhengjiang for lens:GT9764B 20230112 end*/
+
 #define GT9778AF_SetI2Cclient GT9778AF_SetI2Cclient_Main
 #define GT9778AF_Ioctl GT9778AF_Ioctl_Main
 #define GT9778AF_Release GT9778AF_Release_Main

@@ -22,7 +22,9 @@
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/regulator/consumer.h>
+//prize add by dengzhiyuan 202327 start
 #include <linux/power_supply.h>
+//prize add by dengzhiyuan 202327 end
 #include "leds-aw2016.h"
 
 /* register address */
@@ -107,7 +109,9 @@ struct aw2016_led {
     int num_leds;
     int id;
     int blinking;
+//prize add by dengzhiyuan 202327 start
 	struct power_supply *pdpe_psy;
+//prize add by dengzhiyuan 202327 end
 };
 
 static int aw2016_write(struct aw2016_led *led, u8 reg, u8 val)
@@ -549,7 +553,7 @@ static int aw2016_disable_auto_charge_indication(struct aw2016_led *led)
 	}
 	return 0;
 }
-
+//prize add by dengzhiyuan 202327 start
 static int aw2016_get_boot_mode(struct aw2016_led *led_array)
 {
 	int ret = 0;
@@ -574,13 +578,13 @@ static int aw2016_get_boot_mode(struct aw2016_led *led_array)
 	}
 	return ret;
 }
-
+//prize add by dengzhiyuan 202327 end
 static int aw2016_led_probe(struct i2c_client *client,
                 const struct i2c_device_id *id)
 {
     struct aw2016_led *led_array;
     struct device_node *node;
-    int ret = -EINVAL, num_leds = 0,boot_mode = 0;
+    int ret = -EINVAL, num_leds = 0,boot_mode = 0;//prize add by dengzhiyuan boot_mode = 0
     node = client->dev.of_node;
     if (node == NULL)
         return -EINVAL;
@@ -613,13 +617,13 @@ static int aw2016_led_probe(struct i2c_client *client,
         dev_err(&client->dev, "Check chip id error\n");
         goto fail_parsed_node;
     }
-	
+//prize add by dengzhiyuan 202327 start
 	boot_mode = aw2016_get_boot_mode(led_array);
 	
 	if((boot_mode != 8) && (boot_mode != 9)){
 		aw2016_disable_auto_charge_indication(led_array);
 	}
-
+//prize add by dengzhiyuan 202327 end
     return 0;
 
 fail_parsed_node:

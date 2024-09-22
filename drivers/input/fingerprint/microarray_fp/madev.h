@@ -13,14 +13,14 @@
 //settings macro
 #define MTK   			//[MTK|QUALCOMM|SPRD|X86]
 
-#define READ_CHIP_ID	//detect the chip id when defined
+//#define READ_CHIP_ID	//detect the chip id when defined
 
 #define MALOGD_LEVEL	KERN_EMERG     //[KERN_DEBUG|KERN_EMERG] usually, the debug level is used for the release version
 
 #define MA_CHR_FILE_NAME 	"madev0"  //do not neeed modify usually 
 #define MA_CHR_DEV_NAME 	"madev"	  //do not neeed modify usually 
 
-#define MA_EINT_NAME            "mas_fingerprint-eint"//"mediatek,finger_print-eint"
+#define MA_EINT_NAME            "mediatek,finger_print-eint"
 
 
 //#define DOUBLE_EDGE_IRQ
@@ -52,7 +52,7 @@
 #define AFS120	0x78
 //#define AFS80 	0x50
 
-#define FBUF 	(32*1024)
+#define FBUF 	(40*1024)
 
 #if defined(AFS120)
 	#define W   	120   //宽
@@ -97,12 +97,6 @@
 #include <linux/gpio.h>
 #include <linux/spi/spi.h>
 #include <linux/ioctl.h>
-#include <linux/regulator/consumer.h>
-#include <linux/power_supply.h>
-#include <linux/pinctrl/consumer.h>
-
-
-
 //#include <linux/wakelock.h>
 //#include <linux/pm_wakeup.h>
 
@@ -153,10 +147,6 @@ struct wakeup_source wl;
 #else
 struct wake_lock wl;
 #endif
-#if defined(CONFIG_PRIZE_FP_USE_VFP)
-   struct regulator *vdd_ldo;
-#endif
-
 };
 //end
 
@@ -169,10 +159,11 @@ struct fprint_dev {
     struct device *dev;
 };
 
+
 //function define
 
 //extern the settings.h function 
-//extern void mas_select_transfer(struct spi_device *spi, int len);
+extern void mas_select_transfer(struct spi_device *spi, int len);
 extern int mas_finger_get_gpio_info(struct platform_device *pdev);
 extern int mas_finger_set_gpio_info(int cmd);
 extern void mas_enable_spi_clock(struct spi_device *spi);

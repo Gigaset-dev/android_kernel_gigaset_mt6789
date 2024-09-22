@@ -15,7 +15,13 @@
 
 //#include "lcm_drv.h"
 #include "hardware_info.h"
+/* DRV added by chenjiaxi, add lpddr 8802 info, start */
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_LPDDR_INFO)
+#include "prize_custom_memory_list.h"
+#else
 #include "prize_custom_memory.h"
+#endif
+/* DRV added by chenjiaxi, add lpddr 8802 info, end */
 #include <linux/fs.h>
 
 #include <linux/of.h>
@@ -112,11 +118,6 @@ struct hardware_info current_barosensor_info =
 {
 	"unknow","unknow","unknow","unknow",
 };
-struct hardware_info current_flash_lpddr_info =
-{
-	"unknow","unknow","unknow","unknow",
-};
-//prize add by lipengpeng 20220901 end 
 struct hardware_info current_sarsensor_info =
 {
 	"unknow","unknow","unknow","unknow",
@@ -132,6 +133,25 @@ struct hardware_info current_fingerprint_info =
 {
 	"unknow","unknow","unknow","unknow",
 };
+//prize add by lipengpeng 20220901 start 
+struct hardware_info current_flash_lpddr_info =
+{
+	"unknow","unknow","unknow","unknow",
+};
+//prize add by lipengpeng 20220901 end
+//prize add by dengzhiyuan 20230727 start
+#if 0
+//drv add by xudongfang for ufs health at 20230721 start
+#if defined(CONFIG_PRIZE_HARDWARE_INFO_UFS_HEALTH)
+struct hardware_info current_flash_health_info =
+{
+	"unknow","unknow","unknow","unknow",
+};
+EXPORT_SYMBOL_GPL(current_flash_health_info);
+#endif // CONFIG_PRIZE_HARDWARE_INFO_UFS_HEALTH
+//drv add by xudongfang for ufs health at 20230721 end
+#endif
+//prize add by dengzhiyuan 20230727 end
 #if defined(CONFIG_PRIZE_HARDWARE_INFO_BAT)
 struct hardware_info current_battery_info =
 {
@@ -167,11 +187,12 @@ EXPORT_SYMBOL_GPL(current_gyroscope_info);
 EXPORT_SYMBOL_GPL(current_msensor_info);
 EXPORT_SYMBOL_GPL(current_barosensor_info);
 EXPORT_SYMBOL_GPL(current_fingerprint_info);
+//prize add by lipengpeng 20220901 start 
+EXPORT_SYMBOL_GPL(current_flash_lpddr_info);
+//prize add by lipengpeng 20220901 end 
 EXPORT_SYMBOL_GPL(current_sarsensor_info);
  // prize add for tof info by zhuzhengjiang  20200521 start
 EXPORT_SYMBOL_GPL(current_tof_info); // prize add for tof info by zhuzhengjiang  20200521 start
-//prize add by lipengpeng 20220901 start 
-EXPORT_SYMBOL_GPL(current_flash_lpddr_info);
 //mt_battery_meter.h
 static void dev_get_current_tof_info(char *buf)
 {
@@ -254,12 +275,6 @@ static void dev_get_current_lcm_info(char *buf)
 	 	return;
 	#endif
 	}
-
-	strcpy(current_lcm_info.chip,"ICNL9911C");
-	strcpy(current_lcm_info.id,"0x50");
-	strcpy(current_lcm_info.vendor,"ICNL");
-	strcpy(current_lcm_info.more,"720x1560");
-
 	p += sprintf(p, "[LCM]:\n");
 	p += sprintf(p, "  chip:%s\n", current_lcm_info.chip);
 	if(strcmp(current_lcm_info.id,"unknow") != 0){
@@ -508,6 +523,108 @@ static void dev_get_current_fingerprint_info(char *buf)
 	 len += (p - buf);
 	 HW_PRINT("%s",buf);
 }
+//prize add by dengzhiyuan 20230727 start
+#if 0
+/* DRV added by chenjiaxi, add lpddr 8802 info, start */
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_LPDDR_INFO)
+int get_lpddr_used_index(void)
+{
+	struct device_node * of_chosen = NULL;
+	char *bootargs = NULL;
+	char *ptr;
+	int lpddr_index = 0;
+	char *saved_command_line = vmalloc(650 * sizeof(char));
+	
+	of_chosen = of_find_node_by_path("/chosen");
+	if (of_chosen) {
+		bootargs = (char *)of_get_property(of_chosen, "bootargs", NULL);
+		if (!bootargs) {
+			printk("%s: failed to get bootargs\n", __func__);
+		} else {
+			strncpy(saved_command_line, bootargs, 650);
+			printk("%s: bootargs: %s\n", __func__, bootargs);
+		}
+	} else {
+		printk("%s: failed to get /chosen \n", __func__);
+	}
+
+	ptr = strstr(saved_command_line, "lpddr_used_index=");
+	if(ptr == NULL)
+		return -1;
+	ptr += strlen("lpddr_used_index=");
+	lpddr_index = simple_strtol(ptr, NULL, 10);
+	return lpddr_index;
+}
+#endif
+/* DRV added by chenjiaxi, add lpddr 8802 info, end */
+
+//prize add by lipengpeng 20220901 start 
+static void dev_get_current_flash_info(char *buf)
+{
+/* DRV added by chenjiaxi, add lpddr 8802 info, start */
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_LPDDR_INFO)
+	char *p = buf;
+	int i, ret = 0;
+	HW_PRINT("dev_get_current_flash_lpddr_info");
+	
+	ret = get_lpddr_used_index();
+	HW_PRINT("get_lpddr_used_index is %d, sizeof Cust_emmc_support is %d", ret, sizeof(Cust_emmc_support) / sizeof(Cust_emmc_support[0]));
+	
+	if (ret != -1) {
+		if (ret < sizeof(Cust_emmc_support) / sizeof(Cust_emmc_support[0])) {
+			p += sprintf(p, "\n[flash]:\n");	
+			p += sprintf(p, " %s\n",Cust_emmc_support[get_lpddr_used_index()]);
+		} else {
+			p += sprintf(p, "\n[flash]:\n");	
+			p += sprintf(p, " %s\n", "unknow");
+		}
+	} else {
+		p += sprintf(p, "\n[flash]:\n");	
+		p += sprintf(p, " %s\n", "unknow");
+	}
+
+	p += sprintf(p, "\n[flash list]:\n");
+	for(i = 0;i < (sizeof(Cust_emmc_support) / sizeof(Cust_emmc_support[0])) ; i++)
+		p += sprintf(p, " %s\n",Cust_emmc_support[i]); 
+
+	p += sprintf(p, "\n");	
+
+//drv add by xudongfang for ufs health at 20230721 start
+#if defined(CONFIG_PRIZE_HARDWARE_INFO_UFS_HEALTH)
+	 p += sprintf(p, "\n[health life]:\n");
+	 p += sprintf(p, "LifeEstA=0x%s LifeEstB=0x%s\n",current_flash_health_info.chip,current_flash_health_info.vendor);
+	 p += sprintf(p, "EOL=0x%s\n",current_flash_health_info.id);
+#endif
+//drv add by xudongfang for ufs health at 20230721 end
+	p += sprintf(p, "\n");
+#else
+	     char *p = buf;
+	HW_PRINT("dev_get_current_flash_lpddr_info");
+	if(strcmp(current_flash_lpddr_info.chip,"unknow") == 0)
+		return ;
+
+	
+	 p += sprintf(p, "\n[flash]:\n");
+	 p += sprintf(p, "  chip:%s\n", current_flash_lpddr_info.chip);
+	 p += sprintf(p, "  id:%s\n", current_flash_lpddr_info.id);
+	 p += sprintf(p, "  vendor:%s\n",current_flash_lpddr_info.vendor);
+//drv add by xudongfang for ufs health at 20230721 start
+#if defined(CONFIG_PRIZE_HARDWARE_INFO_UFS_HEALTH)
+	 p += sprintf(p, "\n[health life]:\n");
+	 p += sprintf(p, "LifeEstA=0x%s LifeEstB=0x%s\n",current_flash_health_info.chip,current_flash_health_info.vendor);
+	 p += sprintf(p, "EOL=0x%s\n",current_flash_health_info.id);
+	 p += sprintf(p, "\n");
+#endif
+//drv add by xudongfang for ufs health at 20230721 end
+#endif
+/* DRV added by chenjiaxi, add lpddr 8802 info, end */
+
+	 len += (p - buf);
+	 HW_PRINT("%s",buf);
+}
+//prize add by lipengpeng 20220901 end 
+#endif
+//prize add by dengzhiyuan 20230727 start
 #if defined(CONFIG_PRIZE_HARDWARE_INFO_BAT)
 static void dev_get_current_battery_info(char *buf)
 {
@@ -596,8 +713,7 @@ static ssize_t hardware_info_store(struct device *dev, struct device_attribute *
 	return size;
 	
 }
-
-//prize add by lipengpeng 20220901 start 
+//prize add by dengzhiyuan 20230727 start
 static void dev_get_current_flash_info(char *buf)
 {
 /*	char *p = buf;
@@ -617,8 +733,7 @@ static void dev_get_current_flash_info(char *buf)
 */
 	 
 }
-//prize add by lipengpeng 20220901 end 
-
+//prize add by dengzhiyuan 20230727 end
 //extern char *saved_command_line;
 /*int get_lpddr_emmc_used_index(void)
 {
@@ -688,14 +803,14 @@ static void dev_get_current_flash_info(char *buf)
 	 len += (p - buf);  
 	 HW_PRINT("%s",buf);
 }*/
-
+//prize add by dengzhiyuan 20230727 start
 static void dev_get_AudioParam_version_info(char *buf)
 {
 
 	   char *p = buf;
 	   char databuf[100]={0};
 	   
-	   sprintf(databuf, "%s\n","chip:AW88394CSR\nproduct:GX4\nversion:V6-20230201\n");
+	   sprintf(databuf, "%s\n","chip:AW88394+MT6789\nproduct:GX4\nversion:GX4-T-V7-20230802\n");
 /*	   struct file *fp = NULL;
 	   mm_segment_t fs;
 	   loff_t pos;
@@ -721,7 +836,7 @@ static void dev_get_AudioParam_version_info(char *buf)
 	   len += (p - buf);
 	   HW_PRINT("%s",buf);
 }
-
+//prize add by dengzhiyuan 20230727 end
 static ssize_t hardware_info_show(struct device *dev, struct device_attribute *attr,char *buf)
 {
 	len = 0;
@@ -758,11 +873,12 @@ static ssize_t hardware_info_show(struct device *dev, struct device_attribute *a
 #endif
 //prize add by lipengpeng 20210820 end 
 
-	dev_get_current_flash_info(buf + len);
-
 //	dev_get_current_flash_lpddr_index_info(buf + len);
 
-	dev_get_AudioParam_version_info(buf + len);
+//prize add by lipengpeng 20220901 start 
+    dev_get_current_flash_info(buf + len);
+//prize add by lipengpeng 20220901 end  	
+	dev_get_AudioParam_version_info(buf + len);//prize modifidy by dengzhiyuan 20230727 remove comments
 	dev_get_current_tof_info(buf + len);// prize add for tof info by zhuzhengjiang  20200521 start
 	return len;
 

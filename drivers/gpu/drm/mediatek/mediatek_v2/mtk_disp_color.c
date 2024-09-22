@@ -3385,6 +3385,11 @@ static void ddp_color_restore(struct mtk_ddp_comp *comp)
 static void mtk_color_prepare(struct mtk_ddp_comp *comp)
 {
 	struct mtk_disp_color *color = comp_to_color(comp);
+	/*prize liuyong, modify When boot up, the screen flashes once, 20230828 start*/
+	bool is_color_restore = (g_color_backup.COLOR_CFG_MAIN != 0);
+
+	DDPINFO("%s: is_color_restore: %d\n", __func__, is_color_restore);
+	/*prize liuyong, modify When boot up, the screen flashes once, 20230828 end*/
 
 	mtk_ddp_comp_clk_prepare(comp);
 	atomic_set(&g_color_is_clock_on[index_of_color(comp->id)], 1);
@@ -3395,7 +3400,10 @@ static void mtk_color_prepare(struct mtk_ddp_comp *comp)
 			DISP_COLOR_SHADOW_CTRL, COLOR_BYPASS_SHADOW);
 
 	// restore DISP_COLOR_CFG_MAIN register
-	ddp_color_restore(comp);
+	/*prize liuyong, modify When boot up, the screen flashes once, 20230828 start*/
+	if (is_color_restore)
+		ddp_color_restore(comp);
+	/*prize liuyong, modify When boot up, the screen flashes once, 20230828 end*/
 }
 
 static void mtk_color_unprepare(struct mtk_ddp_comp *comp)

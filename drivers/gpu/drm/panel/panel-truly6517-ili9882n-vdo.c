@@ -138,6 +138,7 @@ static void lcm_panel_init(struct lcm *ctx)
 			__func__, PTR_ERR(ctx->reset_gpio));
 		return;
 	}
+	pr_info("%s\n", __func__);
 	gpiod_set_value(ctx->reset_gpio, 0);
 	udelay(15 * 1000);
 	gpiod_set_value(ctx->reset_gpio, 1);
@@ -147,7 +148,7 @@ static void lcm_panel_init(struct lcm *ctx)
 	gpiod_set_value(ctx->reset_gpio, 1);
 	mdelay(20);//ili9882n at least 10ms
 	devm_gpiod_put(ctx->dev, ctx->reset_gpio);
-#if 1
+#if 0
 // GIP Setting
 lcm_dcs_write_seq_static(ctx,0xFF, 0x98,0x82,0x01);  //3H 
 lcm_dcs_write_seq_static(ctx,0x00, 0x47);  //STVA    
@@ -551,7 +552,7 @@ static int lcm_unprepare(struct drm_panel *panel)
 			__func__, PTR_ERR(ctx->reset_gpio));
 		return PTR_ERR(ctx->reset_gpio);
 	}
-	gpiod_set_value(ctx->reset_gpio, 0);
+	gpiod_set_value(ctx->reset_gpio, 1);   //prize hjw
 	devm_gpiod_put(ctx->dev, ctx->reset_gpio);
 
 #if defined(CONFIG_PRIZE_LCD_BIAS)
@@ -676,7 +677,7 @@ static struct drm_display_mode default_mode = {
 static struct mtk_panel_params ext_params = {
 	.physical_width_um = 67932,
 	.physical_height_um = 150960,
-	.pll_clk = 240,
+	.pll_clk = 260,
 	.vfp_low_power = 400,
 	.cust_esd_check = 0,
 	.esd_check_enable = 0,

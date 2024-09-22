@@ -26,8 +26,8 @@ struct mtk_spk_i2c_ctrl {
 
 //prize add by lipengpeng 20220607 start
 #define MTK_SPK_AWINIC_AW883XX_STR "MTK_SPK_AWINIC_AW883XX"
-#define MTK_SPK_CIRRUS_CS35L45_STR "MTK_SPK_CIRRUS_CS35L45"
 //prize add by lipengpeng 20220607 end
+#define MTK_SPK_CIRRUS_CS35L45_STR "MTK_SPK_CIRRUS_CS35L45"
 #define MTK_SPK_I2S_0_STR "MTK_SPK_I2S_0"
 #define MTK_SPK_I2S_1_STR "MTK_SPK_I2S_1"
 #define MTK_SPK_I2S_2_STR "MTK_SPK_I2S_2"
@@ -60,7 +60,8 @@ enum mtk_spk_type {
 
 //prize add by lipengpeng 20220607 start
 	MTK_SPK_AWINIC_AW883XX,
-	MTK_SPK_FOURSEMI_FS18XX,
+//prize add by lipengpeng 20220607 end
+    MTK_SPK_FOURSEMI_FS18XX,
 	MTK_SPK_CIRRUS_CS35L45,
 	MTK_SPK_TYPE_NUM
 };

@@ -4,6 +4,9 @@
 
 obj-$(CONFIG_GOODIX_FINGERPRINT) += goodix/
 obj-$(CONFIG_FPC_FINGERPRINT) += fpc/
+# prize-add-liaoxingen-20230114-start
+obj-$(CONFIG_GOODIX_GW9518_FINGERPRINT) += goodix-gw9518/
+# prize-add-liaoxingen-20230114-end
 # begin, prize-pengguangyi-20190119, add for goodix gf5118m fp
 obj-$(CONFIG_GOODIX_GF5118M_FINGERPRINT) += goodix-gf5118m/
 # end, prize-pengguangyi-20190119, add for goodix gf5118m fp
@@ -12,6 +15,10 @@ obj-$(CONFIG_MTK_FINGERPRINT_SUNWAVECORP) += sunwave_driver_all_in_one/
 obj-$(CONFIG_FT9362_FINGERPRINT) += focaltech/
 obj-$(CONFIG_FT9362_FINGERPRINT_TEE) += focaltech_tee/
 # prize-add-pengzhipeng-20191105-end
+# prize-add-durunshen-focaltech fingerprint-20230410 start
+obj-$(CONFIG_FINGERPRINT_FOCALTECH)  += focaltech_fp/
+obj-$(CONFIG_MTK_FINGERPRINT_FT9391_TEE)  += ft9391_tee/
+# prize-add-durunshen-focaltech fingerprint-20230410-end
 # prize-add-xuxiaoming-20200112-start
 obj-$(CONFIG_SILEAD_FP)		+= silead/
 obj-$(CONFIG_SILEAD_FP_PLATFORM)		+= silead/
@@ -38,5 +45,8 @@ obj-$(CONFIG_MICROARRAY_FP) += microarray_fp/
 #prize add by tangcong  20210827 start 
 obj-$(CONFIG_MTK_FINGERPRINT_FORTSENSE) += fortsense_driver_all_in_one/
 #prize add by tangcong  20210827 end 
+#drv by liaojie for udf_fortsense_fs6281,20230911 start
+obj-$(CONFIG_UDF_FORTSENSE_FS6281) += udf_fortsense_fs6281/
+#drv by liaojie for udf_fortsense_fs6281,20230911 end
 FINGERPRINT_LISTS := $(subst ",,$(CONFIG_MTK_FINGERPRINT_SUPPORT_LIST))
 obj-y += $(foreach FINGERPRINT,$(FINGERPRINT_LISTS),$(FINGERPRINT)/)

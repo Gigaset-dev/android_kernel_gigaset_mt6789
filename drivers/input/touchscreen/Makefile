@@ -112,6 +112,12 @@ obj-$(CONFIG_TOUCHSCREEN_ROHM_BU21023)	+= rohm_bu21023.o
 obj-$(CONFIG_TOUCHSCREEN_RASPBERRYPI_FW)	+= raspberrypi-ts.o
 obj-$(CONFIG_TOUCHSCREEN_IQS5XX)	+= iqs5xx.o
 obj-$(CONFIG_TOUCHSCREEN_ZINITIX)	+= zinitix.o
+obj-$(CONFIG_TOUCHSCREEN_HIMAX_CHIPSET) += hxchipset/
+obj-$(CONFIG_TOUCHSCREEN_GOODIX_BRL)   += GT9966/
+obj-$(CONFIG_TOUCHSCREEN_MTK_TUI_COMMON_API) +=tui-common.o
+#prize add by xuejian 202302013 start
+obj-$(CONFIG_TOUCHSCREEN_MTK_ILITEK_V3)		+= ILITEK_V3/
+#prize add by xuejian 20230213 end
 #prize add by lipengpeng 20220521 start
 obj-$(CONFIG_TOUCHSCREEN_FTS)	+=  FT8722/
 #prize add by lipengpeng 20220521 end
@@ -119,6 +125,12 @@ obj-$(CONFIG_TOUCHSCREEN_FTS)	+=  FT8722/
 #prize add by lipengpeng 20220521 start
 obj-$(CONFIG_CDFINGER_REE)	+=  cdfinger_ree/
 #prize add by lipengpeng 20220521 end
+#drv add by pengzhipeng 20230316 start
+obj-$(CONFIG_TOUCHSCREEN_SYNA_TCM2) += synaptics_tcm2/
+#drv add by pengzhipeng 20230316 end
+#drv add by wangwei1 20230520 start
+obj-$(CONFIG_TOUCHSCREEN_HYNITRON_TS) += hynitron/
+#drv add by wangwei1 20230520 end
 
 # obj-$(CONFIG_TOUCHSCREEN_CHIPONR_TDDI)	+=  chipone-tddi/
 

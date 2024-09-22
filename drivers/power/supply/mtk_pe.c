@@ -40,8 +40,8 @@
 
 #include "mtk_pe.h"
 #include "mtk_charger_algorithm_class.h"
-#include "pd_pe_policy.h"
-#include "pd_policy_manager.h"
+#include "pd_pe_policy.h"//prize
+#include "pd_policy_manager.h"//prize
 
 
 #define VBUS_MAX_DROP 1500000
@@ -53,6 +53,7 @@ int pe_get_debug_level(void)
 	return pe_dbg_level;
 }
 
+//prize begin
 static int abs_ex(int before,int after)
 {
 	if(after > before){
@@ -133,6 +134,7 @@ static int pdpe_set_state(struct mtk_pe *pe,int state)
 	}
 	return ret;
 }
+//prize end
 
 int mtk_pe_reset_ta_vchr(struct chg_alg_device *alg)
 {
@@ -252,7 +254,7 @@ static int pe_increase_ta_vchr(struct chg_alg_device *alg, u32 vchr_target)
 {
 	int ret = 0, ret_value = 0;
 	int vchr_before, vchr_after;
-	int vchr_tmp = 0;
+	int vchr_tmp = 0;//prize
 	u32 retry_cnt = 0;
 	bool is_chip_enabled = false;
 	int chg_cnt, i;
@@ -271,11 +273,11 @@ static int pe_increase_ta_vchr(struct chg_alg_device *alg, u32 vchr_target)
 		}
 
 		vchr_before = pe_hal_get_vbus(alg);
-		
+//prize begin
 		vchr_tmp = abs_ex(vchr_before,vchr_target);
 		
 		if(vchr_tmp <= 500000){
-			pr_err("gezi ------%s---vchr_before = %d,vchr_target=%d,vchr_tmp=%d\n",__func__,vchr_before,vchr_target,vchr_tmp);
+			pr_err("%s: don't increase, vchr_before = %d, vchr_target=%d\n",__func__,vchr_before,vchr_target);
 			return 0;
 		}
 		__pe_increase_ta_vchr(alg);
@@ -284,12 +286,13 @@ static int pe_increase_ta_vchr(struct chg_alg_device *alg, u32 vchr_target)
 		
 		vchr_tmp = abs_ex(vchr_before,vchr_after);
 
-		pr_err("gezi ------%s---vchr_before = %d,vchr_after=%d,vchr_tmp=%d\n",__func__,vchr_before,vchr_after,vchr_tmp);
+		pr_err("%s: vchr_before = %d, vchr_after=%d, vchr_target=%d\n",__func__,vchr_before,vchr_after,vchr_target);
 
 		//if (abs(vchr_after - vchr_target) <= VBUS_MAX_DROP) {
 		//if(vchr_tmp <= VBUS_MAX_DROP){
 		if(1){
-			pe_dbg("gezi----%s: OK\n", __func__);
+			pe_dbg("%s: OK\n", __func__);
+		//prize end
 			return ret_value;
 		}
 		pe_dbg("%s: retry, cnt = %d, vchr = (%d, %d), vchr_target = %d\n",
@@ -298,8 +301,8 @@ static int pe_increase_ta_vchr(struct chg_alg_device *alg, u32 vchr_target)
 
 		retry_cnt++;
 	} while (pe_hal_get_charger_type(alg) !=
-		POWER_SUPPLY_TYPE_UNKNOWN && retry_cnt < 10);
-	
+		POWER_SUPPLY_TYPE_UNKNOWN && retry_cnt < 10);//prize
+
 	ret = -EHAL;
 	pe_dbg("%s: failed, vchr = (%d, %d), vchr_target = %d\n",
 		__func__, vchr_before / 1000, vchr_after / 1000,
@@ -312,19 +315,19 @@ static int pe_detect_ta(struct chg_alg_device *alg)
 {
 	int ret = 0;
 	struct mtk_pe *pe;
-	int vchar = 0,cnt = 2;
+	int vchar = 0,cnt = 2;//prize
 	pe = dev_get_drvdata(&alg->dev);
 	pe_dbg("%s: starts\n", __func__);
 	
-	pdpe_set_state(pe,PDPE_WORK_PE_CHECK);
+	pdpe_set_state(pe,PDPE_WORK_PE_CHECK);//prize
 
 	/* Disable OVP */
 	ret = pe_hal_enable_vbus_ovp(alg, false);
 	if (ret < 0)
 		goto _err;
-	
+
 	pe->ta_vchr_org = pe_hal_get_vbus(alg);
-	
+//prize begin
 	//ret = pe_increase_ta_vchr(alg, 9000000);
 	
 	do {
@@ -346,7 +349,7 @@ static int pe_detect_ta(struct chg_alg_device *alg)
 
 
 	//ret = -1;
-
+//prize end
 	if (ret == 0) {
 		pe_dbg("%s: OK\n", __func__);
 		return ret;
@@ -355,7 +358,7 @@ static int pe_detect_ta(struct chg_alg_device *alg)
 	/* Detect PE+ TA failed */
 	ret = -1;
 	
-	pdpe_set_state(pe,PDPE_WORK_PE_NOT_SUPPORT);
+	pdpe_set_state(pe,PDPE_WORK_PE_NOT_SUPPORT);//prize
 
 	/* Enable OVP */
 	pe_hal_enable_vbus_ovp(alg, true);
@@ -385,10 +388,11 @@ static int pe_plugout_reset(struct chg_alg_device *alg)
 {
 	int ret = 0;
 	struct mtk_pe *pe;
-	int boot_mode = 0,connect_state = 0;
+	int boot_mode = 0,connect_state = 0;//prize
 	pe = dev_get_drvdata(&alg->dev);
 	pe_dbg("%s: starts\n", __func__);
-	
+
+//prize begin
 	boot_mode = pdpe_get_boot_mode(pe);
 	connect_state = pdpe_get_state(pe);
 	pr_err("%s:boot_mode=%d,connect_state=%d\n", __func__, boot_mode,connect_state);
@@ -400,6 +404,7 @@ static int pe_plugout_reset(struct chg_alg_device *alg)
 		pr_err("-----%s: %d\n", __func__,__LINE__);
 		return 0;
 	}*/
+//prize end
 	/* pe is not running */
 	if (pe->state != PE_RUN &&
 		pe->state != PE_DONE) {
@@ -448,7 +453,7 @@ int __pe_check_charger(struct chg_alg_device *alg)
 	    pe->ref_vbat > pe->vbat_threshold) ||
 		uisoc >= pe->ta_stop_battery_soc) {
 		ret_value = ALG_TA_CHECKING;
-		pdpe_set_state(pe,PDPE_WORK_PE_NEED_NOT);
+		pdpe_set_state(pe,PDPE_WORK_PE_NEED_NOT);//prize
 		goto out;
 	}
 
@@ -587,7 +592,7 @@ static int _pe_is_algo_ready(struct chg_alg_device *alg)
 		} else if ((uisoc < pe->ta_start_battery_soc &&
 			    pe->ref_vbat > pe->vbat_threshold) ||
 			uisoc >= pe->ta_stop_battery_soc) {
-			pdpe_set_state(pe,PDPE_WORK_PE_NEED_NOT);
+			pdpe_set_state(pe,PDPE_WORK_PE_NEED_NOT);//prize
 			ret_value = ALG_NOT_READY;
 		} else {
 			ret_value = ALG_READY;
@@ -625,9 +630,9 @@ static int _pe_init_algo(struct chg_alg_device *alg)
 	log_level = pe_hal_get_log_level(alg);
 	pr_notice("%s: log_level=%d", __func__, log_level);
 	
-	log_level = 3;
+	log_level = 3;//prize 
 	
-	pdpe_set_state(pe,PDPE_WORK_INIT_DONE);
+	pdpe_set_state(pe,PDPE_WORK_INIT_DONE);//prize 
 	
 	if (log_level > 0)
 		pe_dbg_level = log_level;
@@ -697,7 +702,7 @@ static int _pe_notifier_call(struct chg_alg_device *alg,
 
 	return 0;
 }
-/*
+/*//prize
 static int pe_get_conditional_vbus(struct chg_alg_device *alg, u32 uA)
 {
 	int chr_volt = 0, orig_chr_current = 0;
@@ -778,7 +783,7 @@ static int __pe_run(struct chg_alg_device *alg)
 
 	chr_volt = pe_hal_get_vbus(alg);
 	//chr_volt2 = pe_get_conditional_vbus(alg, 500000);
-	chr_volt2 = chr_volt;
+	chr_volt2 = chr_volt;//prize
 
 	if (pe->ta_9v_support && pe->ta_12v_support) {
 		if (abs(chr_volt - 12000000) > VBUS_MAX_DROP) {
@@ -796,6 +801,7 @@ static int __pe_run(struct chg_alg_device *alg)
 			pe->ta_12v_support, tune);
 	} else if (pe->ta_9v_support && !pe->ta_12v_support) {
 		if (abs(chr_volt - 9000000) > VBUS_MAX_DROP) {
+		//prize begin
 			if (abs(chr_volt2 - 9000000) > VBUS_MAX_DROP){
 				tune = true;
 				pe_err("----gezi-000-----%s: vbus:%d chr_volt2:%d ads:%d,tune:%d\n",__func__, chr_volt,chr_volt2,abs(chr_volt2 - 9000000),tune);
@@ -812,6 +818,7 @@ static int __pe_run(struct chg_alg_device *alg)
 			pe_dbg("----gezi---111---%s: vbus:%d chr_volt2:%d tune:%d\n",__func__, chr_volt,chr_volt2,tune);
 		}
 		pe_dbg("%s: vbus:%d target:%d 9v:%d 12v:%d tune:%d\n",__func__, chr_volt,9000000, pe->ta_9v_support,pe->ta_12v_support, tune);
+	//prize end
 	} else {
 		tune = false;
 		pe_dbg("%s:error setting vbus:%d 9v:%d 12v:%d tune:%d\n",
@@ -866,13 +873,13 @@ static int __pe_run(struct chg_alg_device *alg)
 				pe->ta_stop_battery_soc, ichg / 1000,
 				ret);
 			pe_leave(alg, true);
-			pdpe_set_state(pe,PDPE_WORK_PE_RUN_END);
+			pdpe_set_state(pe,PDPE_WORK_PE_RUN_END);//prize
 			goto _out;
 		}
 	}
 
 	mtk_pe_set_charging_current(alg);
-	pdpe_set_state(pe,PDPE_WORK_PE_RUN);
+	pdpe_set_state(pe,PDPE_WORK_PE_RUN);//prize
 	
 	chr_volt = pe_hal_get_vbus(alg);
 	mivr = chr_volt - 1000000;
@@ -915,7 +922,9 @@ int _pe_start_algo(struct chg_alg_device *alg)
 	int ret, ret_value;
 
 	pe = dev_get_drvdata(&alg->dev);
-	pe_dbg("%s state:%d %s\n", __func__,pe->state, pe_state_to_str(pe->state));
+	pe_dbg("%s state:%d %s\n", __func__,
+		pe->state,
+		pe_state_to_str(pe->state));
 
 	/* Lock */
 	mutex_lock(&pe->access_lock);
@@ -1076,15 +1085,13 @@ static void mtk_pe_parse_dt(struct mtk_pe *pe,
 
 }
 
-
-
 static int mtk_pe_probe(struct platform_device *pdev)
 {
 	struct mtk_pe *pe = NULL;
 
-	pr_err("%s: starts\n", __func__);
+	pr_notice("%s: starts\n", __func__);
 	
-	pr_err("gezi--------%s-----------%d\n",__func__,__LINE__);
+	pr_err("gezi--------%s-----------%d\n",__func__,__LINE__);//prize
 
 	pe = devm_kzalloc(&pdev->dev, sizeof(*pe), GFP_KERNEL);
 	if (!pe)
@@ -1101,17 +1108,19 @@ static int mtk_pe_probe(struct platform_device *pdev)
 
 	mtk_pe_parse_dt(pe, &pdev->dev);
 	//pe->bat_psy = devm_power_supply_get_by_phandle(&pdev->dev, "gauge");
-	pe->bat_psy = power_supply_get_by_name("bms");
+	pe->bat_psy = power_supply_get_by_name("bms");//prize
 	
 	if (IS_ERR_OR_NULL(pe->bat_psy))
-		pe_err("%s: devm power fail to get bms\n", __func__);
+		pe_err("%s: devm power fail to get bms\n", __func__);//prize
 
-	pe->alg = chg_alg_device_register("pe", &pdev->dev,pe, &pe_alg_ops, NULL);
-					
+	pe->alg = chg_alg_device_register("pe", &pdev->dev,
+					pe, &pe_alg_ops, NULL);
+//prize begin
 	pe->pdpe_psy = power_supply_get_by_name("pdpe-state");
 	if(pe->pdpe_psy == NULL){
 		pr_err("gezi get info->pdpe_psy failed\n");
 	}
+//prize end
 
 	return 0;
 
@@ -1148,6 +1157,7 @@ static struct platform_driver pe_driver = {
 		   .of_match_table = mtk_pe_of_match,
 	},
 };
+//prize begin
 int mtk_pe_init(void)
 {
 	return platform_driver_register(&pe_driver);
@@ -1171,3 +1181,4 @@ MODULE_AUTHOR("wy.chuang <wy.chuang@mediatek.com>");
 MODULE_DESCRIPTION("MTK Pump Express algorithm Driver");
 MODULE_LICENSE("GPL");
 */
+//prize end

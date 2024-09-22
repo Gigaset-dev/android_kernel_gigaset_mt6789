@@ -50,6 +50,15 @@ config GOODIX_SENSOR_TYPE
 	  GF3288 GF5206 GF5216 GF5208
 endif
 
+# prize modify by liaoxingen for goodix figner start
+if MTK_FINGERPRINT_SELECT = "gw9518"
+config GOODIX_GW9518_FINGERPRINT
+     bool "Goodix GW9518 Fingerprint"
+     default y
+     help
+        Goodix Fingerprint chip GW9518  TEE driver
+endif
+# prize modify by liaoxingen for goodix figner end
 
 #prize-add-pengzhipeng-20191105-start
 if MTK_FINGERPRINT_SELECT = "ft9362"
@@ -141,6 +150,13 @@ if MTK_FINGERPRINT_SELECT = "fortsense_driver_all_in_one"
 	   help
 			fortsense fingerprint Fortsense's device.
 endif
+if MTK_FINGERPRINT_SELECT = "ft9391_tee"
+  config MTK_FINGERPRINT_FT9391_TEE
+       bool "FT9391 TEE Fingerprint"
+       default y
+	   help
+			FT9391 fingerprint device.
+endif
 #prize added by chenjiaxi, fortsense fingerprint, 20210410-end
 #prize-add finger-wangyongsheng-20210327-start
 if MTK_FINGERPRINT_SELECT = "microarray_fp"
@@ -149,6 +165,14 @@ config MICROARRAY_FP
     default y
     help
 		microarray fingerprint.
+endif
+
+if MTK_FINGERPRINT_SELECT = "udf_fortsense_fs6281"
+config UDF_FORTSENSE_FS6281
+    bool "udf_fortsense_fs6281 Fingerprint"
+    default y
+    help
+    	udf_fortsense_fs6281 fingerprint.
 endif
 #prize-add finger-wangyongsheng-20210327-end
 
@@ -176,3 +200,7 @@ config MTK_FINGERPRINT_FORTSENSE
 	  driver will support fingerprint function
 	  
 #prize add by lipengpeng 20220630 end
+
+#prize-add finger-durunshen-20230410-start
+source "drivers/input/fingerprint/focaltech_fp/Kconfig" 
+#prize-add finger-durunshen-20230410-end

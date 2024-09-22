@@ -64,9 +64,9 @@
 
 #define CWFG_NAME               "cw221X"
 #define SIZE_OF_PROFILE         80
-#define USER_RSENSE             1000  /* mhom rsense * 1000  for convenience calculation */
+#define USER_RSENSE             5000  /* mhom rsense * 1000  for convenience calculation */
 
-#define queue_delayed_work_time  8000
+#define queue_delayed_work_time  1000  //hjw for  8000->1000
 #define queue_start_work_time    50
 
 #define CW_SLEEP_20MS           20
@@ -79,6 +79,7 @@
 #define CW_TRUE                 1
 #define CW_RETRY_COUNT          3
 #define CW_VOL_UNIT             1000
+#define CW_CUR_UNIT		1000
 #define CW_LOW_VOLTAGE_REF      2500
 #define CW_LOW_VOLTAGE          3000
 #define CW_LOW_VOLTAGE_STEP     10
@@ -100,18 +101,19 @@
 
 int g_cw2015_present = 0;
 
+#if IS_ENABLED(CONFIG_MTK_CW221X_SUPPORT_OF)
+#define SIZE_BATINFO    80
+static unsigned char config_profile_info[SIZE_OF_PROFILE] = {0};
+#else
 static unsigned char config_profile_info[SIZE_OF_PROFILE] = {
-		0x50,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-		0xA8,0xB7,0xBD,0xCF,0xC6,0xC7,0x85,0x4B,
-		0x20,0xFF,0xFF,0xC8,0x88,0x71,0x59,0x4B,
-		0x41,0x36,0x29,0x56,0x23,0xD9,0xBF,0xDD,
-		0xD5,0xCD,0xCB,0xC9,0xC6,0xC2,0xBE,0xB8,
-		0xB3,0xBA,0xBC,0xA0,0x8C,0x84,0x79,0x70,
-		0x6C,0x6E,0x83,0x8F,0xA1,0x8D,0x60,0xD8,
-		0x80,0x00,0xAB,0x10,0x00,0x82,0xE7,0x00,
-		0x00,0x00,0x64,0x12,0x91,0xCA,0x00,0x00,
-		0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xDD,
+0x5A,0x00,0x00,0x00,0x00,0x00,0x00,0x09,0xA2,0xAB,0xA5,0xC1,0xA8,0xA3,0xDC,
+0xC9,0xBF,0xFF,0xFF,0xFF,0xC4,0x97,0x74,0x5E,0x55,0x52,0x4E,0xD7,0xC7,0xDA,
+0xF1,0xD1,0xD0,0xCF,0xCE,0xCE,0xCC,0xC8,0xC1,0xD5,0xAF,0xC3,0xC2,0xA5,0x94,
+0x88,0x82,0x74,0x69,0x66,0x78,0x8F,0xA6,0x86,0x5C,0x57,0x20,0x00,0xAB,0x10,
+0x00,0xB0,0xFD,0x00,0x00,0x00,0x64,0x2B,0xC0,0x30,0x00,0x00,0x00,0x00,0x00,
+0x00,0x00,0x00,0x00,0x44,
 };
+#endif
 
 struct cw_battery {
 	struct i2c_client *client;
@@ -724,7 +726,7 @@ static int cw_battery_get_property(struct power_supply *psy,
 		val->intval = cw_bat->voltage * CW_VOL_UNIT;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		val->intval = cw_bat->cw_current;
+		val->intval = cw_bat->cw_current * CW_CUR_UNIT;
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
@@ -757,6 +759,14 @@ static int cw221X_probe(struct i2c_client *client, const struct i2c_device_id *i
 	int ret;
 	int loop = 0;
 	struct cw_battery *cw_bat;
+//prize add by huarui, support config by dts, 20190612 start
+#if IS_ENABLED(CONFIG_MTK_CW221X_SUPPORT_OF)
+	struct device_node *np = NULL;
+	int size = 0;
+	uint8_t buf[SIZE_BATINFO] = {0};
+	int i;
+#endif
+//prize add by huarui, support config by dts, 20190612 end
 #ifdef CW_PROPERTIES
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
 	struct power_supply_desc *psy_desc;
@@ -774,7 +784,30 @@ static int cw221X_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	i2c_set_clientdata(client, cw_bat);
 	cw_bat->client = client;
-
+//prize add by huarui, support config by dts, 20190612 start
+#if IS_ENABLED(CONFIG_MTK_CW221X_SUPPORT_OF)
+	np = client->dev.of_node;
+	if (np){
+// prize-add-sunshuai-2015 Multi-Battery Solution-20200222-start
+		size = of_property_count_u8_elems(np,"batinfo");
+		cw_printk("cw_bat get batinfo size %d!\n",size);
+		if (size == SIZE_BATINFO){
+			ret = of_property_read_u8_array(np,"batinfo",buf,size);
+			if (!ret){
+				memcpy(config_profile_info,buf,size);
+				for(i=0;i<size;i++){
+					printk("cw221x_probe[%d] %x ",i,config_profile_info[i]);
+			    }
+				cw_printk("cw_bat get batinfo sucess size(%d)!\n",size);
+			}else{
+				cw_printk("cw_bat get batinfo fail %d!\n",ret);
+			}
+		}else{
+			cw_printk("cw_bat get batinfo size fail %d!\n",size);
+		}
+   	}
+#endif
+//prize add by huarui, support config by dts, 20190612 end
 	ret = cw_init(cw_bat);
 	while ((loop++ < CW_RETRY_COUNT) && (ret != 0)) {
 		msleep(CW_SLEEP_200MS);

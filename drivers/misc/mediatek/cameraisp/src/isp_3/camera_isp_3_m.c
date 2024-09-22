@@ -297,6 +297,8 @@ static unsigned int g_log_def_constraint;
 #define ISP_REG_ADDR_TG2_INTER_ST (ISP_ADDR + 0x244C)
 #define ISP_REG_ADDR_IMGO_BASE_ADDR (ISP_ADDR + 0x3300)
 #define ISP_REG_ADDR_RRZO_BASE_ADDR (ISP_ADDR + 0x3320)
+#define ISP_REG_ADDR_AFO_XSIZE (ISP_ADDR + 0x3488)
+#define ISP_REG_ADDR_AFO_YSIZE (ISP_ADDR + 0x348C)
 #define ISP_REG_ADDR_DMA_DCM_STATUS (ISP_ADDR + 0x1A8)
 
 #define ISP_REG_ADDR_DMA_REQ_STATUS (ISP_ADDR + 0x1C0)
@@ -414,6 +416,9 @@ static unsigned int g_log_def_constraint;
 #define ISP_INNER_REG_ADDR_RRZ_D_VERT_INT_OFST (ISP_ADDR_CAMINF + 0xE7BC)
 #define ISP_INNER_REG_ADDR_RRZ_D_IN_IMG (ISP_ADDR_CAMINF + 0xE7A4)
 #define ISP_INNER_REG_ADDR_RRZ_D_OUT_IMG (ISP_ADDR_CAMINF + 0xE7A8)
+
+#define ISP_INNER_REG_ADDR_AFO_XSIZE (ISP_ADDR_CAMINF + 0xF488)
+#define ISP_INNER_REG_ADDR_AFO_YSIZE (ISP_ADDR_CAMINF + 0xF48C)
 
 /* camsv hw     no inner address to     read */
 /* #define ISP_INNER_REG_ADDR_IMGO_SV_XSIZE        (0) */
@@ -8007,7 +8012,7 @@ static bool ISP_PM_QOS_CTRL_FUNC(unsigned int bIsOn, unsigned int module)
 {
 	int port = 0;
 
-	if (module > ISP_CAM_TYPE_CAM_AMOUNT) {
+	if (module >= ISP_CAM_TYPE_CAM_AMOUNT) {
 		log_err("HW_module: %d", module);
 		return MFALSE;
 	}
@@ -8020,8 +8025,8 @@ static bool ISP_PM_QOS_CTRL_FUNC(unsigned int bIsOn, unsigned int module)
 			G_PM_QOS[module].port_bw[port].avg = 0;
 			G_PM_QOS[module].port_bw[port].peak = 0;
 		}
+		log_inf("PM_QoS Clr BW: module[%d]\n", module);
 	}
-
 	if (G_PM_QOS[module].upd_flag && G_PM_QOS[module].sof_flag) {
 
 		ISP3_SetPMQOS(E_BW_UPDATE, module,
@@ -10138,7 +10143,7 @@ static __tcmfunc irqreturn_t ISP_Irq_CAM(signed int Irq, void *DeviceId)
 			_fbc_chk[1].Reg_val = ISP_RD32(ISP_REG_ADDR_RRZO_FBC);
 			IRQ_LOG_KEEPER(
 				_IRQ, m_CurrentPPB, _LOG_INF,
-				"P1_SOF_%d_%d(0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x, D_%d(%d/%d)_Filled(%d_%d_%d),D_%d(%d/%d)_Filled(%d_%d_%d) )\n",
+				"P1_SOF_%d_%d(0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x, D_%d(%d/%d)_Filled(%d_%d_%d),D_%d(%d/%d)_Filled(%d_%d_%d) )\n",
 				sof_count[_PASS1], cur_v_cnt,
 				(unsigned int)(_fbc_chk[0].Reg_val),
 				(unsigned int)(_fbc_chk[1].Reg_val),
@@ -10146,6 +10151,10 @@ static __tcmfunc irqreturn_t ISP_Irq_CAM(signed int Irq, void *DeviceId)
 				ISP_RD32(ISP_REG_ADDR_RRZO_BASE_ADDR),
 				ISP_RD32(ISP_INNER_REG_ADDR_IMGO_YSIZE),
 				ISP_RD32(ISP_INNER_REG_ADDR_RRZO_YSIZE),
+				ISP_RD32(ISP_REG_ADDR_AFO_XSIZE),
+				ISP_RD32(ISP_REG_ADDR_AFO_YSIZE),
+				ISP_RD32(ISP_INNER_REG_ADDR_AFO_XSIZE),
+				ISP_RD32(ISP_INNER_REG_ADDR_AFO_YSIZE),
 				ISP_RD32(ISP_REG_ADDR_TG_MAGIC_0),
 				ISP_RD32(ISP_REG_ADDR_DMA_DCM_STATUS),
 				_imgo_,
@@ -11143,6 +11152,19 @@ static long ISP_ioctl(struct file *pFile, unsigned int Cmd, unsigned long Param)
 			}
 		}
 		break;
+	case ISP_CLR_ISPCLK:
+		{
+			if (copy_from_user(DebugFlag, (void *)Param,
+				sizeof(unsigned int)) == 0) {
+				log_inf("ISP PMQoS E_CLK_CLR %d\n", DebugFlag[0]);
+
+				ISP3_SetPMQOS(E_CLK_CLR, 0, &DebugFlag[0]);
+			} else {
+				log_err("ISP_CLR_ISPCLK copy_from_user failed\n");
+				Ret = -EFAULT;
+			}
+		}
+		break;
 	case ISP_GET_ISPCLK:
 		{
 			int result = 0;
@@ -11580,9 +11602,9 @@ compat_get_isp_waitirq_data(struct compat_ISP_WAIT_IRQ_STRUCT __user *data32,
 	compat_uint_t tmp2;
 	compat_uint_t tmp3;
 	compat_uptr_t uptr;
-	struct ISP_IRQ_USER_STRUCT isp_irq_user_tmp;
-	struct ISP_IRQ_TIME_STRUCT isp_irq_time_tmp;
-	struct ISP_EIS_META_STRUCT isp_eis_meta_tmp;
+	struct ISP_IRQ_USER_STRUCT isp_irq_user_tmp = {0};
+	struct ISP_IRQ_TIME_STRUCT isp_irq_time_tmp = {0};
+	struct ISP_EIS_META_STRUCT isp_eis_meta_tmp = {0};
 	int err;
 
 	err = get_user(tmp, &data32->Clear);
@@ -11626,9 +11648,9 @@ compat_put_isp_waitirq_data(struct compat_ISP_WAIT_IRQ_STRUCT __user *data32,
 	compat_uint_t tmp;
 	compat_uint_t tmp2;
 	compat_uint_t tmp3;
-	struct ISP_IRQ_USER_STRUCT isp_irq_user_tmp;
-	struct ISP_IRQ_TIME_STRUCT isp_irq_time_tmp;
-	struct ISP_EIS_META_STRUCT isp_eis_meta_tmp;
+	struct ISP_IRQ_USER_STRUCT isp_irq_user_tmp = {0};
+	struct ISP_IRQ_TIME_STRUCT isp_irq_time_tmp = {0};
+	struct ISP_EIS_META_STRUCT isp_eis_meta_tmp = {0};
 	int err;
 
 	err = get_user(tmp, &data->Clear);

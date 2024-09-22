@@ -1910,7 +1910,7 @@ static void aw_sar_ps_notify_callback_work(struct work_struct *work)
 		pr_info("sar aw_g_device is NUll error!\n");
 	}
 }
-
+//prize add by dengzhiyuan 20230801 start
 void mtk_nanohub_calibration_to_hub(void)
 {
 	if (aw_g_device != NULL) {
@@ -2000,7 +2000,7 @@ static int sar_cali_psy_reg(struct device *dev)
 	}
 	return 0;
 }
-
+//prize add by dengzhiyuan 20230801 end
 
 
 static int aw_sar_ps_get_state(struct power_supply *psy, bool *present)
@@ -2141,9 +2141,9 @@ static int __init hf_manager_init(void)
 			&hf_manager_proc_fops, &hfcore))
 		pr_err("Failed to create proc\n");
 		
-		
+//prize add by dengzhiyuan 20230801 start
 	sar_cali_psy_reg(dev);
-
+//prize add by dengzhiyuan 20230801 end
 
 	/* awinic bob add start */
 #ifdef AW_USB_PLUG_CAIL

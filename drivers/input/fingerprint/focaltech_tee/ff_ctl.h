@@ -158,7 +158,4 @@ typedef struct {
 #define FF_IOC_WRITE_FINGER_STATE     _IOW(FF_IOC_MAGIC, 0x0d, int)
 /* Query the driver version string. */
 #define FF_IOC_GET_HAL_VERSION      _IOR(FF_IOC_MAGIC, 0x0e, const char)
-
-
-
 #endif /* __FF_CTRL_API_H__ */

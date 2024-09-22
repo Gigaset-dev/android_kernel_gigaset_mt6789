@@ -808,8 +808,6 @@ void vcp_disable_pm_clk(enum feature_id id)
 		vcp_disable_dapc();
 		vcp_wait_awake_count();
 
-		vcp_wait_awake_count();
-
 		ret = pm_runtime_put_sync(vcp_io_devs[VCP_IOMMU_256MB1]);
 		if (ret)
 			pr_debug("[VCP] %s: pm_runtime_put_sync\n", __func__);

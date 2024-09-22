@@ -30,5 +30,7 @@ extern struct hardware_info current_gyroscope_info;
 extern struct hardware_info current_barosensor_info;
 extern struct hardware_info current_sarsensor_info;
 extern struct hardware_info current_flash_lpddr_info;
-
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO_UFS_HEALTH)
+extern struct hardware_info current_flash_health_info;
+#endif	
 #endif /* _HARDWARE_INFO_H_ */

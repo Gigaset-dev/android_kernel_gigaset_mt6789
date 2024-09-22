@@ -1,0 +1,10 @@
+#
+# TMS NFC device
+#
+
+config TMS_NFC_DEVICE
+    tristate "TMS NFC Driver"
+    depends on I2C && TMS_DEVICE
+    help
+        Say Y here if you have I2C device.
+

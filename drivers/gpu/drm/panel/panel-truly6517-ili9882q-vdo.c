@@ -545,7 +545,7 @@ static int panel_ata_check(struct drm_panel *panel)
 	struct lcm *ctx = panel_to_lcm(panel);
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
 	unsigned char data[3] = {0x00, 0x00, 0x00};
-	unsigned char id[3] = {0x30, 0x80, 0x00};
+	unsigned char id[3] = {0x00, 0x80, 0x00};
 	ssize_t ret;
 
 	ret = mipi_dsi_dcs_read(dsi, 0x4, data, 3);
@@ -554,14 +554,14 @@ static int panel_ata_check(struct drm_panel *panel)
 		return 0;
 	}
 
-	printk("ATA read data %x %x %x\n", data[0], data[1], data[2]);
+	pr_info("ATA read data %x %x %x\n", data[0], data[1], data[2]);
 
 	if (data[0] == id[0] &&
 	    data[1] == id[1] &&
 	    data[2] == id[2])
 		return 1;
 
-	printk("ATA expect data is %x %x %x\n", id[0], id[1], id[2]);
+	pr_info("ATA expect data is %x %x %x\n", id[0], id[1], id[2]);
 
 	return 0;
 }

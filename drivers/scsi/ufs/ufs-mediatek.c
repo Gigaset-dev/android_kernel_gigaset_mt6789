@@ -34,7 +34,11 @@
 #include "unipro.h"
 #include "ufs-mediatek.h"
 #include "ufs-mediatek-dbg.h"
-
+//drv add by xudongfang for ufs health at 20230721 start
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO_UFS_HEALTH)
+#include "../../misc/mediatek/prize/hardware_info/hardware_info.h"
+#endif
+//drv add by xudongfang for ufs health at 20230721 end
 #if IS_ENABLED(CONFIG_MTK_AEE_FEATURE)
 #include <mt-plat/aee.h>
 static int ufs_abort_aee_count;
@@ -45,7 +49,9 @@ static int ufs_abort_aee_count;
 #undef CREATE_TRACE_POINTS
 
 //prize add by lipengpeng 20220901 start
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
 #include "../../misc/mediatek/prize/hardware_info/hardware_info.h"
+#endif
 //prize add by lipengpeng 20220901 end 
 
 #define ufs_mtk_va09_pwr_ctrl(res, on) \
@@ -2196,10 +2202,10 @@ static void ufs_mtk_fixup_dev_quirks(struct ufs_hba *hba)
 {
 	struct ufs_dev_info *dev_info = &hba->dev_info;
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
-//prize add by lipengpeng 20230207 start 
-#if IS_ENABLED(CONFIG_PRIZE_UFS_LIFE_SUPPORT)
+//drv add by xudongfang for ufs health at 20230721 start
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO_UFS_HEALTH)
 	u8 *desc_buf;
-	int ret; 
+	int ret;
 	u8 LifeEstA_value;
     u8 LifeEstB_value;
     u8 PreEol_value;
@@ -2207,7 +2213,7 @@ static void ufs_mtk_fixup_dev_quirks(struct ufs_hba *hba)
 	if (!desc_buf)
 		printk("lpp------memory allocation failed\n");
 #endif
-//prize add by lipengpeng 20230207 end 
+//drv add by xudongfang for ufs health at 20230721 end
 	/*
 	 * If VCC setting is no yet enable,
 	 * setting VCC by ufs_mtk_fixup_vcc_regulator.
@@ -2244,20 +2250,23 @@ static void ufs_mtk_fixup_dev_quirks(struct ufs_hba *hba)
 	ufs_mtk_install_tracepoints(hba);
 
 //prize add by lipengpeng 20220901 start 
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
 	sprintf(current_flash_lpddr_info.chip,"model=%s",hba->dev_info.model);
     sprintf(current_flash_lpddr_info.id,"Device vendor=0x%X", hba->dev_info.wmanufacturerid);
     sprintf(current_flash_lpddr_info.vendor,"hba->ufs_version = 0x%x", hba->ufs_version);
-#if IS_ENABLED(CONFIG_PRIZE_UFS_LIFE_SUPPORT)
-	ret = ufshcd_read_desc_param(hba, QUERY_DESC_IDN_HEALTH, 0, HEALTH_DESC_PARAM_LIFE_TIME_EST_A,desc_buf, 1);
+//drv add by xudongfang for ufs health at 20230721 start
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO_UFS_HEALTH)
+    ret = ufshcd_read_desc_param(hba, QUERY_DESC_IDN_HEALTH, 0, HEALTH_DESC_PARAM_LIFE_TIME_EST_A,desc_buf, 1);
 	LifeEstA_value = desc_buf[HEALTH_DESC_PARAM_LEN];
-	sprintf(current_mmc_info.chip,"0x%02x",LifeEstA_value);
+	sprintf(current_flash_health_info.chip,"%02x",LifeEstA_value);
 	ret = ufshcd_read_desc_param(hba, QUERY_DESC_IDN_HEALTH, 0, HEALTH_DESC_PARAM_LIFE_TIME_EST_B,desc_buf, 1);
 	LifeEstB_value = desc_buf[HEALTH_DESC_PARAM_LEN];
-    sprintf(current_mmc_info.vendor,"0x%02x",LifeEstB_value);
+    sprintf(current_flash_health_info.vendor,"%02x",LifeEstB_value);
 	ret = ufshcd_read_desc_param(hba, QUERY_DESC_IDN_HEALTH, 0, HEALTH_DESC_PARAM_EOL_INFO,desc_buf, 1);
 	PreEol_value = desc_buf[HEALTH_DESC_PARAM_LEN];
-    sprintf(current_mmc_info.id,"0x%02x",PreEol_value);
-   kfree(desc_buf);
+    sprintf(current_flash_health_info.id,"%02x",PreEol_value);
+#endif
+//drv add by xudongfang for ufs health at 20230721 end
 #endif
 //prize add by lipengpeng 20220901 end 
 

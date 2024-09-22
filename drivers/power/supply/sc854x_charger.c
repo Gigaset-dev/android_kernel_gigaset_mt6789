@@ -204,6 +204,8 @@ struct sc854x {
     struct power_supply_desc psy_desc;
     struct power_supply_config psy_cfg;
     struct power_supply *fc2_psy;
+	struct power_supply *charge_psy;
+	bool sc_adc_disabled;
 };
 
 /************************************************************************/
@@ -949,6 +951,27 @@ static int sc854x_get_adc_data(struct sc854x *sc, int channel,  int *result)
     int ret;
     u16 val;
     u16 t;
+	//prize hjw for  ibat start
+	#if IS_ENABLED(CONFIG_BATTERY_CW2217)
+	union power_supply_propval prop;
+	
+	if(channel == ADC_IBAT)
+	{
+		struct power_supply *bms_psy = NULL;
+		bms_psy = power_supply_get_by_name("cw-bat");
+		if (IS_ERR_OR_NULL(bms_psy)) {
+			sc_err("%s Couldn't get bms_psy\n", __func__);
+		}
+		else{
+			ret = power_supply_get_property(bms_psy,POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
+			ret = prop.intval;
+			sc_err("gezi %s:%d\n", __func__,ret);
+			*result = prop.intval;
+			return 0;
+		}
+	}
+	#endif
+	//prize hjw for  ibat end
     if(channel >= ADC_MAX_NUM)return 0;
     
     usleep_range(15000, 17000);
@@ -1669,6 +1692,11 @@ static int sc854x_psy_register(struct sc854x *sc)
         sc_err("failed to register fc2_psy\n");
         return PTR_ERR(sc->fc2_psy);
     }
+	sc->charge_psy = power_supply_get_by_name("charger");
+	
+	if(!sc->charge_psy){
+		sc_err("gezi failed to get charge_psy\n");
+	}
 
     sc_info("%s power supply register successfully\n", sc->psy_desc.name);
 
@@ -1873,6 +1901,7 @@ static int sc854x_charger_probe(struct i2c_client *client,
 
     sc->resume_completed = true;
     sc->irq_waiting = false;
+	sc->sc_adc_disabled = false;
 
     ret = sc854x_detect_device(sc);
     if (ret) {
@@ -1954,12 +1983,67 @@ static inline bool is_device_suspended(struct sc854x *sc)
     return !sc->resume_completed;
 }
 
+static int sc854x_suspend_disable_adc(struct sc854x *sc)
+{
+	union power_supply_propval prop;
+	int ret = 0;
+	
+	if(!sc){
+		pr_err("gezi------%s---sc null----%d\n",__func__,__LINE__);
+		return -1;
+	}
+	if(!sc->charge_psy){
+		sc->charge_psy = power_supply_get_by_name("charger");
+		if(!sc->charge_psy){
+			pr_err("gezi failed to get charge_psy\n");
+			return -1;
+		}
+		else{
+			ret = power_supply_get_property(sc->charge_psy,POWER_SUPPLY_PROP_ONLINE, &prop);
+			pr_err("gezi------%s----online:%d dis:%d\n",__func__,prop.intval,sc->sc_adc_disabled);
+			if((!prop.intval) && (!sc->sc_adc_disabled)){
+				sc->sc_adc_disabled = true;
+				sc854x_enable_adc(sc, false);
+			}
+		}
+	}
+	else{
+		ret = power_supply_get_property(sc->charge_psy,POWER_SUPPLY_PROP_ONLINE, &prop);
+		pr_err("gezi------%s----online:%d dis:%d\n",__func__,prop.intval,sc->sc_adc_disabled);
+		if((!prop.intval) && (!sc->sc_adc_disabled)){
+			sc->sc_adc_disabled = true;
+			sc854x_enable_adc(sc, false);
+		}
+	}
+	return 0;
+}
+
+static int sc854x_resume_enable_adc(struct sc854x *sc)
+{
+	//union power_supply_propval prop;
+	//int ret = 0;
+	
+	if(!sc){
+		pr_err("gezi------%s---sc null----%d\n",__func__,__LINE__);
+		return -1;
+	}
+	
+	pr_err("gezi------%s----dis:%d\n",__func__,sc->sc_adc_disabled);
+	
+	if(sc->sc_adc_disabled){
+		sc854x_enable_adc(sc, true);
+		sc->sc_adc_disabled = false;
+	}
+
+	return 0;
+}
 static int sc854x_suspend(struct device *dev)
 {
     struct i2c_client *client = to_i2c_client(dev);
     struct sc854x *sc = i2c_get_clientdata(client);
 
     mutex_lock(&sc->irq_complete);
+	sc854x_suspend_disable_adc(sc);
     sc->resume_completed = false;
     mutex_unlock(&sc->irq_complete);
     sc_err("Suspend successfully!");
@@ -1983,8 +2067,13 @@ static int sc854x_resume(struct device *dev)
 {
     struct i2c_client *client = to_i2c_client(dev);
     struct sc854x *sc = i2c_get_clientdata(client);
+	
+	pr_err("gezi------%s-------%d\n",__func__,__LINE__);
 
     mutex_lock(&sc->irq_complete);
+	
+	sc854x_resume_enable_adc(sc);
+	
     sc->resume_completed = true;
     if (sc->irq_waiting) {
         sc->irq_disabled = false;
@@ -2016,6 +2105,13 @@ static int sc854x_charger_remove(struct i2c_client *client)
 
 static void sc854x_charger_shutdown(struct i2c_client *client)
 {
+	struct sc854x *sc = i2c_get_clientdata(client);
+	if(!sc){
+		pr_err("gezi------%s---sc null----%d\n",__func__,__LINE__);
+		return;
+	}
+    sc854x_enable_adc(sc, false);
+	//printk("sc854x_charger_shutdown!");
 }
 
 static const struct dev_pm_ops sc854x_pm_ops = {

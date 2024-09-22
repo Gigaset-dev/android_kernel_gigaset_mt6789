@@ -18,15 +18,13 @@ subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/$(MTK_PLA
 subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat
 subdir-ccflags-y += -I$(srctree)/drivers/spi/mediatek/$(MTK_PLATFORM)
 
+
 #compatible for trustkernel
 subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/tkcore/include/
 subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/tkcore/core
 
 #compatible for microtrust
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/teei/V1.0/tz_vfs
-
-obj-m	+= micro_fp.o
-micro_fp-y	+= mtk-settings.o
-micro_fp-y	+= madev.o
-
+obj-m := microarray_fp.o
+microarray_fp-y	+= madev.o mtk-settings.o
 

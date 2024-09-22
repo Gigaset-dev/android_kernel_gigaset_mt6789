@@ -2030,6 +2030,11 @@ unsigned int mmc_calc_max_discard(struct mmc_card *card)
 	struct mmc_host *host = card->host;
 	unsigned int max_discard, max_trim;
 
+	//G5GF2 sd card format 20% reboot add by cjd 2022.7.03
+    if (mmc_card_sd(card) && mmc_card_uhs(card)){
+		return UINT_MAX;
+	}
+	
 	/*
 	 * Without erase_group_def set, MMC erase timeout depends on clock
 	 * frequence which can change.  In that case, the best choice is

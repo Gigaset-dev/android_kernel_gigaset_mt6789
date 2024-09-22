@@ -1,0 +1,9 @@
+#
+# TMS Guide device
+#
+
+config TMS_GUIDE_DEVICE
+    tristate "TMS Guide Driver"
+    depends on I2C && TMS_DEVICE
+    help
+        Say Y here to compile guidev for guide device register.

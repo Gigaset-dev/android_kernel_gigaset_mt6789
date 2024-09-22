@@ -203,3 +203,32 @@ config MTK_FLASHLIGHT_DLPT
 	  the current of battary dynamicly. It will start by request
 	  and notice user by kernel notifier.
 
+#/* prize add by zhuzhengjiang for flash aw3641e 20201224 start*/
+config MTK_FLASHLIGHT_AW3641E_GPIO
+	tristate "Mediatek flashlight aw3641e gpio driver"
+	depends on MTK_FLASHLIGHT
+	default n
+	help
+	  This is flashlight aw3641e gpio driver for camera.
+
+	  Say Y here if you want a aw3641e driver IC with GPIO interface.
+	  Select this only if your board has this IC.
+
+	  Say M here if you want to compile this driver as a module.
+#/* prize add by zhuzhengjiang for flash aw3641e 20201224 end*/
+
+#/* prize add by  huangjiwu for camera limit  20201224 start*/
+config DRV_CAMERA_POWER_LIMIT
+	tristate "Mediatek charger limit  driver"
+	depends on MTK_FLASHLIGHT
+	default n
+	help
+	  This is charger limit driver for camera.
+
+	  Say Y here if you want a charger limit interface.
+	  Select this only if your board has this IC.
+
+	  Say M here if you want to compile this driver as a module.
+#/* prize add by huangjiwu for camera limit 20201224 end*/
+
+

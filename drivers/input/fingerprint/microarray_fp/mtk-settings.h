@@ -46,12 +46,7 @@
 #include <asm/uaccess.h>
 #include <linux/gpio.h>
 #include <linux/spi/spi.h>
-#include <linux/regulator/consumer.h>
-#include <linux/power_supply.h>
-#include <linux/pinctrl/consumer.h>
-
-
-//#include "mtk_spi.h"
+////lude "mt_spi.h"
 //#include <linux/wakelock.h>
 ////lude <mt-plat/mt_gpio.h>
 #ifdef CONFIG_MTK_CLKMGR
@@ -62,13 +57,13 @@
 
 #define MA_DRV_NAME             "madev"
 
-#define MA_DTS_NAME           "mediatek,mt6765-fpc"// "mediatek,microarray_finger"
+#define MA_DTS_NAME            "mediatek,microarray_finger"
 
-#define MA_EINT_DTS_NAME        "mediatek,mt6765-fpc"//"mediatek,microarray_finger"
+#define MA_EINT_DTS_NAME        "mediatek,microarray_finger"
 
 #define MA_INT_PIN_LABEL		"finger_int_pin"
-//#define TEE_ID_COMPATIBLE_TRUSTKERNEL		//??2?¨¬tee
-#define TEE_ID_COMPATIBLE_MICROTRUST		//?1??tee
+//#define TEE_ID_COMPATIBLE_TRUSTKERNEL		//TrustKernel TEE
+//#define TEE_ID_COMPATIBLE_MICROTRUST		//MicroTrust  TEE
 //macro settings end
 
 
@@ -79,6 +74,9 @@ extern int mas_plat_remove(struct platform_device *pdev);
 
 extern int mas_probe(struct spi_device *spi);
 extern int mas_remove(struct spi_device *spi);
+
+/* add for spi cls ctl start */
+#ifdef CONFIG_SPI_MT65XX
 
 #include <linux/spi/spi.h>
 #include <linux/types.h>
@@ -169,7 +167,8 @@ struct mt_chip_conf {
     enum spi_tckdly tckdly;
 };
 
-/* add for spi cls ctl start */
+#endif 
+
 struct mt_spi_t {
         struct platform_device *pdev;
         void __iomem *regs;
@@ -188,7 +187,6 @@ struct mt_spi_t {
         struct clk *clk_main;
 #endif
 };
-
 void mt_spi_enable_clk(struct mt_spi_t *ms);
 void mt_spi_disable_clk(struct mt_spi_t *ms);
 void mt_spi_enable_master_clk(struct spi_device *spidev);
@@ -201,7 +199,7 @@ void mt_spi_disable_master_clk(struct spi_device *spidev);
 //packaging end
 
 //the interface called by madev
-int mas_select_transfer(struct spi_device *spi, int len);
+void mas_select_transfer(struct spi_device *spi, int len);
 int mas_finger_get_gpio_info(struct platform_device *pdev);
 int mas_finger_set_gpio_info(int cmd);
 void mas_enable_spi_clock(struct spi_device *spi);
@@ -216,8 +214,7 @@ void ma_spi_change(struct spi_device *spi, unsigned int speed, int flag);
 int mas_get_interrupt_gpio(unsigned int index);
 int mas_switch_power(unsigned int on_off);
 int mas_do_some_for_probe(struct spi_device *spi);
+int mas_finger_set_reset(int count);
 void mas_free_dts_info(void);
 int mas_tee_spi_transfer(u8 *txb, u8 *rxb, int len);
-extern int vfp_regulator_ctl(int enable);
-int mas_set_spi_controller_data(struct spi_device *spi);
 #endif

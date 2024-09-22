@@ -1,0 +1,10 @@
+#
+# MediaTek LCD_BIAS Driver
+#
+
+config BIAS_TPS65132_SUPPORT
+	tristate "TPS65132 lcd bias Driver"
+	help
+	  Enables to support lcd bias. 
+	  If unsure, say N.
+
