@@ -73,7 +73,8 @@
 #include "sm5602_fg.h"
 
 #if IS_ENABLED(CONFIG_PRIZE_CHARGE_CTRL_POLICY)
-bool g_charge_is_screen_on = true;
+bool g_charge_is_screen_on = 1;
+EXPORT_SYMBOL(g_charge_is_screen_on);
 #endif
 
 //prize add by lipengpeng 20210621 start 
@@ -3638,29 +3639,26 @@ static void bms_psy_init(struct platform_device *pdev,struct mtk_charger *info)
 
 #if IS_ENABLED(CONFIG_PRIZE_CHARGE_CTRL_POLICY)
 
-static int charger_disp_notifier_callback(struct notifier_block *nb,
-	unsigned long value, void *v)
+static int charge_fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
 {
-	struct mtk_charger *info = container_of(nb, struct mtk_charger, disp_notifier);
-	int *data = (int *)v;
+	int *evdata = (int *)data;
 
-	if (info && v) {
-		//cts_err("%s IN", __func__);
-		if (value == MTK_DISP_EARLY_EVENT_BLANK) {
-			if (*data == MTK_DISP_BLANK_POWERDOWN) {
-				g_charge_is_screen_on = false;
-			}
-		} else if (value == MTK_DISP_EVENT_BLANK) {
-			if (*data == MTK_DISP_BLANK_UNBLANK) {
-				g_charge_is_screen_on = true;
-			}
-		}
-	} else {
-		return -1;
-	}
+        if (event == MTK_DISP_EVENT_BLANK) {
+                if (*evdata == MTK_DISP_BLANK_UNBLANK) {
+						g_charge_is_screen_on = 1;
+					    printk("lpp---mtk charge is screen on \n");
+                } else if (*evdata == MTK_DISP_BLANK_POWERDOWN) {
+						g_charge_is_screen_on = 0;
+					    printk("lpp---mtk charge is screen off \n");
+                }
+        }
+		
+        return 0;
 
-	return 0;
 }
+static struct notifier_block charge_fb_notifier = {
+	.notifier_call = charge_fb_notifier_callback,
+};
 #endif
 //prize end
 
@@ -3858,17 +3856,12 @@ static int mtk_charger_probe(struct platform_device *pdev)
 	bms_psy_init(pdev,info);
 	
 #if IS_ENABLED(CONFIG_PRIZE_CHARGE_CTRL_POLICY)
-	info->disp_notifier.notifier_call = charger_disp_notifier_callback;
-	ret = mtk_disp_notifier_register("screen monitor", &info->disp_notifier);
-	if (ret) {
-		pr_err("Failed to register screen monitor notifier client:%d", ret);
-		//goto err_register_disp_notif_failed;
-	}
-	else{
-		pr_err("gezi screen monitor register success.\n");
-	}
+	ret = mtk_disp_notifier_register("mtk charge", &charge_fb_notifier);
+	if (ret)
+		pr_debug("[%s] failed to register mtk_disp_notifier_register %d\n", __func__, ret);
 #endif
 //prize end
+	info->pre_battery_ntc = info->battery_temp;//drv add by liuruiqian
 	
 	kthread_run(charger_routine_thread, info, "charger_thread");
 

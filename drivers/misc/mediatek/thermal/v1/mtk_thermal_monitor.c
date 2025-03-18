@@ -1426,6 +1426,7 @@ static int mtk_cooling_wrapper_set_cur_state
 	struct mtk_thermal_cooler_data *mcdata;
 	int ret = 0;
 	unsigned long cur_state = 0;
+	unsigned long max_state = 0;
 
 	mutex_lock(&MTM_COOLER_LOCK);
 	/* Recovery client's devdata */
@@ -1436,6 +1437,11 @@ static int mtk_cooling_wrapper_set_cur_state
 		mutex_unlock(&MTM_COOLER_LOCK);
 		return -1;
 	}
+
+
+	if (ops->get_max_state)
+		ret = ops->get_max_state(cdev, &max_state);
+
 	if (ops->get_cur_state)
 		ret = ops->get_cur_state(cdev, &cur_state);
 	/* check conditions */
@@ -1512,8 +1518,16 @@ static int mtk_cooling_wrapper_set_cur_state
 			, mcdata->tz->type, cdev->type, mcdata->trip, state);
 	THRML_STORAGE_LOG(THRML_LOGGER_MSG_COOL_STAE, set_cur_state,
 			mcdata->tz->type, mcdata->trip, cdev->type, state);
-	if (ops->set_cur_state)
-		ret = ops->set_cur_state(cdev, state);
+
+	if (ops->set_cur_state) {
+		if (state > max_state) {
+			THRML_ERROR_LOG("[.set_cur_state]E state is bigger than max_state.\n");
+			ops->set_cur_state(cdev, cur_state);
+			ret = -EINVAL;
+		} else {
+			ret = ops->set_cur_state(cdev, state);
+		}
+	}
 	if (ops_ext && ops_ext->set_cur_temp && mcdata->tz)
 		ops_ext->set_cur_temp(cdev, mcdata->tz->temperature);
 	/* reset devdata to mcdata */
@@ -1716,7 +1730,9 @@ static int __init thermal_monitor_init(void)
 		mtk_cooler_dtm_init();
 		mtk_cooler_bcct_init();
 		mtk_cooler_cam_init();
+#if IS_ENABLED(CONFIG_MTK_THERMAL_PA_VIA_ATCMD)
 		mtk_cooler_mutt_init();
+#endif
 		mtk_cooler_sysrst_init();
 		mtk_cooler_VR_FPS_init();
 		ta_init();
@@ -1756,7 +1772,9 @@ static void __exit thermal_monitor_exit(void)
 	mtk_cooler_dtm_exit();
 	mtk_cooler_bcct_exit();
 	mtk_cooler_cam_exit();
+#if IS_ENABLED(CONFIG_MTK_THERMAL_PA_VIA_ATCMD)
 	mtk_cooler_mutt_exit();
+#endif
 	mtk_cooler_sysrst_exit();
 	mtk_cooler_VR_FPS_exit();
 #if defined(LVTS_CPU_PM_NTFY_CALLBACK)

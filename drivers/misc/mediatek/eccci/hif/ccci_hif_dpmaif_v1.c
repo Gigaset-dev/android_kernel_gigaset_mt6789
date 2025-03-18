@@ -29,7 +29,7 @@
 #if IS_ENABLED(CONFIG_MTK_AEE_FEATURE)
 #include <mt-plat/aee.h>
 #endif
-
+#include <linux/suspend.h>
 
 #include "ccci_hif_dpmaif_v1.h"
 #include "dpmaif_reg_v1.h"
@@ -181,6 +181,7 @@ static int dpmaif_wait_resume_done(void)
 			CCCI_NORMAL_LOG(-1, TAG,
 				"[%s] warning: suspend_flag = 1; (cnt: %d)",
 				__func__, cnt);
+			pm_system_wakeup();
 			return -1;
 		}
 	}
@@ -4645,6 +4646,10 @@ static int dpmaif_pre_stop(unsigned char hif_id)
 	if (hif_id != DPMAIF_HIF_ID)
 		return -1;
 
+	if (dpmaif_ctrl->dpmaif_state == HIFDPMAIF_STATE_PWROFF
+		|| dpmaif_ctrl->dpmaif_state == HIFDPMAIF_STATE_MIN)
+		return 0;
+
 	dpmaif_stop_hw();
 
 	return 0;
@@ -5134,20 +5139,35 @@ static int dpmaif_tx_sw_solution_init(void)
 	if (dpmaif_ctrl->smem_base_vir == NULL || dpmaif_ctrl->smem_base_phy == 0 ||
 				dpmaif_ctrl->smem_size <= 0) {
 		dpmaif_ctrl->tx_sw_solution_enable = 0;
+#if IS_ENABLED(CONFIG_PHYS_ADDR_T_64BIT)
 		CCCI_ERROR_LOG(-1, TAG,
-			"[%s] error: fail. smem_base: %p(%llx); smem_size: %u\n",
+			"[%s] error: fail. smem_base: %p(0x%llx); smem_size: %u\n",
 			__func__, dpmaif_ctrl->smem_base_vir, dpmaif_ctrl->smem_base_phy,
 			dpmaif_ctrl->smem_size);
+#else
+		CCCI_ERROR_LOG(-1, TAG,
+			"[%s] error: fail. smem_base: %p(0x%lx); smem_size: %u\n",
+			__func__, dpmaif_ctrl->smem_base_vir, dpmaif_ctrl->smem_base_phy,
+			dpmaif_ctrl->smem_size);
+#endif
 		return 0;
 	}
 
 	dpmaif_ctrl->tx_sw_solution_enable = 1;
 
+#if IS_ENABLED(CONFIG_PHYS_ADDR_T_64BIT)
 	CCCI_NORMAL_LOG(-1, TAG,
-		"[%s] tx_sw_solution_enable: %u; smem_base: %p(0x%llX); smem_size: %u\n",
+		"[%s] tx_sw_solution_enable: %u; smem_base: %p(0x%llx); smem_size: %u\n",
 		__func__, dpmaif_ctrl->tx_sw_solution_enable,
 		dpmaif_ctrl->smem_base_vir, dpmaif_ctrl->smem_base_phy,
 		dpmaif_ctrl->smem_size);
+#else
+	CCCI_NORMAL_LOG(-1, TAG,
+		"[%s] tx_sw_solution_enable: %u; smem_base: %p(0x%lx); smem_size: %u\n",
+		__func__, dpmaif_ctrl->tx_sw_solution_enable,
+		dpmaif_ctrl->smem_base_vir, dpmaif_ctrl->smem_base_phy,
+		dpmaif_ctrl->smem_size);
+#endif
 
 	INIT_DELAYED_WORK(&dpmaif_ctrl->smem_drb_work, &dpmaif_smem_tx_done);
 	dpmaif_ctrl->smem_worker = alloc_workqueue("smem_ul_worker",

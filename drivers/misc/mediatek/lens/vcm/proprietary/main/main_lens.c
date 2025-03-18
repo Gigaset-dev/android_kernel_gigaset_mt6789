@@ -84,6 +84,8 @@ static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
 	GT9764BAF_Release, GT9764BAF_GetFileName, NULL},
     {1, AFDRV_AW8601CSR, AW8601CSR_SetI2Cclient, AW8601CSR_Ioctl,
 	 AW8601CSR_Release, AW8601CSR_GetFileName, NULL},
+	 {1, AFDRV_GT9772AF, GT9772AF_SetI2Cclient, GT9772AF_Ioctl,
+	 GT9772AF_Release, GT9772AF_GetFileName, NULL},
     {1, AFDRV_PD9402A, PD9402A_SetI2Cclient, PD9402A_Ioctl,
 	 PD9402A_Release, PD9402A_GetFileName, NULL},
 	/*Prize add by zhuzhengjiang 20220716 end*/

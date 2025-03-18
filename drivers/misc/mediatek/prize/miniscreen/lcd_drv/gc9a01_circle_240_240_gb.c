@@ -237,6 +237,7 @@ int gc9a01_scr_on(void)
 	schedule_delayed_work(&gc9a01_data.dwork, 2*HZ);
 	return 0;
 }
+EXPORT_SYMBOL(gc9a01_scr_on);
 
 #define SPI_MAX_SPEED_HZ     (48000000)
 

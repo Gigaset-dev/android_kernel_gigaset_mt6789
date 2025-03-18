@@ -259,6 +259,10 @@ void mtk_enc_put_buf(struct mtk_vcodec_ctx *ctx)
 	struct mtk_video_enc_buf *bs_info, *frm_info;
 	struct vb2_v4l2_buffer *dst_vb2_v4l2, *src_vb2_v4l2;
 	struct vb2_buffer *dst_buf;
+	char *pbuf;
+	int dump_size;
+	int i;
+	char debug_fb[200] = {0};
 
 	mutex_lock(&ctx->buf_lock);
 	do {
@@ -282,6 +286,24 @@ void mtk_enc_put_buf(struct mtk_vcodec_ctx *ctx)
 			frm_info = container_of(pfrm,
 				struct mtk_video_enc_buf, frm_buf);
 			src_vb2_v4l2 = &frm_info->vb;
+
+			if (rResult.flags & VENC_FLAG_ENCODE_TIMEOUT && pfrm->fb_addr[0].va != 0) {
+				mtk_v4l2_err("Venc Timeout Dump Framebuf %d VA=%p PA=%llx Size=0x%zx =>",
+				pfrm->index,
+				pfrm->fb_addr[0].va,
+				(u64)pfrm->fb_addr[0].dma_addr,
+				pfrm->fb_addr[0].size);
+
+				pbuf = (char *)pfrm->fb_addr[0].va;
+				dump_size = pfrm->fb_addr[0].size < 256 ? pfrm->fb_addr[i].size: 256;
+				for (i = 0; i < dump_size; i++) {
+					SPRINTF(debug_fb, "%s %02x", debug_fb, pbuf[i]);
+					if ((i + 1) % 16 == 0 || i == dump_size - 1) {
+						mtk_v4l2_err("%s", debug_fb);
+						memset(debug_fb, 0, ARRAY_SIZE(debug_fb));
+					}
+				}
+			}
 		}
 
 		if (src_vb2_v4l2 != NULL && dst_vb2_v4l2 != NULL) {
@@ -1582,6 +1604,12 @@ static int vidioc_venc_qbuf(struct file *file, void *priv,
 			ctx->id, buf->index, vq->num_buffers);
 		return -EINVAL;
 	}
+	if (IS_ERR_OR_NULL(buf->m.planes) || buf->length == 0) {
+		mtk_v4l2_err("[%d] buffer index %d planes address %p 0x%llx or length %d invalid",
+			ctx->id, buf->index, buf->m.planes,
+			(unsigned long long)buf->m.planes, buf->length);
+		return -EINVAL;
+	}
 	vb = vq->bufs[buf->index];
 	vb2_v4l2 = container_of(vb, struct vb2_v4l2_buffer, vb2_buf);
 	mtkbuf = container_of(vb2_v4l2, struct mtk_video_enc_buf, vb);
@@ -1962,13 +1990,20 @@ static int vb2ops_venc_queue_setup(struct vb2_queue *vq,
 	}
 
 	if (*nplanes) {
+		if (*nplanes != q_data->fmt->num_planes)
+			return -EINVAL;
 		for (i = 0; i < *nplanes; i++)
 			if (sizes[i] < q_data->sizeimage[i])
 				return -EINVAL;
 	} else {
 		*nplanes = q_data->fmt->num_planes;
-		for (i = 0; i < *nplanes; i++)
+		for (i = 0; i < *nplanes; i++) {
 			sizes[i] = q_data->sizeimage[i];
+			if (sizes[i] == 0) {
+				mtk_v4l2_err("plane size[%d] is 0", i);
+				return -EINVAL;
+			}
+		}
 	}
 
 	mtk_v4l2_debug(2, "[%d] nplanes %d sizeimage %d %d %d, state=%d",
@@ -2244,6 +2279,7 @@ static int vb2ops_venc_start_streaming(struct vb2_queue *q, unsigned int count)
 	mtk_venc_pmqos_begin_inst(ctx);
 	mutex_unlock(&ctx->dev->enc_dvfs_mutex);
 
+	kfree(param);
 	return 0;
 
 err_set_param:
@@ -2896,8 +2932,8 @@ static void mtk_venc_worker(struct work_struct *work)
 	}
 
 	for (i = 0; i < src_buf->num_planes ; i++) {
-		if (mtk_v4l2_dbg_level > 0)
-			pfrm_buf->fb_addr[i].va = vb2_plane_vaddr(src_buf, i) +
+		// always map va for fb dump when encode timeout
+		pfrm_buf->fb_addr[i].va = vb2_plane_vaddr(src_buf, i) +
 			(size_t)src_buf->planes[i].data_offset;
 		pfrm_buf->fb_addr[i].dma_addr =
 			vb2_dma_contig_plane_dma_addr(src_buf, i) +
@@ -3690,8 +3726,10 @@ int mtk_venc_lock(struct mtk_vcodec_ctx *ctx, u32 hw_id, bool sec)
 	else
 		ret = 0;
 
-	if (ret == 0)
+	if (ret == 0) {
 		ctx->dev->enc_hw_locked[hw_id] = lock;
+		ctx->core_locked[hw_id] = 1;
+	}
 
 	return ret;
 

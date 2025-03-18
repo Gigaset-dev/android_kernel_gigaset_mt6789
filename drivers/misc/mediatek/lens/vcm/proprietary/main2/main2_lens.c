@@ -81,6 +81,8 @@ static struct stAF_OisPosInfo OisPosInfo;
 static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
     {1, AFDRV_AW86014AF, AW86014AF_SetI2Cclient, AW86014AF_Ioctl,
 	 AW86014AF_Release, AW86014AF_GetFileName, NULL},
+    {1, AFDRV_AW86014PCSRAF, AW86014PCSRAF_SetI2Cclient, AW86014PCSRAF_Ioctl,
+	 AW86014PCSRAF_Release, AW86014PCSRAF_GetFileName, NULL},
 	{1, AFDRV_DW9718TAF, DW9718TAF_SetI2Cclient, DW9718TAF_Ioctl,
 	 DW9718TAF_Release, DW9718TAF_GetFileName, NULL},
 	{1, AFDRV_LC898212XDAF_F, LC898212XDAF_F_SetI2Cclient,
@@ -107,6 +109,10 @@ static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
     {1, AFDRV_AW86017CSRAF, AW86017CSRAF_SetI2Cclient, AW86017CSRAF_Ioctl,
 	 AW86017CSRAF_Release, AW86017CSRAF_GetFileName, NULL},
 	// prize add by zhuzhengjiang for af end
+	{1, AFDRV_DW9800WAF, DW9800WAF_SetI2Cclient_Main2, 
+	DW9800WAF_Ioctl_Main2, DW9800WAF_Release_Main2, 
+	DW9800WAF_GetFileName_Main2, NULL},
+
 };
 
 static struct stAF_DrvList *g_pstAF_CurDrv;

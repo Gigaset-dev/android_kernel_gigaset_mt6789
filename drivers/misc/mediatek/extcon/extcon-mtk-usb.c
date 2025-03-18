@@ -21,9 +21,14 @@
 #include <linux/proc_fs.h>
 
 #include "extcon-mtk-usb.h"
+//prize add by lipengpeng 20220613 start
+#include "../../../power/supply/mtk_charger.h"
+//prize add by lipengpeng 20220613 end
 
 //#include "../../../power/supply/mtk_charger.h"//prize
 #include "../../../power/supply/sm5602_fg.h"//prize
+
+extern int get_MT5725_status(void);//drv add by liuruiqian for wireless charge lock USB,20241118
 
 #if IS_ENABLED(CONFIG_TCPC_CLASS)
 #include "tcpm.h"
@@ -150,7 +155,8 @@ static bool usb_is_online(struct mtk_extcon_info *extcon)
 	dev_info(extcon->dev, "online=%d, type=%d\n", pval.intval, tval.intval);
 
 	if (pval.intval && (tval.intval == POWER_SUPPLY_TYPE_USB ||
-			tval.intval == POWER_SUPPLY_TYPE_USB_CDP))
+			tval.intval == POWER_SUPPLY_TYPE_USB_CDP) &&
+			0 != get_MT5725_status())//drv mod by liuruiqian for wireless charge lock USB,20241118
 		return true;
 	else
 		return false;

@@ -1,0 +1,65 @@
+#include "../../drv_common.h"
+
+#if PRI_PLATFORM_MT6835
+#include "./mt6835/custom.h"
+#endif
+
+
+#if PRI_PLATFORM_MT6789
+#include "./mt6789/custom.h"
+#endif
+
+#if PRI_PLATFORM_MT6855
+#include "./mt6855/custom.h"
+#endif
+
+
+/* Fingerprint GPIO standardization */
+&SPI_INDEX{
+	focaltech_fpspi@0 {
+		compatible = "focaltech,fpspi";
+		reg = <0>;
+		spi-max-frequency = <4000000>;
+		status = "okay";
+	};
+};
+&odm {
+	focaltech_fp: focaltech_fp {
+		compatible = "focaltech,fp";
+		interrupt-parent = <&pio>;
+		interrupts = <FP_IRQ_PIN IRQ_TYPE_EDGE_RISING>;
+	        debounce = <FP_IRQ_PIN 0>;
+	#if PRI_PLATFORM_MT6855	
+		focaltech_fp,use-regulator;
+		ff_vdd-supply = <&mt6369_vfp>; 
+	#endif	
+		focaltech_fp,read-chip;    //If you want to read the id please open this sentence
+	        focaltech_fp,reset-gpio = <&pio FP_RESET_PIN 0>;
+	        focaltech_fp,irq-gpio = <&pio FP_IRQ_PIN 0>;
+
+		status = "okay";
+		
+		pinctrl-names = "default", "fp_spi_mode";
+		pinctrl-0 = <&focaltech_fp_pins_default>;
+		pinctrl-1 = <&focaltech_fp_spi_mode>;
+
+
+	};
+};
+&pio {
+    focaltech_fp_pins_default: ff_pins_default {
+    };
+   
+    focaltech_fp_spi_mode: focaltech_spimode_default {
+        pins_cmd_dat {
+            pinmux = 
+                <FP_CK_AS_SPI>,
+                <FP_CS_AS_SPI>,
+                <FP_MO_AS_SPI>,
+                <FP_MI_AS_SPI>;
+                drive-strength = <7>;   //此处调节驱动能力0-7
+        };
+    };
+};
+
+/* Fingerprint GPIO end */

@@ -73,7 +73,7 @@ int fsm_firmware_init(char *fw_name)
 	}
 
 	pr_info("loading %s in nowait mode", fw_name);
-	ret = request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+	ret = request_firmware_nowait(THIS_MODULE, true,
 			fw_name, dev, GFP_KERNEL,
 			dev, fsm_firmware_inited);
 	if (ret) {

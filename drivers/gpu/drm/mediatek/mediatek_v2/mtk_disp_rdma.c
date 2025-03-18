@@ -386,8 +386,8 @@ static irqreturn_t mtk_disp_rdma_irq_handler(int irq, void *dev_id)
 			unsigned int crtc_idx = drm_crtc_index(crtc);
 			unsigned int pf_idx;
 
+			cur_time = ktime_get();
 			if (rdma->id == DDP_COMPONENT_RDMA0) {
-				cur_time = ktime_get();
 				DRM_MMP_EVENT_START(rdma0, val, 0);
 			}
 			DDPIRQ("[IRQ] %s: frame start!\n", mtk_dump_comp_str(rdma));
@@ -430,7 +430,8 @@ static irqreturn_t mtk_disp_rdma_irq_handler(int irq, void *dev_id)
 			  mtk_dump_comp_str(rdma), priv->underflow_cnt);
 		if (mtk_crtc)
 			drm_priv = mtk_crtc->base.dev->dev_private;
-		if (drm_priv && drm_priv->data->mmsys_id == MMSYS_MT6768)
+		if (drm_priv && (drm_priv->data->mmsys_id == MMSYS_MT6768 ||
+			 drm_priv->data->mmsys_id == MMSYS_MT6765))
 			DDPMSG("%s: pix(%d,%d,%d,%d)\n", mtk_dump_comp_str(rdma),
 				readl(MT6768_DISP_REG_RDMA_IN_P_CNT + rdma->regs),
 				readl(MT6768_DISP_REG_RDMA_IN_LINE_CNT + rdma->regs),
@@ -568,14 +569,6 @@ static void mtk_rdma_start(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle)
 			mtk_ddp_write_relaxed(comp, 0x01,
 				DISP_REG_RDMA_MEM_GMC_S4,
 				handle);
-			mtk_ddp_write_mask(comp, 0x00,
-				DISP_REG_RDMA_ULTRA_SRC_SEL,
-				FLD_RG_PREULTRA_RDMA_SEL,
-				handle);
-			mtk_ddp_write_mask(comp, 0x00,
-				DISP_REG_RDMA_ULTRA_SRC_SEL,
-				FLD_RG_ULTRA_RDMA_SEL,
-				handle);
 		}
 		break;
 	case MMSYS_MT6895:
@@ -615,12 +608,6 @@ static void mtk_rdma_stop(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle)
 			mtk_ddp_write_relaxed(comp, 0x0,
 				DISP_REG_RDMA_MEM_GMC_S4,
 				handle);
-			mtk_ddp_write_mask(comp, 0x01,
-				DISP_REG_RDMA_ULTRA_SRC_SEL,
-				FLD_RG_PREULTRA_RDMA_SEL, handle);
-			mtk_ddp_write_mask(comp, 0x02,
-				DISP_REG_RDMA_ULTRA_SRC_SEL,
-				FLD_RG_ULTRA_RDMA_SEL, handle);
 		}
 		break;
 	case MMSYS_MT6895:
@@ -690,7 +677,8 @@ void mtk_rdma_cal_golden_setting(struct mtk_ddp_comp *comp,
 		gs[GS_RDMA_SRAM_SEL] = 1;
 		set_share_sram(1);
 	} else {
-		if (priv->data->mmsys_id == MMSYS_MT6768 && if_fps == 90) {
+		if ((priv->data->mmsys_id == MMSYS_MT6768 ||
+                     priv->data->mmsys_id == MMSYS_MT6765) && if_fps == 90) {
 			pre_ultra_low_us = 55;
 			pre_ultra_high_us = 65;
 			ultra_low_us = 45;
@@ -789,9 +777,6 @@ void mtk_rdma_cal_golden_setting(struct mtk_ddp_comp *comp,
 	}
 
 	if (rdma->data->dsi_buffer) {
-		if (priv->data->mmsys_id == MMSYS_MT6879)
-			gs[GS_RDMA_FIFO_SIZE] = 0x20;
-		else
 			gs[GS_RDMA_FIFO_SIZE] = fifo_size;
 		gs[GS_RDMA_FIFO_UNDERFLOW_EN] = 0;
 	} else {
@@ -1964,12 +1949,12 @@ const struct mtk_disp_rdma_data mt6739_rdma_driver_data = {
 
 const struct mtk_disp_rdma_data mt6765_rdma_driver_data = {
 	.fifo_size = SZ_1K * 6,
-	.pre_ultra_low_us = 60,
-	.pre_ultra_high_us = 70,
-	.ultra_low_us = 40,
-	.ultra_high_us = 60,
-	.urgent_low_us = 30,
-	.urgent_high_us = 35,
+	.pre_ultra_low_us = 80,
+	.pre_ultra_high_us = 90,
+	.ultra_low_us = 60,
+	.ultra_high_us = 80,
+	.urgent_low_us = 43,
+	.urgent_high_us = 58,
 	.sodi_config = mt6765_mtk_sodi_config,
 	.shadow_update_reg = 0x00bc,
 	.support_shadow = false,
@@ -2044,6 +2029,7 @@ static const struct mtk_disp_rdma_data mt6885_rdma_driver_data = {
 	.has_greq_urg_num = true,
 	.is_support_34bits = false,
 	.dsi_buffer = false,
+	.disable_underflow = true,
 };
 
 static const struct mtk_disp_rdma_data mt6983_rdma_driver_data = {
@@ -2133,7 +2119,7 @@ static const struct mtk_disp_rdma_data mt6833_rdma_driver_data = {
 };
 
 static const struct mtk_disp_rdma_data mt6879_rdma_driver_data = {
-	.fifo_size = SZ_1K * 3 + SZ_32K,
+	.fifo_size =  SZ_4K * 15 + SZ_256 * 3,
 	.pre_ultra_low_us = 250,
 	.pre_ultra_high_us = 260,
 	.ultra_low_us = 230,

@@ -4,6 +4,10 @@
 #include "./aw87xxx_quadruple/aw87xxx_quadruple.dtsi"
 #endif
 
+#if PRI_AW87XXX_DUAL
+#include "./aw87xxx_dual/aw87xxx_dual.dtsi"
+#endif
+
 #if PRI_AW87XXX_SINGLE
 #include "./aw87xxx_single/aw87xxx_single.dtsi"
 #endif

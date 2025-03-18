@@ -1,4 +1,4 @@
-#include "sd77428.h"
+#include "sd77428_2.h"
 
 unsigned int sbsd_cmd_def[SBSD_CMD_MAX] = 
 {

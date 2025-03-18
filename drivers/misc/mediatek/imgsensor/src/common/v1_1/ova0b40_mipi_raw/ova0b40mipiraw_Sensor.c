@@ -94,10 +94,10 @@ static struct imgsensor_info_struct imgsensor_info = {
         .pclk = 100000000,
         .linelength =  708,
         .framelength = 4705,
-        .startx = 896,
-        .starty = 1044,
-        .grabwindow_width  = 4000,
-        .grabwindow_height = 2256,
+        .startx = 0,
+        .starty = 0,
+        .grabwindow_width  = 5792,
+        .grabwindow_height = 4344,
         .mipi_data_lp2hs_settle_dc = 85,
         .mipi_pixel_rate = 1099337143,
         .max_framerate = 300,
@@ -105,8 +105,8 @@ static struct imgsensor_info_struct imgsensor_info = {
 //drv add by lipengpeng 20240309 start
     .hs_video = {
         .pclk = 100000000,
-        .linelength =   350,
-        .framelength = 2376,
+        .linelength =   700,//350,
+        .framelength = 1188,//2376,
         .startx = 0,
         .starty = 0,
         .grabwindow_width  = 1920,
@@ -190,7 +190,7 @@ static struct imgsensor_struct imgsensor = {
 static struct SENSOR_WINSIZE_INFO_STRUCT imgsensor_winsize_info[10] = {
     { 11584, 8688,    0,    0, 11584, 8688,  5792, 4344,    0,    0,  5792, 4344, 0,   0,   5792, 4344},// preview
     { 11584, 8688,    0,    0, 11584, 8688,  5792, 4344,    0,    0,  5792, 4344, 0,   0,   5792, 4344},// preview
-    { 11584, 8688,    0,    0, 11584, 8688,  5792, 4344,    0,    0,  5792, 4344, 896,   1044,   4000, 2256},// normal_video
+    { 11584, 8688,    0,    0, 11584, 8688,  5792, 4344,    0,    0,  5792, 4344, 0,   0,   5792, 4344},// normal_video
     { 11584, 8688,   64,   48, 11520, 8640,  1920, 1080,    0,    0,  1920, 1080, 0,   0,   1920, 1080},// drv add by lipengpeng 20240309 
     { 11584, 8688,   32, 1104, 11520, 6480,  2880, 1620,    0,    0,  2880, 1620, 0,   0,   2880, 1620},// slim_video
 };
@@ -211,8 +211,8 @@ static struct SENSOR_VC_INFO_STRUCT SENSOR_VC_INFO[10] = {
     /* normal_video mode setting */
     {
         0x02, 0x0a, 0x0000, 0x0008, 0x40, 0x00,
-        0x00, 0x2b, 0x0FA0, 0x08D0, 0x00, 0x00, 0x0000, 0x0000,
-        0x01, 0x2B, 0x02d0, 0x0658, 0x03, 0x00, 0x0000, 0x0000
+        0x00, 0x2b, 0x16a0, 0x10f8, 0x00, 0x00, 0x0000, 0x0000,
+        0x01, 0x2b, 0x02d0, 0x0878, 0x03, 0x00, 0x0000, 0x0000
     },
     /* high_speed_video mode setting */
     {
@@ -1696,7 +1696,7 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
             memcpy((void *)PDAFinfo,(void *)&imgsensor_pd_info,sizeof(struct SET_PD_BLOCK_INFO_T));
             break;
         case MSDK_SCENARIO_ID_VIDEO_PREVIEW:
-            //memcpy((void *)PDAFinfo,(void *)&imgsensor_pd_info_video,sizeof(struct SET_PD_BLOCK_INFO_T));	//micheal
+            memcpy((void *)PDAFinfo,(void *)&imgsensor_pd_info,sizeof(struct SET_PD_BLOCK_INFO_T));
             break;
         case MSDK_SCENARIO_ID_SLIM_VIDEO:
             //memcpy((void *)PDAFinfo,(void *)&imgsensor_pd_info_slim_video,sizeof(struct SET_PD_BLOCK_INFO_T));	//micheal

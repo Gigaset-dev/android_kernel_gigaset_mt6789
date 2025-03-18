@@ -31,7 +31,7 @@ static int __init irq_affinity_setup(char *str)
 	cpulist_parse(str, irq_default_affinity);
 	/*
 	 * Set at least the boot cpu. We don't want to end up with
-	 * bugreports caused by random comandline masks
+	 * bugreports caused by random commandline masks
 	 */
 	cpumask_set_cpu(smp_processor_id(), irq_default_affinity);
 	return 1;
@@ -678,9 +678,9 @@ int __handle_domain_irq(struct irq_domain *domain, unsigned int hwirq,
 #ifdef CONFIG_IRQ_DOMAIN
 #if defined(CONFIG_MTK_FIX_IRQ_RCU_DEAD_LOCK) && defined(CONFIG_ARM)
 	if (lookup) {
-		irq_enter();
-		irq = irq_find_mapping(domain, hwirq);
-		irq_exit();
+		__irq_enter_raw();
+ 		irq = irq_find_mapping(domain, hwirq);
+		__irq_exit_raw();
 	}
 #else
 	if (lookup)

@@ -220,7 +220,7 @@ wait_ack:
 	return 0;
 }
 
-static void handle_init_ack_msg(struct vdec_vcu_ipi_init_ack *msg)
+static void handle_init_ack_msg(struct mtk_vcodec_dev *dev, struct vdec_vcu_ipi_init_ack *msg)
 {
 	struct vdec_vcu_inst *vcu = (struct vdec_vcu_inst *)
 		(unsigned long)msg->ap_inst_addr;
@@ -234,6 +234,10 @@ static void handle_init_ack_msg(struct vdec_vcu_ipi_init_ack *msg)
 
 	vcu->vsi = (void *)((__u64)vcp_get_reserve_mem_virt(VDEC_MEM_ID) + inst_offset);
 	vcu->inst_addr = msg->vcu_inst_addr;
+
+	dev->tf_info = (struct mtk_tf_info *)
+		((__u64)vcp_get_reserve_mem_virt(VDEC_MEM_ID) + VDEC_TF_INFO_OFFSET);
+
 	mtk_vcodec_debug(vcu, "- vcu_inst_addr = 0x%x", vcu->inst_addr);
 }
 
@@ -602,7 +606,7 @@ int vcp_dec_ipi_handler(void *arg)
 				wake_up(&vcu->wq_res);
 				break;
 			case VCU_IPIMSG_DEC_INIT_DONE:
-				handle_init_ack_msg((void *)obj->share_buf);
+				handle_init_ack_msg(dev, (void *)obj->share_buf);
 				vcu->ctx->state = MTK_STATE_INIT;
 			case VCU_IPIMSG_DEC_START_DONE:
 			case VCU_IPIMSG_DEC_DEINIT_DONE:
@@ -786,7 +790,8 @@ static int vdec_vcp_backup(struct mtk_vcodec_dev *dev)
 	}
 	inst = (struct vdec_inst *)ctx->drv_handle;
 	mtk_v4l2_debug(1, "backup by ctx %d", ctx->id);
-
+	if(inst == NULL)
+		return -EINVAL;
 	mtk_vcodec_debug_enter(inst);
 
 	memset(&msg, 0, sizeof(msg));
@@ -999,7 +1004,8 @@ static void vdec_vcp_deinit(unsigned long h_vdec)
 	int err = 0;
 
 	mtk_vcodec_debug_enter(inst);
-
+	if((inst == NULL) || (inst->ctx == NULL))
+		return;
 	memset(&msg, 0, sizeof(msg));
 	msg.msg_id = AP_IPIMSG_DEC_DEINIT;
 	msg.ctx_id = inst->ctx->id;
@@ -1034,6 +1040,8 @@ int vdec_vcp_reset(struct vdec_inst *inst, enum vdec_reset_type drain_type)
 	struct vdec_ap_ipi_cmd msg;
 	int err = 0;
 	mtk_vcodec_debug(inst, "drain_type %d +", drain_type);
+	if((inst == NULL) || (inst->ctx == NULL))
+		return  -EINVAL;
 	memset(&msg, 0, sizeof(msg));
 	msg.msg_id = AP_IPIMSG_DEC_RESET;
 	msg.ctx_id = inst->ctx->id;
@@ -1180,7 +1188,8 @@ void set_vdec_vcp_data(struct vdec_inst *inst, enum vcp_reserve_mem_id_t id, voi
 		mem_size, (__u64)string_va, (__u64)string_pa);
 	mtk_vcodec_debug(inst, "string: %s", (char *)string);
 	mtk_vcodec_debug(inst, "string_len: %d", string_len);
-
+	if((inst == NULL) || (inst->ctx == NULL))
+		return;
 	if (string_len <= (mem_size-1))
 		memcpy(string_va, (char *)string, string_len + 1);
 
@@ -1217,7 +1226,8 @@ int vdec_vcp_set_frame_buffer(struct vdec_inst *inst, void *fb)
 	struct vdec_ipi_fb ipi_fb;
 	struct vdec_fb *pfb = NULL;
 	bool dst_not_get = true;
-
+	if(inst == NULL)
+		return -EINVAL;
 	mtk_vcodec_debug(inst, "+ id=%X", AP_IPIMSG_DEC_FRAME_BUFFER);
 
 	memset(&msg, 0, sizeof(msg));

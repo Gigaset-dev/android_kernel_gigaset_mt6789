@@ -5,6 +5,7 @@
 
 #include "mtk-mmc-autok.h"
 #include "mtk-mmc.h"
+#include "../core/card.h"
 
 #define MSDC_CLKTXDLY		0
 #define MSDC_PB0_DEFAULT_VAL		0x403C0007
@@ -280,6 +281,30 @@ static void msdc_reset_hw(struct msdc_host *host)
 
 	val = readl(host->base + MSDC_INT);
 	writel(val, host->base + MSDC_INT);
+}
+
+/**********************************************************
+ * AutoK Utility interface Implenment                     *
+ **********************************************************/
+
+static int mtk_mmc_need_use_rising_edge(struct msdc_host *host)
+{
+	struct mmc_host *mmc;
+
+	mmc = mmc_from_priv(host);
+
+	if(!mmc->card) {
+		AUTOK_DBGPRINT(AUTOK_DBG_RES, "mtk-test card is null");
+		return 0;
+	}
+	AUTOK_DBGPRINT(AUTOK_DBG_RES, "mtk-test manfid: %d prod_nam: %s", mmc->card->cid.manfid,
+		mmc->card->cid.prod_name);
+	if ((mmc->card->cid.manfid == CID_MANFID_HONGXINYU) ||
+		(mmc->card->cid.manfid == CID_MANFID_CHANGCUN)) {
+		return 1;
+	} else {
+		return 0;
+	}
 }
 
 /**********************************************************
@@ -954,7 +979,7 @@ static int autok_pad_dly_sel(struct AUTOK_REF_INFO *pInfo)
 	FBound_Cnt_R = pBdInfo_R->fbd_cnt;
 	Bound_Cnt_R = pBdInfo_R->bd_cnt;
 	Bound_Cnt_F = pBdInfo_F->bd_cnt;
-
+	AUTOK_RAWPRINT("[AUTOK]FBound_Cnt_R=%d\n",FBound_Cnt_R);
 	switch (FBound_Cnt_R) {
 	case 4:	/* SSSS Corner may cover 2~3T */
 	case 3:
@@ -1502,6 +1527,7 @@ static int autok_pad_dly_sel(struct AUTOK_REF_INFO *pInfo)
 
 	/* Select Optimised Sample edge & delay count (the small one) */
 	pInfo->cycle_cnt = cycle_cnt;
+	AUTOK_RAWPRINT("[AUTOK]uDlySel_R=%d,uDlySel_F=%d\n",uDlySel_R,uDlySel_F);
 	if (uDlySel_R <= uDlySel_F) {
 		pInfo->opt_edge_sel = 0;
 		pInfo->opt_dly_cnt = uDlySel_R;
@@ -1570,7 +1596,7 @@ static int autok_adjust_param(struct msdc_host *host,
 	u32 tune_reg = host->dev_comp->pad_tune_reg;
 
 	memset(&platform_top_ctrl, 0, sizeof(struct AUTOK_PLAT_TOP_CTRL));
-	get_platform_top_ctrl(platform_top_ctrl);
+	get_platform_top_ctrl_by_ver(platform_top_ctrl, host->dev_comp->autok_ver);
 
 	switch (param) {
 	case READ_DATA_SMPL_SEL:
@@ -2503,10 +2529,10 @@ int autok_path_sel(struct msdc_host *host)
 	memset(&platform_para_rx, 0, sizeof(struct AUTOK_PLAT_PARA_RX));
 	memset(&platform_para_func, 0, sizeof(struct AUTOK_PLAT_FUNC));
 	memset(&platform_top_ctrl, 0, sizeof(struct AUTOK_PLAT_TOP_CTRL));
-	get_platform_para_tx(platform_para_tx);
-	get_platform_para_rx(platform_para_rx);
-	get_platform_func(platform_para_func);
-	get_platform_top_ctrl(platform_top_ctrl);
+	get_platform_para_tx_by_ver(platform_para_tx, host->dev_comp->autok_ver);
+	get_platform_para_rx_by_ver(platform_para_rx, host->dev_comp->autok_ver);
+	get_platform_func_by_ver(platform_para_func, host->dev_comp->autok_ver);
+	get_platform_top_ctrl_by_ver(platform_top_ctrl, host->dev_comp->autok_ver);
 
 	autok_write_param(host, READ_DATA_SMPL_SEL, 0);
 	autok_write_param(host, WRITE_DATA_SMPL_SEL, 0);
@@ -2591,8 +2617,8 @@ int autok_init_sdr104(struct msdc_host *host)
 	
 	memset(&platform_para_rx, 0, sizeof(struct AUTOK_PLAT_PARA_RX));
 	memset(&platform_para_func, 0, sizeof(struct AUTOK_PLAT_FUNC));
-	get_platform_para_rx(platform_para_rx);
-	get_platform_func(platform_para_func);
+	get_platform_para_rx_by_ver(platform_para_rx, host->dev_comp->autok_ver);
+	get_platform_func_by_ver(platform_para_func, host->dev_comp->autok_ver);
 
 	/* driver may miss data tune path setting in the interim */
 	autok_path_sel(host);
@@ -2656,8 +2682,8 @@ int autok_init_hs200(struct msdc_host *host)
 
 	memset(&platform_para_rx, 0, sizeof(struct AUTOK_PLAT_PARA_RX));
 	memset(&platform_para_func, 0, sizeof(struct AUTOK_PLAT_FUNC));
-	get_platform_para_rx(platform_para_rx);
-	get_platform_func(platform_para_func);
+	get_platform_para_rx_by_ver(platform_para_rx, host->dev_comp->autok_ver);
+	get_platform_func_by_ver(platform_para_func, host->dev_comp->autok_ver);
 
 	/* driver may miss data tune path setting in the interim */
 	autok_path_sel(host);
@@ -2709,8 +2735,8 @@ int autok_init_hs400(struct msdc_host *host)
 
 	memset(&platform_para_rx, 0, sizeof(struct AUTOK_PLAT_PARA_RX));
 	memset(&platform_para_func, 0, sizeof(struct AUTOK_PLAT_FUNC));
-	get_platform_para_rx(platform_para_rx);
-	get_platform_func(platform_para_func);
+	get_platform_para_rx_by_ver(platform_para_rx, host->dev_comp->autok_ver);
+	get_platform_func_by_ver(platform_para_func, host->dev_comp->autok_ver);
 
 	/* driver may miss data tune path setting in the interim */
 	autok_path_sel(host);
@@ -2756,6 +2782,15 @@ int autok_init_hs400(struct msdc_host *host)
 }
 EXPORT_SYMBOL(autok_init_hs400);
 
+#define DEFAULT_RAWDATA64_RISING 0X200000000LL
+#define DEFAULT_RAWDATA64_FALLING 0X300000000000100LL
+/*
+ *CMD 0          33      OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOXOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+ *0x200000000
+ *CMD 1          47      OOOOOOOOXOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOXXOOOOOO
+ *0x300000000000100
+ *[0 1 2 ...... 60 61 62 63]
+ */
 int execute_online_tuning_hs400(struct msdc_host *host, u8 *res)
 {
 	unsigned int ret = 0;
@@ -2791,8 +2826,8 @@ int execute_online_tuning_hs400(struct msdc_host *host, u8 *res)
 	memset(&autok_host_para, 0, sizeof(struct autok_host));
 	memset(&platform_para_rx, 0, sizeof(struct AUTOK_PLAT_PARA_RX));
 	memset(&platform_para_tx, 0, sizeof(struct AUTOK_PLAT_PARA_TX));
-	get_platform_para_rx(platform_para_rx);
-	get_platform_para_tx(platform_para_tx);
+	get_platform_para_rx_by_ver(platform_para_rx, host->dev_comp->autok_ver);
+	get_platform_para_tx_by_ver(platform_para_tx, host->dev_comp->autok_ver);
 
 	autok_init_hs400(host);
 	memset((void *)p_autok_tune_res, 0,
@@ -2841,8 +2876,19 @@ int execute_online_tuning_hs400(struct msdc_host *host, u8 *res)
 			}
 		}
 		score = autok_simple_score64(tune_result_str64, RawData64);
-		AUTOK_DBGPRINT(AUTOK_DBG_RES, "[AUTOK]CMD %d \t %d \t %s\r\n",
-			uCmdEdge, score, tune_result_str64);
+		if (!RawData64 || (score==64)) {
+			if(!uCmdEdge){
+				AUTOK_DBGPRINT(AUTOK_DBG_RES,"[AUTOK]Handling when all result OOOOOO - rising\r\n");
+				RawData64 = DEFAULT_RAWDATA64_RISING;
+				score = autok_simple_score64(tune_result_str64, RawData64);
+			} else {
+				AUTOK_DBGPRINT(AUTOK_DBG_RES,"[AUTOK]Handling when all result OOOOOO - falling\r\n");
+				RawData64 = DEFAULT_RAWDATA64_FALLING;
+				score = autok_simple_score64(tune_result_str64, RawData64);
+			}
+		}
+		AUTOK_DBGPRINT(AUTOK_DBG_RES, "[AUTOK]CMD %d \t %d \t %s 0x%llx\r\n",
+			uCmdEdge, score, tune_result_str64, RawData64);
 		if (uCmdEdge)
 			autok_window_apply(CMD_FALL,
 			    RawData64, p_autok_tune_res);
@@ -3070,6 +3116,14 @@ int execute_cmd_online_tuning(struct msdc_host *host, u8 *res)
 		score = autok_simple_score64(tune_result_str64, RawData64);
 		AUTOK_DBGPRINT(AUTOK_DBG_RES, "[AUTOK]CMD %d \t %d \t %s\r\n",
 			uCmdEdge, score, tune_result_str64);
+
+		if (res != NULL) {
+			if (uCmdEdge)
+				autok_window_apply(CMD_FALL, RawData64, res);
+			else
+				autok_window_apply(CMD_RISE, RawData64, res);
+		}
+
 		if (autok_check_scan_res64(RawData64,
 			    &pBdInfo->scan_info[uCmdEdge],
 			    AUTOK_TUNING_INACCURACY) != 0)
@@ -3165,8 +3219,8 @@ int execute_online_tuning_hs200(struct msdc_host *host, u8 *res)
 	memset(&autok_host_para, 0, sizeof(struct autok_host));
 	memset(&platform_para_func, 0, sizeof(struct AUTOK_PLAT_FUNC));
 	memset(&platform_para_tx, 0, sizeof(struct AUTOK_PLAT_PARA_TX));
-	get_platform_func(platform_para_func);
-	get_platform_para_tx(platform_para_tx);
+	get_platform_func_by_ver(platform_para_func, host->dev_comp->autok_ver);
+	get_platform_para_tx_by_ver(platform_para_tx, host->dev_comp->autok_ver);
 
 	autok_init_hs200(host);
 	memset((void *)p_autok_tune_res, 0,
@@ -3337,8 +3391,8 @@ int execute_online_tuning(struct msdc_host *host, u8 *res)
 	memset(&autok_host_para, 0, sizeof(struct autok_host));
 	memset(&platform_para_func, 0, sizeof(struct AUTOK_PLAT_FUNC));
 	memset(&platform_para_tx, 0, sizeof(struct AUTOK_PLAT_PARA_TX));
-	get_platform_func(platform_para_func);
-	get_platform_para_tx(platform_para_tx);
+	get_platform_func_by_ver(platform_para_func, host->dev_comp->autok_ver);
+	get_platform_para_tx_by_ver(platform_para_tx, host->dev_comp->autok_ver);
 
 	autok_init_sdr104(host);
 	memset((void *)p_autok_tune_res, 0,
@@ -3494,7 +3548,7 @@ void autok_msdc_tx_setting(struct msdc_host *host, struct mmc_ios *ios)
 	unsigned int clk_mode;
 
 	memset(&platform_para_tx, 0, sizeof(struct AUTOK_PLAT_PARA_TX));
-	get_platform_para_tx(platform_para_tx);
+	get_platform_para_tx_by_ver(platform_para_tx, host->dev_comp->autok_ver);
 	if (host->dev_comp->clk_div_bits == 8)
 		sdr_get_field(host->base + MSDC_CFG,
 			MSDC_CFG_CKMOD, &clk_mode);
@@ -3972,7 +4026,7 @@ int hs200_execute_tuning(struct msdc_host *host, u8 *res)
 	unsigned int ckgen;
 
 	memset(&platform_para_func, 0, sizeof(struct AUTOK_PLAT_FUNC));
-	get_platform_func(platform_para_func);
+	get_platform_func_by_ver(platform_para_func, host->dev_comp->autok_ver);
 	ktime_get_ts64(&tm_s);
 	int_en = readl(host->base + MSDC_INTEN);
 	writel(0, host->base + MSDC_INTEN);
@@ -4113,8 +4167,8 @@ int autok_vcore_merge_sel(struct msdc_host *host, unsigned int merge_cap)
 		}
 		score = autok_simple_score64(tune_result_str64, RawData64);
 		AUTOK_DBGPRINT(AUTOK_DBG_RES,
-			"[AUTOK]CMD %d \t %d \t %s merge\r\n",
-			uCmdEdge, score, tune_result_str64);
+			"[AUTOK]CMD %d \t %d \t %s merge 0x%llx\r\n",
+			uCmdEdge, score, tune_result_str64, RawData64);
 		if (autok_check_scan_res64_new(RawData64,
 			&pInfo->scan_info[uCmdEdge], 0) != 0)
 			goto fail;
@@ -4129,13 +4183,15 @@ int autok_vcore_merge_sel(struct msdc_host *host, unsigned int merge_cap)
 			    host->autok_res[AUTOK_VCORE_MERGE]);
 		uCmdEdge ^= 0x1;
 	} while (uCmdEdge);
-	if (max_win[0] >= max_win[1]) {
+
+	if (mtk_mmc_need_use_rising_edge(host) || (max_win[0] >= max_win[1])) {
 		pInfo->opt_edge_sel = 0;
 		pInfo->opt_dly_cnt = dly_sel[0];
 	} else {
 		pInfo->opt_edge_sel = 1;
 		pInfo->opt_dly_cnt = dly_sel[1];
 	}
+
 	AUTOK_DBGPRINT(AUTOK_DBG_RES,
 		"[AUTOK]cmd edge = %d cmd dly = %d max win = %d\r\n",
 		pInfo->opt_edge_sel,
@@ -4396,8 +4452,11 @@ int emmc_execute_dvfs_autok(struct msdc_host *host, u32 opcode)
 
 	res = host->autok_res[vcore];
 
-	if (mmc->ios.timing == MMC_TIMING_MMC_HS200
-		&& !host->is_autok_done) {
+	if (mmc->ios.timing == MMC_TIMING_MMC_HS200) {
+		if (host->is_skip_hs200_tune) {
+			pr_notice("[AUTOK]eMMC Skip HS200 Tune\n");
+			goto end;
+		}
 		if (opcode == MMC_SEND_STATUS) {
 			pr_notice("[AUTOK]eMMC HS200 Tune CMD only\n");
 			ret = hs200_execute_tuning_cmd(host, res);
@@ -4414,7 +4473,7 @@ int emmc_execute_dvfs_autok(struct msdc_host *host, u32 opcode)
 			ret = hs400_execute_tuning(host, res);
 		}
 	}
-
+end:
 	return ret;
 }
 EXPORT_SYMBOL(emmc_execute_dvfs_autok);
@@ -4443,6 +4502,7 @@ int emmc_execute_autok(struct msdc_host *host, u32 opcode)
 				memcpy(host->autok_res[AUTOK_VCORE_LEVEL0],
 						host->autok_res[AUTOK_VCORE_MERGE],
 						TUNING_PARA_SCAN_COUNT);
+			host->is_skip_hs200_tune = 1;
 			host->is_autok_done = 1;
 		}
 	} else {

@@ -46,7 +46,7 @@ static int id_data[] = {
     [SC8545_ID] = 0x66,
     [SC8546_ID] = 0x67,
     [SC8547_ID] = 0x66,
-    [SC8549_ID] = 0x66,
+    [SC8549_ID] = 0x49,//drv add by liuruiqian for chip_id,20240311
 };
 
 enum {

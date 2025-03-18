@@ -93,6 +93,7 @@ config PRIZE_TYPEC_CHG_DET
 	  hardwareinfo functionality.
   
 config PRIZE_ENDOSCOPE	
+	tristate "PRIZE ENDOSCOPE"
 	bool "endoscope enable"
 	default n
 	help
@@ -112,6 +113,8 @@ config PRIZE_COMMON_NODE
 	help
 	  common_node. If configures to be n, means devices doesn't support
 	  common_node functionality.
+ 
+source "drivers/misc/mediatek/prize/prize_common_node/Kconfig"
  
 config PRIZE_DIGITAL_LCD
   tristate "digital lcd"
@@ -150,14 +153,73 @@ config PRIZE_HARDWARE_INFO_UFS_HEALTH
           hardware ufs health info. If configures to be n, means devices doesn't support
           hardware ufs health info functionality.
 #DRV added by xudongfang ,add ufs health info end
+#drv-add by shenwenbin for oled panel 20231213 start
+config PRIZE_OLED_NODE
+	tristate "oled node"
+	default n
+	help
+	  oled_node. If configures to be n, means devices doesn't support
+	  oled_node functionality.
+#drv-add by shenwenbin for oled panel 20231213 end
 
-#drv add by liuxuhui for sensor hall start --- 20231123
+#drv add by lipengpeng 20231223 start 
+config CAMERA_TTM
+	tristate "STMicroelectronics TTM driver solution - TTM Controller Driver"
+	default n
+	help
+	  STMicroelectronics CAMERA_TTM Near Field Communication controller
+	  functionality. If configures to be n, means devices doesn't support
+	  functionality.
+
+config CAMERA_SERIAL_CAMERA
+	tristate "STMicroelectronics SERIAL_CAMERA driver solution - SERIAL_CAMERA Controller Driver"
+	default n
+	help
+	  STMicroelectronics SERIAL_CAMERA Near Field Communication controller
+	  functionality. If configures to be n, means devices doesn't support
+	  functionality.	  
+#drv add by lipengpeng 20231223 end 	  
+
+#DRV added by chenjiaxi, add miniscreen driver, start
+config DRV_MINISCREEN
+	tristate "DRV_MINISCREEN"
+	default n
+	help
+	  DRV_MINISCREEN
+source "drivers/misc/mediatek/prize/miniscreen/Kconfig"
+#DRV added by chenjiaxi, add miniscreen driver, end
+#drv add by lipengpeng 20240307 start
+config DRV_ADC_GMS_DETECT
+	tristate "adc gms detect"
+	default n
+	help
+	  hardware_info. If configures to be n, means devices doesn't support
+	  hardwareinfo functionality.
+
+#drv add by lipengpeng 20240307 end	  
+config PRIZE_LEPTON_FILR
+	tristate "priz lepton filr"
+	default n
+	help
+	  PRIZE_LEPTON_FILR. If configures to be n, means devices doesn't support
+	  FILR functionality.
+
+# pri BQS33-208 added by ocean 20240625 begin
+source "drivers/misc/mediatek/prize/prize_sim_state/Kconfig"
+# pri BQS33-208 added by ocean 20240625 end
+config PRIZE_CAMPING_LIGHT
+	tristate "PRIZE_CAMPING_LIGHT Driver"
+	default n
+	help
+	  PRIZE_CAMPING_LIGHT.
+
+#drv add by yaozhipeng for sensor hall start --- 20241118
 config PRIZE_HALL
     tristate "SPRIZE_HALL Driver"
     default n
     help
       PRIZE_HALL.
-#drv add by liuxuhui for sensor hall end --- 20231123
+#drv add by yaozhipeng for sensor hall end --- 20241118
 
 #drv add by yaozhipeng for sensor 3d hall start --- 20240130
 config 3D_HALL_IST8309
@@ -166,12 +228,3 @@ config 3D_HALL_IST8309
     help
       3D_HALL.
 #drv add by yaozhipeng for sensor 3d hall end --- 20240130
-
-#drv added by chenjiaxi, add miniscreen driver, start
-config DRV_MINISCREEN
-	tristate "DRV_MINISCREEN"
-	default n
-	help
-	  DRV_MINISCREEN
-source "drivers/misc/mediatek/prize/miniscreen/Kconfig"
-#drv added by chenjiaxi, add miniscreen driver, end

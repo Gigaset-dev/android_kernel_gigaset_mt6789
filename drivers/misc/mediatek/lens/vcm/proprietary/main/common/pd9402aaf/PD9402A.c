@@ -1,15 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2018 AWINIC Technology CO., LTD
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
+ * Copyright (c) 2019 MediaTek Inc.
  */
+
+
 
 /*
  * PD9402A voice coil motor driver
@@ -17,136 +11,72 @@
  *
  */
 
-#include <linux/i2c.h>
 #include <linux/delay.h>
-#include <linux/uaccess.h>
 #include <linux/fs.h>
+#include <linux/i2c.h>
+#include <linux/uaccess.h>
 
 #include "lens_info.h"
 
-#define AW8601_DRIVER_VERSION "v1.0.0"
-
 #define AF_DRVNAME "PD9402A_DRV"
-#define AF_I2C_SLAVE_ADDR        0x18
+#define AF_I2C_SLAVE_ADDR 0x18
 
 #define AF_DEBUG
 #ifdef AF_DEBUG
-#define LOG_INF(format, args...) pr_debug(AF_DRVNAME " [%s] " format, __func__, ##args)
+#define LOG_INF(format, args...)                                               \
+	pr_info(AF_DRVNAME " [%s] " format, __func__, ##args)
 #else
 #define LOG_INF(format, args...)
 #endif
-#define AW_LOG_ERR(format, args...) \
-	pr_err(AF_DRVNAME " [%s] " format, __func__, ##args)
 
 static struct i2c_client *g_pstAF_I2Cclient;
 static int *g_pAF_Opened;
 static spinlock_t *g_pAF_SpinLock;
 
-
 static unsigned long g_u4AF_INF;
 static unsigned long g_u4AF_MACRO = 1023;
-static unsigned long g_u4TargetPosition;
-static unsigned long g_u4CurrPosition;
+static unsigned long g_u4CurrPosition = 0;
+static unsigned long g_u4TargetPosition = 0;
 
-static int i2c_read(u8 a_u2Addr, u8 *a_puBuff)
+static int s4PD9402A_ReadReg(unsigned short * a_pu2Result)
 {
-	int i4RetValue = 0;
-	char puReadCmd[1] = { (char)(a_u2Addr) };
-
-	i4RetValue = i2c_master_send(g_pstAF_I2Cclient, puReadCmd, 1);
-	if (i4RetValue != 2) {
-		LOG_INF(" I2C write failed!!\n");
-		return -1;
-	}
-
-	i4RetValue = i2c_master_recv(g_pstAF_I2Cclient, (char *)a_puBuff, 1);
-	if (i4RetValue != 1) {
-		LOG_INF(" I2C read failed!!\n");
-		return -1;
-	}
-
-	return 0;
-}
-
-static u8 read_data(u8 addr)
-{
-	u8 get_byte = 0;
-
-	i2c_read(addr, &get_byte);
-
-	return get_byte;
-}
-
-static int s4PD9402A_ReadReg(unsigned short *a_pu2Result)
-{
-	*a_pu2Result = (read_data(0x03) << 8) + (read_data(0x04) & 0xff);
-
-	return 0;
-}
-
-static int s4AF_WriteReg(u16 a_u2Data)
-{
-	int i4RetValue = 0;
-
-	char puSendCmd[3] = { 0x03, (char)(a_u2Data >> 8), (char)(a_u2Data & 0xFF) };
+    int  i4RetValue = 0;
+    char pBuff[2];
 
 	g_pstAF_I2Cclient->addr = AF_I2C_SLAVE_ADDR;
-
 	g_pstAF_I2Cclient->addr = g_pstAF_I2Cclient->addr >> 1;
+	
+    i4RetValue = i2c_master_recv(g_pstAF_I2Cclient, pBuff , 2);
 
-	i4RetValue = i2c_master_send(g_pstAF_I2Cclient, puSendCmd, 3);
+    if (i4RetValue < 0) {
+        LOG_INF("[PD9402A] I2C read failed!! \n");
+        return -1;
+    }
 
-	if (i4RetValue < 0) {
-		LOG_INF("I2C send failed!!\n");
-		return -1;
-	}
+    *a_pu2Result = (((u16)pBuff[0]) << 4) + (pBuff[1] >> 4);
 
-	return 0;
+    return 0;
 }
 
-/*******************************************************************************
- * I2c read/write
- ******************************************************************************/
-static int PD9402A_WriteReg(unsigned char a_uAddr, unsigned char a_uData)
+static int s4PD9402A_WriteReg(u16 a_u2Data)
 {
-	int ret = 0;
+    int  i4RetValue = 0;
 
-	unsigned char puSendCmd[2] = { a_uAddr, a_uData };
+    char puSendCmd[3] = {0x03 , (char)(a_u2Data >> 8) , (char)(a_u2Data)};
 
 	g_pstAF_I2Cclient->addr = AF_I2C_SLAVE_ADDR;
-	ret = i2c_master_send(g_pstAF_I2Cclient, puSendCmd, 2);
-	if (ret < 0) {
-		AW_LOG_ERR("Send data err, ret = %d\n", ret);
-		return ret;
-	}
+	g_pstAF_I2Cclient->addr = g_pstAF_I2Cclient->addr >> 1;
+	
+    i4RetValue = i2c_master_send(g_pstAF_I2Cclient, puSendCmd, 3);
+	
+    if (i4RetValue < 0) {
+        LOG_INF("[PD9402A] I2C send failed!! \n");
+        return -1;
+    }
 
-	return 0;
+    return 0;
 }
 
-static int PD9402A_ReadReg(unsigned char a_uAddr, unsigned char *a_puData)
-{
-	int ret = 0;
-	char a_uResult;
-	unsigned char puSendCmd[1] = { a_uAddr };
-
-	g_pstAF_I2Cclient->addr = AF_I2C_SLAVE_ADDR;
-
-	ret = i2c_master_send(g_pstAF_I2Cclient, puSendCmd, 1);
-	if (ret < 0) {
-		AW_LOG_ERR("Send address err, ret = %d\n", ret);
-		return ret;
-	}
-
-	ret = i2c_master_recv(g_pstAF_I2Cclient, &a_uResult, 1);
-	if (ret < 0) {
-		AW_LOG_ERR("Recv data err, ret = %d\n", ret);
-		return ret;
-	}
-
-	*a_puData = a_uResult;
-
-	return 0;
-}
 
 static inline int getAFInfo(__user struct stAF_MotorInfo *pstMotorInfo)
 {
@@ -164,100 +94,118 @@ static inline int getAFInfo(__user struct stAF_MotorInfo *pstMotorInfo)
 	else
 		stMotorInfo.bIsMotorOpen = 0;
 
-	if (copy_to_user(pstMotorInfo, &stMotorInfo, sizeof(struct stAF_MotorInfo)))
+	if (copy_to_user(pstMotorInfo, &stMotorInfo,
+			 sizeof(struct stAF_MotorInfo)))
 		LOG_INF("copy to user failed when getting motor information\n");
 
 	return 0;
 }
 
-static int initdrv(void)
-{
+/* initAF include driver initialization and standby mode */
+static int initAF(void)
+{	
+	char puSendCmd1[2]={(char)(0x02),(char)(0x01)};
+	char puSendCmd2[2]={(char)(0x02),(char)(0x00)};
+    char puSendCmd3[2]={(char)(0x02),(char)(0x02)};
+    char puSendCmd4[2]={(char)(0x06),(char)(0x80)};
+    char puSendCmd5[2]={(char)(0x07),(char)(0x79)};
+
 	int i4RetValue = 0;
-	// prize add by zhuzhengjiang for af crash "kaca" start
-	char puSendCmdArray[7][2] = {
-	{0xec, 0xa3}, {0xa1, 0x0e}, {0xf2, 0x90},
-	{0xdc, 0x51},	{0x02, 0x02},{0x06, 0xc0} //{0x06, 0x40}, {0x07, 0x60}, {0xFE, 0xFE},
-	};
-	// prize add by zhuzhengjiang for af crash "kaca" end
-	unsigned char cmd_number;
+	int ret = 0;
+	
+	LOG_INF("+\n");
 
-	LOG_INF("InitDrv[1] %p, %p\n", &(puSendCmdArray[1][0]), puSendCmdArray[1]);
-	LOG_INF("InitDrv[2] %p, %p\n", &(puSendCmdArray[2][0]), puSendCmdArray[2]);
+	g_pstAF_I2Cclient->addr = AF_I2C_SLAVE_ADDR;
+	g_pstAF_I2Cclient->addr = g_pstAF_I2Cclient->addr >> 1;
+ 	i4RetValue = i2c_master_send(g_pstAF_I2Cclient, puSendCmd1, 2);	
+    if (i4RetValue < 0)  {
+        LOG_INF("[PD9402A] I2C send puSendCmd1 failed!! \n");
+        return -1;
+    }
 
-	for (cmd_number = 0; cmd_number < 7; cmd_number++) {
-		if (puSendCmdArray[cmd_number][0] != 0xFE) {
-			i4RetValue = i2c_master_send(g_pstAF_I2Cclient, puSendCmdArray[cmd_number], 2);
+	i4RetValue = i2c_master_send(g_pstAF_I2Cclient, puSendCmd2, 2);
+    if (i4RetValue < 0) {
+        LOG_INF("[PD9402A] I2C send puSendCmd2 failed!! \n");
+        return -1;
+    }
+    mdelay(1);
 
-			if (i4RetValue < 0)
-				return -1;
-		} else {
-			udelay(100);
-		}
-	}
+    i4RetValue = i2c_master_send(g_pstAF_I2Cclient, puSendCmd3, 2);
+    if (i4RetValue < 0) {
+        LOG_INF("[PD9402A] I2C send puSendCmd3 failed!! \n");
+        return -1;
+    }
 
-	return i4RetValue;
+    i4RetValue = i2c_master_send(g_pstAF_I2Cclient, puSendCmd4, 2);
+    if (i4RetValue < 0) {
+        LOG_INF("[PD9402A] I2C send puSendCmd4 failed!! \n");
+        return -1;
+    }
+
+    i4RetValue = i2c_master_send(g_pstAF_I2Cclient, puSendCmd5, 2);
+    if (i4RetValue < 0) {
+        LOG_INF("[PD9402A] I2C send puSendCmd5 failed!! \n");
+        return -1;
+    }
+    
+    if (*g_pAF_Opened == 1) {
+        unsigned short InitPos;
+        ret = s4PD9402A_ReadReg(&InitPos);
+	    
+        spin_lock(g_pAF_SpinLock);
+        if (ret == 0) {
+            LOG_INF("[PD9402A] Init Pos %6d \n", InitPos);
+            g_u4CurrPosition = (unsigned long)InitPos;
+        } else {		
+            g_u4CurrPosition = 0;
+        }
+        *g_pAF_Opened = 2;
+        spin_unlock(g_pAF_SpinLock);
+    }
+
+	LOG_INF("-\n");
+
+	return 0;
 }
 
-
+/* moveAF only use to control moving the motor */
 static inline int moveAF(unsigned long a_u4Position)
 {
-	int ret = 0;
-	int temppos = 0;	// prize add by zhuzhengjiang for af crash "kaca" start
-	if ((a_u4Position > g_u4AF_MACRO) || (a_u4Position < g_u4AF_INF)) {
-		LOG_INF("out of range\n");
-		return -EINVAL;
-	}
+    if ((a_u4Position > g_u4AF_MACRO) || (a_u4Position < g_u4AF_INF)) {
+        LOG_INF("[PD9402A] out of range \n");
+        return -EINVAL;
+    }
 
-	if (*g_pAF_Opened == 1) {
-		unsigned short InitPos;
+    if (g_u4CurrPosition < a_u4Position) {
+        spin_lock(g_pAF_SpinLock);	
+    //    g_i4Dir = 1;
+        spin_unlock(g_pAF_SpinLock);	
+    } else if (g_u4CurrPosition > a_u4Position) {
+        spin_lock(g_pAF_SpinLock);	
+    //    g_i4Dir = -1;
+        spin_unlock(g_pAF_SpinLock);			
+    } else {
+    	return 0;
+    }
 
-		initdrv();
-		ret = s4PD9402A_ReadReg(&InitPos);
+    spin_lock(g_pAF_SpinLock);    
+    g_u4TargetPosition = a_u4Position;
+    spin_unlock(g_pAF_SpinLock);	
 
-		if (ret == 0) {
-			LOG_INF("Init Pos %6d\n", InitPos);
+    LOG_INF("[PD9402A] move [curr] %d [target] %d\n", g_u4CurrPosition, g_u4TargetPosition);
 
-			spin_lock(g_pAF_SpinLock);
-			g_u4CurrPosition = (unsigned long)InitPos;
-			spin_unlock(g_pAF_SpinLock);
+    spin_lock(g_pAF_SpinLock);
+    spin_unlock(g_pAF_SpinLock);	
 
-		} else {
-			spin_lock(g_pAF_SpinLock);
-			g_u4CurrPosition = 0;
-			spin_unlock(g_pAF_SpinLock);
-		}
-			LOG_INF("move [curr] %d [target] %d\n", g_u4CurrPosition, g_u4TargetPosition);
-// prize add by zhuzhengjiang for af crash "kaca" start
-		if (g_u4CurrPosition > 200) {
-			for(temppos= 200; temppos< g_u4CurrPosition; temppos=temppos+50)
-				s4AF_WriteReg((unsigned short)g_u4CurrPosition);
-		}
-// prize add by zhuzhengjiang for af crash "kaca" end
-		spin_lock(g_pAF_SpinLock);
-		*g_pAF_Opened = 2;
-		spin_unlock(g_pAF_SpinLock);
-	}
+    if (s4PD9402A_WriteReg((unsigned short)g_u4TargetPosition) == 0){
+        spin_lock(g_pAF_SpinLock);		
+        g_u4CurrPosition = (unsigned long)g_u4TargetPosition;
+        spin_unlock(g_pAF_SpinLock);				
+    } else {
+        LOG_INF("[PD9402A] set I2C failed when moving the motor \n");			
+    }
 
-	if (g_u4CurrPosition == a_u4Position)
-		return 0;
-
-	spin_lock(g_pAF_SpinLock);
-	g_u4TargetPosition = a_u4Position;
-	spin_unlock(g_pAF_SpinLock);
-
-	/* LOG_INF("move [curr] %d [target] %d\n", g_u4CurrPosition, g_u4TargetPosition); */
-
-
-	if (s4AF_WriteReg((unsigned short)g_u4TargetPosition) == 0) {
-		spin_lock(g_pAF_SpinLock);
-		g_u4CurrPosition = (unsigned long)g_u4TargetPosition;
-		spin_unlock(g_pAF_SpinLock);
-	} else {
-		LOG_INF("set I2C failed when moving the motor\n");
-		ret = -1;
-	}
-
-	return ret;
+    return 0;
 }
 
 static inline int setAFInf(unsigned long a_u4Position)
@@ -276,13 +224,16 @@ static inline int setAFMacro(unsigned long a_u4Position)
 	return 0;
 }
 
-long PD9402A_Ioctl(struct file *a_pstFile, unsigned int a_u4Command, unsigned long a_u4Param)
+/* ////////////////////////////////////////////////////////////// */
+long PD9402A_Ioctl(struct file *a_pstFile, unsigned int a_u4Command,
+		    unsigned long a_u4Param)
 {
 	long i4RetValue = 0;
 
 	switch (a_u4Command) {
 	case AFIOC_G_MOTORINFO:
-		i4RetValue = getAFInfo((__user struct stAF_MotorInfo *) (a_u4Param));
+		i4RetValue =
+			getAFInfo((__user struct stAF_MotorInfo *)(a_u4Param));
 		break;
 
 	case AFIOC_T_MOVETO:
@@ -315,8 +266,17 @@ int PD9402A_Release(struct inode *a_pstInode, struct file *a_pstFile)
 {
 	LOG_INF("Start\n");
 
-	if (*g_pAF_Opened == 2)
+	if (*g_pAF_Opened == 2) {
 		LOG_INF("Wait\n");
+        LOG_INF("[PD9402A] feee \n");
+	
+		s4PD9402A_WriteReg(0x02BC);//700code
+		mdelay(15);
+		s4PD9402A_WriteReg(0x0258);//600code
+		mdelay(15);
+		s4PD9402A_WriteReg(0x0200);//512code
+		mdelay(15);
+	}
 
 	if (*g_pAF_Opened) {
 		LOG_INF("Free\n");
@@ -331,20 +291,20 @@ int PD9402A_Release(struct inode *a_pstInode, struct file *a_pstFile)
 	return 0;
 }
 
-int PD9402A_SetI2Cclient(struct i2c_client *pstAF_I2Cclient, spinlock_t *pAF_SpinLock, int *pAF_Opened)
+int PD9402A_SetI2Cclient(struct i2c_client *pstAF_I2Cclient,
+			  spinlock_t *pAF_SpinLock, int *pAF_Opened)
 {
-	pr_info("aw8601 driver version %s\n", AW8601_DRIVER_VERSION);
 	g_pstAF_I2Cclient = pstAF_I2Cclient;
 	g_pAF_SpinLock = pAF_SpinLock;
 	g_pAF_Opened = pAF_Opened;
+
+	initAF();
 
 	return 1;
 }
 
 int PD9402A_PowerDown(struct i2c_client *pstAF_I2Cclient, int *pAF_Opened)
 {
-	unsigned char data;
-
 	LOG_INF("Start\n");
 
 	g_pstAF_I2Cclient = pstAF_I2Cclient;
@@ -352,13 +312,6 @@ int PD9402A_PowerDown(struct i2c_client *pstAF_I2Cclient, int *pAF_Opened)
 
 	if (*g_pAF_Opened > 0)
 		*g_pAF_Opened = 0;
-
-	PD9402A_WriteReg(0x08, 0x0a);
-
-	PD9402A_ReadReg(0x02, &data);
-	data |= 0x01;
-	PD9402A_WriteReg(0x02, data); /* enter PD mode, PD = 1; */
-	usleep_range(5000, 5500);
 
 	LOG_INF("End\n");
 

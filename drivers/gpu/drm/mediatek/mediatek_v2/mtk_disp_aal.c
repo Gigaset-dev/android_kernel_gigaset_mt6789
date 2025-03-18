@@ -1369,10 +1369,10 @@ static int disp_aal_write_dre_to_reg(struct mtk_ddp_comp *comp,
 			comp->regs_pa + DISP_AAL_DRE_FLT_FORCE(10),
 			DRE_REG_3(gain[22], 0, gain[23], 9, gain[24], 18), ~0);
 		cmdq_pkt_write(handle, comp->cmdq_base,
-			comp->regs_pa + DISP_AAL_DRE_FLT_FORCE(11),
+			comp->regs_pa + DISP_AAL_DRE_FLT_FORCE_11,
 			DRE_REG_3(gain[25], 0, gain[26], 9, gain[27], 18), ~0);
 		cmdq_pkt_write(handle, comp->cmdq_base,
-			comp->regs_pa + DISP_AAL_DRE_FLT_FORCE(12), gain[28], ~0);
+			comp->regs_pa + DISP_AAL_DRE_FLT_FORCE_12, gain[28], ~0);
 	} else {
 		cmdq_pkt_write(handle, comp->cmdq_base,
 			comp->regs_pa + DISP_AAL_DRE_FLT_FORCE(0),
@@ -2431,9 +2431,13 @@ static void ddp_aal_dre_backup(struct mtk_ddp_comp *comp)
 		g_aal_backup.DRE_MAPPING =
 			readl(comp->regs + GKI_DISP_AAL_DRE_MAPPING_00);
 
-		for (i = 0; i < GKI_DRE_FLT_NUM; i++)
+		for (i = 0; i < LEGACY_DRE_FLT_NUM_MAX; i++)
 			g_aal_backup.DRE_FLT_FORCE[i] =
 				readl(comp->regs + DISP_AAL_DRE_FLT_FORCE(i));
+		g_aal_backup.DRE_FLT_FORCE[11] =
+				readl(comp->regs + DISP_AAL_DRE_FLT_FORCE_11);
+		g_aal_backup.DRE_FLT_FORCE[12] =
+				readl(comp->regs + DISP_AAL_DRE_FLT_FORCE_12);
 	} else {
 		g_aal_backup.DRE_MAPPING =
 			readl(comp->regs + DISP_AAL_DRE_MAPPING_00);
@@ -2540,9 +2544,13 @@ static void ddp_aal_dre_restore(struct mtk_ddp_comp *comp)
 		writel(g_aal_backup.DRE_MAPPING,
 			comp->regs + GKI_DISP_AAL_DRE_MAPPING_00);
 
-		for (i = 0; i < GKI_DRE_FLT_NUM; i++)
+		for (i = 0; i < LEGACY_DRE_FLT_NUM_MAX; i++)
 			writel(g_aal_backup.DRE_FLT_FORCE[i],
 				comp->regs + DISP_AAL_DRE_FLT_FORCE(i));
+		writel(g_aal_backup.DRE_FLT_FORCE[11],
+				comp->regs + DISP_AAL_DRE_FLT_FORCE_11);
+		writel(g_aal_backup.DRE_FLT_FORCE[12],
+				comp->regs + DISP_AAL_DRE_FLT_FORCE_12);
 	} else {
 		writel(g_aal_backup.DRE_MAPPING,
 			comp->regs + DISP_AAL_DRE_MAPPING_00);

@@ -195,6 +195,10 @@ source "drivers/misc/mediatek/memory-amms/Kconfig"
 source "drivers/misc/mediatek/mddp/Kconfig"
 endmenu # Modem
 
+#prize liuyong ,add  health info, 20231018, start
+source "drivers/misc/mediatek/prize/Kconfig"
+#prize liuyong ,add  health info, 20231018, end
+
 menu "Other Peripherals"
 source "drivers/misc/mediatek/typec/Kconfig"
 source "drivers/misc/mediatek/extcon/Kconfig"

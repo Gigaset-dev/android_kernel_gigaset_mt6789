@@ -89,7 +89,7 @@
 #define GPU_ACT_REF_POWER               (3352)          /* mW  */
 #define GPU_ACT_REF_FREQ                (886000)        /* KHz */
 #define GPU_ACT_REF_VOLT                (80000)         /* mV x 100 */
-#define GPU_LEAKAGE_POWER               (130)
+#define GPU_LEAKAGE_POWER               (71)
 
 /**************************************************
  * PMIC Setting
@@ -118,17 +118,6 @@
 #define VSRAM_FIXED_DIFF                (0)
 #define VOLT_NORMALIZATION(volt) \
 	((volt % 625) ? (volt - (volt % 625) + 625) : volt)
-
-/**************************************************
- * Power Throttling Setting
- **************************************************/
-#define GPUFREQ_BATT_OC_ENABLE          (1)
-#define GPUFREQ_BATT_PERCENT_ENABLE     (0)
-#define GPUFREQ_LOW_BATT_ENABLE         (1)
-
-#define GPUFREQ_BATT_OC_IDX             (34)
-#define GPUFREQ_BATT_PERCENT_IDX        (34)
-#define GPUFREQ_LOW_BATT_IDX            (34)
 
 /**************************************************
  * Adaptive Volt Scaling (AVS) Setting
@@ -169,16 +158,13 @@ struct gpufreq_clk_info {
 	struct clk *clk_main_parent;
 	struct clk *clk_sub_parent;
 	struct clk *subsys_mfg_cg;
-};
-
-struct gpufreq_mtcmos_info {
-	struct device *mfg0_dev;
-	struct device *mfg1_dev;
-	struct device *mfg2_dev;
-	struct device *mfg3_dev;
-	struct device *mfg4_dev;
-	struct device *mfg5_dev;
-	struct device *mfg6_dev;
+	struct clk *mtcmos_mfg_async;
+	struct clk *mtcmos_mfg;
+	struct clk *mtcmos_mfg_core0;
+	struct clk *mtcmos_mfg_core1_2;
+	struct clk *mtcmos_mfg_core3_4;
+	struct clk *mtcmos_mfg_core5_6;
+	struct clk *mtcmos_mfg_core7_8;
 };
 
 struct gpufreq_adj_info {
@@ -342,6 +328,12 @@ struct gpufreq_adj_info g_adj_gpu_segment_2[] = {
 #define ADJ_GPU_CUSTOM_NUM              ARRAY_SIZE(g_adj_gpu_custom)
 struct gpufreq_adj_info g_adj_gpu_custom[] = {
 	ADJOP(0, 0, 0, 0),
+};
+
+struct mt_gpufreq_power_table_info {
+	unsigned int gpufreq_khz;
+	unsigned int gpufreq_volt;
+	unsigned int gpufreq_power;
 };
 
 #endif /* __GPUFREQ_MT6893_H__ */

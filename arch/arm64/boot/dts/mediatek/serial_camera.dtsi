@@ -1,0 +1,101 @@
+/*
+ * Copyright (c) 2019 MediaTek Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+/* SERIAL_CAMERA GPIO standardization */
+&pio {
+//64
+	uhf_pins_serial_camera_gpio1_funen0: serial_camera@0 { //uart sao ma tou  DV5.0V
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO64__FUNC_GPIO64>;
+			slew-rate = <1>;
+			output-low;
+		};
+	};
+	uhf_pins_serial_camera_gpio1_funen1: serial_camera@1 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO64__FUNC_GPIO64>;
+			slew-rate = <1>;
+			output-high;
+		};
+	};
+//58
+	uhf_pins_serial_camera_gpio2_funen0: serial_camera@2 {  //UART1_SW_S
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO58__FUNC_GPIO58>;
+			slew-rate = <1>;
+			output-low;
+		};
+	};
+	uhf_pins_serial_camera_gpio2_funen1: serial_camera@3 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO58__FUNC_GPIO58>;
+			slew-rate = <1>;
+			output-high;
+		};
+	};
+//60
+	uhf_pins_serial_camera_gpio3_funen0: serial_camera@4 { //UART1_SW_OE
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO60__FUNC_GPIO60>;
+			slew-rate = <1>;
+			output-low;
+		};
+	};
+	uhf_pins_serial_camera_gpio3_funen1: serial_camera@5 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO60__FUNC_GPIO60>;
+			slew-rate = <1>;
+			output-high;
+		};
+	};
+//16
+	uhf_pins_serial_camera_rst_funen0: serial_camera@10 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO16__FUNC_GPIO16>;
+			slew-rate = <1>;
+			output-low;
+		};
+	};
+	uhf_pins_serial_camera_rst_funen1: serial_camera@11 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO16__FUNC_GPIO16>;
+			slew-rate = <1>;
+			output-high;
+		};
+	};
+	
+	uhf_pins_serial_camera_gpio_default: serial_cameradefault {
+	};
+};
+&serial_camera {
+	pinctrl-names = "serial_camera_gpio_default",
+			"serial_camera_enable1_gpio0", "serial_camera_enable1_gpio1",
+			"serial_camera_enable2_gpio0", "serial_camera_enable2_gpio1",
+			"serial_camera_enable3_gpio0", "serial_camera_enable3_gpio1",
+			"serial_camera_rst_gpio0", "serial_camera_rst_gpio1";
+	pinctrl-0 = <&uhf_pins_serial_camera_gpio_default>;
+	pinctrl-1 = <&uhf_pins_serial_camera_gpio1_funen0>;
+	pinctrl-2 = <&uhf_pins_serial_camera_gpio1_funen1>;
+	pinctrl-3 = <&uhf_pins_serial_camera_gpio2_funen0>;
+	pinctrl-4 = <&uhf_pins_serial_camera_gpio2_funen1>;
+	pinctrl-5 = <&uhf_pins_serial_camera_gpio3_funen0>;
+	pinctrl-6 = <&uhf_pins_serial_camera_gpio3_funen1>;
+	pinctrl-11 = <&uhf_pins_serial_camera_rst_funen0>;
+	pinctrl-12 = <&uhf_pins_serial_camera_rst_funen1>;
+	gpio_enable1_status = <&pio 64 0>;  //power on    high
+	gpio_enable2_status = <&pio 58 0>;  //UART1_SW_S  high ÇÐµ½2Â·£¬
+	gpio_enable3_status = <&pio 60 0>;  //UART1_SW_OE low open uart   
+	gpio_rst_status = <&pio 16 0>;
+	
+	status = "okay";
+};
+/* SERIAL_CAMERA GPIO end */

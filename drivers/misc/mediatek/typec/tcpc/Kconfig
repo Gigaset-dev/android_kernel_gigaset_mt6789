@@ -32,6 +32,18 @@ config TCPC_RT1711H
 	  Richtek RT1711H
 	  TypeC port Controller
 	  Driver
+	  
+#drv add by zhaopengge 20231129---start	  
+config TCPC_HUSB311
+	tristate "HUSB311 TypeC port Controller Driver"
+	depends on TCPC_CLASS
+	default n
+	help
+	  Say Y to enable
+	  HUSB311
+	  TypeC port Controller
+	  Driver
+#drv add by zhaopengge 20231129---end	  
 
 config TCPC_RT5081
 	tristate "Richtek RT5081 TypeC port Controller Driver"
@@ -130,3 +142,6 @@ config MTK_TYPEC_WATER_DETECT_BY_PCB
 	  need to be enabled.
 	  Say Yes to let PCB decides enabling water detection or not.
 	  If unsure, say N.
+
+# drv add tankaikun add aw35615 logic ic
+source "drivers/misc/mediatek/typec/tcpc/aw35615/Kconfig"

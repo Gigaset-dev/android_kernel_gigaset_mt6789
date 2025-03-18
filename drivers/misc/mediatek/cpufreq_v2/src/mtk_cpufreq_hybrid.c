@@ -354,7 +354,31 @@ int Ripi_cpu_dvfs_thread(void *data)
 						p->mt_policy->min);
 				}
 #endif
-
+#ifdef POLICY_FREQ_LIMIT_CHECK
+				if (p->mt_policy->cur > p->mt_policy->max) {
+					freqs.old = p->mt_policy->cur;
+					freqs.new = p->mt_policy->max;
+					cpufreq_freq_transition_begin(p->mt_policy, &freqs);
+					cpufreq_freq_transition_end(p->mt_policy, &freqs, 0);
+					p->idx_opp_tbl = _search_available_freq_idx(p,
+						freqs.new, 0);
+				} else if (p->mt_policy->cur < p->mt_policy->min) {
+					freqs.old = p->mt_policy->cur;
+					freqs.new = p->mt_policy->min;
+					cpufreq_freq_transition_begin(p->mt_policy, &freqs);
+					cpufreq_freq_transition_end(p->mt_policy, &freqs, 0);
+					p->idx_opp_tbl = _search_available_freq_idx(p,
+						freqs.new, 0);
+				} else if (cpu_dvfs_get_freq_by_idx(p, p->idx_opp_tbl) !=
+						p->mt_policy->cur) {
+					freqs.old = cpu_dvfs_get_freq_by_idx(p, p->idx_opp_tbl);
+					freqs.new = p->mt_policy->cur;
+					cpufreq_freq_transition_begin(p->mt_policy, &freqs);
+					cpufreq_freq_transition_end(p->mt_policy, &freqs, 0);
+					p->idx_opp_tbl = _search_available_freq_idx(p,
+						freqs.new, 0);
+				}
+#endif
 				trace_cpu_frequency_limits(p->mt_policy);
 
 				/* Policy notification */
@@ -1400,6 +1424,7 @@ void cpuhvfs_update_imax_thermal_state(unsigned int state)
 u8 *record_CCI_Ref;
 unsigned char *record_CCI_Tbl;
 
+#if IS_ENABLED(CONFIG_MTK_CPU_DVFS_ENG_DEBUG)
 unsigned int cpuhvfs_get_cci_result(unsigned int idx_1,
 	unsigned int idx_2, unsigned int mode)
 {
@@ -1416,16 +1441,26 @@ unsigned int cpuhvfs_get_cci_result(unsigned int idx_1,
 void cpuhvfs_update_cci_map_tbl(unsigned int idx_1, unsigned int idx_2,
 	unsigned char result, unsigned int mode, unsigned int use_id)
 {
-	if (idx_1 < NR_FREQ && idx_2 < NR_FREQ && mode < NR_CCI_TBL) {
-		csram_write(OFFS_CCI_TBL_USER, use_id);
-		if (mode == 0)
-			record_CCI_Ref[(idx_1 * NR_FREQ) + idx_2] = result;
-		else
-			record_CCI_Ref[((idx_1 + NR_FREQ) * NR_FREQ)
-				+ idx_2] = result;
-		csram_write(OFFS_CCI_TOGGLE_BIT, 1);
+	unsigned int index;
+
+	if (idx_1 >= NR_FREQ || idx_2 >= NR_FREQ || mode >= NR_CCI_TBL)
+		return;
+
+	csram_write(OFFS_CCI_TBL_USER, use_id);
+
+	if (mode == 0) {
+		index = (idx_1 * NR_FREQ) + idx_2;
+	} else {
+		index = ((idx_1 + NR_FREQ) * NR_FREQ) + idx_2;
 	}
+
+	if (index >= PVT_CCI_TBL_SIZE)
+		return;
+
+	record_CCI_Ref[index] = result;
+	csram_write(OFFS_CCI_TOGGLE_BIT, 1);
 }
+#endif /* CONFIG_MTK_CPU_DVFS_ENG_DEBUG */
 
 void cpuhvfs_update_cci_mode(unsigned int mode, unsigned int use_id)
 {

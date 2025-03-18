@@ -98,6 +98,7 @@ struct mtk_mmqos_desc {
 	const u8 comm_port_channels[MMQOS_MAX_COMM_NUM][MMQOS_MAX_COMM_PORT_NUM];
 	const u8 comm_port_hrt_types[MMQOS_MAX_COMM_NUM][MMQOS_MAX_COMM_PORT_NUM];
 	const u8 md_scen;
+	const u8 freq_mode;
 };
 
 #define DEFINE_MNODE(_name, _id, _bw_ratio, _is_write, _channel, _link) {	\
@@ -114,4 +115,9 @@ int mtk_mmqos_remove(struct platform_device *pdev);
 void mtk_mmqos_init_hrt(struct mmqos_hrt *hrt);
 int mtk_mmqos_register_hrt_sysfs(struct device *dev);
 void mtk_mmqos_unregister_hrt_sysfs(struct device *dev);
+
+enum mminfra_freq_mode {
+	BY_REGULATOR,
+	NO_MMINFRA,
+};
 #endif /* MMQOS_MTK_H */

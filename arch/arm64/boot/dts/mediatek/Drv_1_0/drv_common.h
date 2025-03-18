@@ -1,5 +1,5 @@
 #define PRI_PLATFORM_MT6789 0
-
+#define PRI_PLATFORM_MT6855 0
 //module_setting  ++++++++++++
 #define MODULE_FINGERPRINT 0
 #define MODULE_SMART_PA 0
@@ -44,6 +44,15 @@
 //udf_fortsense_fs6281 ------------------------
 
 
+//udf_fortsense_fs6281 ++++++++++++++++++++++++
+#define PRI_FOCALTECH_REE_ATA 0
+
+#if PRI_FOCALTECH_REE_ATA
+#define PRI_FOCALTECH_REE_ATA_CONFIG_1 0
+#define PRI_FOCALTECH_REE_ATA_CONFIG_2 0
+#define PRI_FOCALTECH_REE_ATA_CONFIG_3 0
+#endif
+//udf_fortsense_fs6281 ------------------------
 
 #endif
 /******  
@@ -96,6 +105,14 @@
 #define PRI_AW88394_SINGLE_CONFIG_1 0
 #define PRI_AW88394_SINGLE_CONFIG_2 0
 #define PRI_AW88394_SINGLE_CONFIG_3 0
+#endif
+
+
+#define PRI_AW88394_DUAL 0
+#if PRI_AW88394_DUAL
+#define PRI_AW88394_DUAL_CONFIG_1 0
+#define PRI_AW88394_DUAL_CONFIG_2 0
+#define PRI_AW88394_DUAL_CONFIG_3 0
 #endif
 
 #endif

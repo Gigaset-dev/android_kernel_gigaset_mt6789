@@ -175,8 +175,9 @@ static void lcm_pannel_reconfig_blk(struct lcm *ctx)
 		//mtk_drm_esd_set_status(0);
 	}
 }
-
+#if IS_ENABLED(CONFIG_PRIZE_COMMON_NODE)
 extern void prize_common_node_show_register(char* name,bool(*hbm_set)(void));
+#endif
 bool get_hbmstate(void)
 {
 	printk("%s g_ctx->hbm_stat:%d",__func__, g_ctx->hbm_stat);
@@ -1445,7 +1446,9 @@ static int lcm_probe(struct mipi_dsi_device *dsi)
 	g_ctx->hbm_stat = false;
 	g_ctx->oled_screen = true;/* drv-add oled sysfs-pengzhipeng-20230306-end */
 	g_ctx->doze_en = false;//drv-Fixed the issue of entering aod and TP having touch-pengzhipeng-20230516
-	prize_common_node_show_register("HBMSTATE", &get_hbmstate);
+#if IS_ENABLED(CONFIG_PRIZE_COMMON_NODE)
+    prize_common_node_show_register("HBMSTATE", &get_hbmstate);
+#endif    
 	pr_info("%s- lcm,nt36672e,vdo,120hz,hfp\n", __func__);
 
 	return ret;

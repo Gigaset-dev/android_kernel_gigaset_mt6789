@@ -10,6 +10,8 @@
 #include "cts_earjack_detect.h"
 #include "cts_strerror.h"
 
+//static struct chipone_ts_data *chipone_glove_data;
+
 #ifdef CONFIG_CTS_I2C_HOST
 static int cts_i2c_writeb(const struct cts_device *cts_dev,
         u32 addr, u8 b, int retry, int delay)
@@ -2693,6 +2695,67 @@ static ssize_t fts_touch_glove_store(struct device *dev, struct device_attribute
 static DEVICE_ATTR(state,0664, fts_touch_glove_show, fts_touch_glove_store);
 */
 
+
+/*prize add by zhangli start*/
+static void drv_glove_mode_enable(unsigned char on)
+{
+	if (1 == on) {
+		cts_enter_glove_mode(g_cts_dev);
+	} else if (0 == on) {
+		cts_exit_glove_mode(g_cts_dev);
+	}
+}
+
+static ssize_t drv_glove_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+    int count = 0;
+    count = snprintf(buf, PAGE_SIZE, "Glove Mode:%s\n", cts_is_glove_enabled(g_cts_dev) ? "On" : "Off");
+    return count;
+}
+
+static ssize_t drv_glove_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+    if (buf[0] == '1') {
+		drv_glove_mode_enable(1);
+		pr_err("enable glove mode, glove_mode_enable = %d\n", cts_is_glove_enabled(g_cts_dev));
+    } else if (buf[0] == '0') {
+		drv_glove_mode_enable(0);
+		pr_err("disable glove mode, glove_mode_enable = %d\n", cts_is_glove_enabled(g_cts_dev));
+    }
+
+    return count;
+}
+
+static DEVICE_ATTR(state, S_IRUGO | S_IWUSR, drv_glove_mode_show, drv_glove_mode_store);
+
+int drv_glove_init(void)
+{
+    static struct kobject *drv_sysfs_rootdir = NULL;
+	struct kobject *drv_glove = NULL;
+    int err = 0;
+	struct chipone_ts_data *cts_data = container_of(g_cts_dev, struct chipone_ts_data, cts_dev);
+
+    if (!drv_sysfs_rootdir)
+        drv_sysfs_rootdir = kobject_create_and_add("prize", kernel_kobj);
+
+    if (!drv_glove)
+        drv_glove = kobject_create_and_add("smartcover", drv_sysfs_rootdir);
+
+    err = sysfs_create_link(drv_glove, &cts_data->device->kobj, "common_node");
+    if (err) {
+        pr_err("sysfs_create_link fail\n");
+        return -1;
+	}
+
+    if (sysfs_create_file(&cts_data->device->kobj, &dev_attr_state.attr)) {
+        return -1;
+	}
+
+	return 0;
+}
+/*prize add by zhangli 2025106 end*/
+#endif
+
 static ssize_t show_cmd_charge_disable(struct class *class, struct class_attribute *attr,	char *buf)
 {
 	if(g_cts_dev == NULL){
@@ -2804,7 +2867,7 @@ int init_sys_node(struct cts_device *cts_dev)
 		return 0;
 }
 
-#endif
+//#endif
 
 int cts_probe_device(struct cts_device *cts_dev)
 {
@@ -2924,7 +2987,12 @@ update_firmware:
             }
         }
     }
-
+	
+/*prize add by zhangli 2025106 start*/
+#ifdef CONFIG_CTS_GLOVE
+	drv_glove_init();
+#endif  
+/*prize add by zhangli 2025106 end*/
     return 0;
 }
 
@@ -3140,6 +3208,8 @@ int cts_is_glove_enabled(const struct cts_device *cts_dev)
 {
     return cts_dev->rtdata.glove_mode_enabled;
 }
+
+
 
 #endif /* CONFIG_CTS_GLOVE */
 

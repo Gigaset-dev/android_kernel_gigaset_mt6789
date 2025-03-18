@@ -281,7 +281,7 @@ static int pe_increase_ta_vchr(struct chg_alg_device *alg, u32 vchr_target)
 			return 0;
 		}
 		__pe_increase_ta_vchr(alg);
-		//msleep(500);
+		msleep(500);//drv mod by liuruiqian for PE shouln't increase 12V,20241210
 		vchr_after = pe_hal_get_vbus(alg);
 		
 		vchr_tmp = abs_ex(vchr_before,vchr_after);

@@ -5,6 +5,39 @@
 #endif
 
 
+
+&odm{
+	fpc:fpc {
+		compatible = "mediatek,mt6765-fpc";
+		interrupt-parent = <&pio>;
+		interrupts = <FP_IRQ_PIN IRQ_TYPE_EDGE_FALLING FP_IRQ_PIN 0>;
+		pinctrl-names = "default",
+			"fpc_eint_as_int",
+			"fpc_pins_rst_high", "fpc_pins_rst_low",
+			"fpc_pins_pwr_high", "fpc_pins_pwr_low",
+			"fpc_mode_as_cs", "fpc_mode_as_ck",
+			"fpc_mode_as_mi", "fpc_mode_as_mo",
+			"fpc_miso_pull_up", "fpc_miso_pull_down",
+			"fpc_mosi_pull_up", "fpc_mosi_pull_down";
+		pinctrl-0 = <&fpc_pins_default>;
+		pinctrl-1 = <&fpc_pins_eint_as_int>;
+		pinctrl-2 = <&fpc_pins_rst_high>;
+		pinctrl-3 = <&fpc_pins_rst_low>;
+		pinctrl-4 = <&fpc_pins_pwr_high>;
+		pinctrl-5 = <&fpc_pins_pwr_low>;
+		pinctrl-6 = <&fpc_mode_as_cs>;
+		pinctrl-7 = <&fpc_mode_as_ck>;
+		pinctrl-8= <&fpc_mode_as_mi>;
+		pinctrl-9 = <&fpc_mode_as_mo>;
+		pinctrl-10 = <&fpc_miso_pull_up>;
+		pinctrl-11 = <&fpc_miso_pull_down>;
+		pinctrl-12 = <&fpc_mosi_pull_up>;
+		pinctrl-13 = <&fpc_mosi_pull_down>;
+		status = "okay";
+       };
+};
+
+
 /* Fingerprint GPIO standardization */
 &SPI_INDEX{
 	#address-cells = <1>;
@@ -22,34 +55,6 @@
 		fingerprint,touch-int-gpio = <&pio FP_IRQ_PIN 0>;
 		status = "okay";
 	};
-};
-
-&fpc {
-	interrupt-parent = <&pio>;
-	interrupts = <FP_IRQ_PIN IRQ_TYPE_EDGE_FALLING FP_IRQ_PIN 0>;
-	pinctrl-names = "default",
-		"fpc_eint_as_int",
-		"fpc_pins_rst_high", "fpc_pins_rst_low",
-		"fpc_pins_pwr_high", "fpc_pins_pwr_low",
-		"fpc_mode_as_cs", "fpc_mode_as_ck",
-		"fpc_mode_as_mi", "fpc_mode_as_mo",
-		"fpc_miso_pull_up", "fpc_miso_pull_down",
-		"fpc_mosi_pull_up", "fpc_mosi_pull_down";
-	pinctrl-0 = <&fpc_pins_default>;
-	pinctrl-1 = <&fpc_pins_eint_as_int>;
-	pinctrl-2 = <&fpc_pins_rst_high>;
-	pinctrl-3 = <&fpc_pins_rst_low>;
-	pinctrl-4 = <&fpc_pins_pwr_high>;
-	pinctrl-5 = <&fpc_pins_pwr_low>;
-	pinctrl-6 = <&fpc_mode_as_cs>;
-	pinctrl-7 = <&fpc_mode_as_ck>;
-	pinctrl-8= <&fpc_mode_as_mi>;
-	pinctrl-9 = <&fpc_mode_as_mo>;
-	pinctrl-10 = <&fpc_miso_pull_up>;
-	pinctrl-11 = <&fpc_miso_pull_down>;
-	pinctrl-12 = <&fpc_mosi_pull_up>;
-	pinctrl-13 = <&fpc_mosi_pull_down>;
-	status = "okay";
 };
 
 &pio {

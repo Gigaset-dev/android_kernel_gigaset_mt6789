@@ -56,8 +56,10 @@
 #define AFDRV_WV511AAF "WV511AAF"
 //prize add for aw86014af zhuzhengjiang 20210722 start
 #define AFDRV_AW86014AF "AW86014AF"
+#define AFDRV_AW86014PCSRAF "AW86014PCSRAF"
 #define AFDRV_AW86017CSRAF "AW86017CSRAF"
 //prize add for aw86014af zhuzhengjiang 20210722 end
+#define AFDRV_DW9800WAF "DW9800WAF"
 
 /* Structures */
 struct stAF_MotorInfo {

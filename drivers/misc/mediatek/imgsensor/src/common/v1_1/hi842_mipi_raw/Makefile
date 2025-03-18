@@ -1,1 +1,0 @@
-imgsensor_isp6s-objs += $(subdrv-rpath)/hi842mipiraw_Sensor.o

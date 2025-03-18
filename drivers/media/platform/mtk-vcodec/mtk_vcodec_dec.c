@@ -1618,7 +1618,12 @@ static int vidioc_vdec_qbuf(struct file *file, void *priv,
 			ctx->id, buf->index, vq->num_buffers);
 		return -EINVAL;
 	}
-
+	if (IS_ERR_OR_NULL(buf->m.planes) || buf->length == 0) {
+		mtk_v4l2_err("[%d] buffer index %d planes address %p 0x%llx or length %d invalid",
+			ctx->id, buf->index, buf->m.planes,
+			(unsigned long long)buf->m.planes, buf->length);
+		return -EINVAL;
+	}
 	vb = vq->bufs[buf->index];
 	vb2_v4l2 = container_of(vb, struct vb2_v4l2_buffer, vb2_buf);
 	mtkbuf = container_of(vb2_v4l2, struct mtk_video_dec_buf, vb);
@@ -2278,8 +2283,13 @@ static int vb2ops_vdec_queue_setup(struct vb2_queue *vq,
 		else
 			*nplanes = 1;
 
-		for (i = 0; i < *nplanes; i++)
+		for (i = 0; i < *nplanes; i++) {
 			sizes[i] = q_data->sizeimage[i];
+			if (sizes[i] == 0) {
+				mtk_v4l2_err("plane size[%d] is 0", i);
+				return -EINVAL;
+			}
+		}
 	}
 
 	mtk_v4l2_debug(1, "[%d]\t type = %d, get %d plane(s), %d buffer(s) of size 0x%x 0x%x ",

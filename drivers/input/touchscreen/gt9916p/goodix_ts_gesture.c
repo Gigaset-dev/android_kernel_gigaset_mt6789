@@ -28,6 +28,11 @@
 #include <linux/input/mt.h>
 #include "goodix_ts_core.h"
 
+/* DRV added by wangwei1, gestuer node, start */
+#if IS_ENABLED(CONFIG_PRIZE_COMMON_NODE)
+#include "../../../misc/mediatek/prize/prize_common_node/prize_common_node.h"
+#endif
+/* DRV added by wangwei1, gestuer node, end */
 
 #define GOODIX_GESTURE_DOUBLE_TAP		0xCC
 #define GOODIX_GESTURE_SINGLE_TAP		0x4C
@@ -196,6 +201,25 @@ const struct goodix_ext_attribute gesture_attrs[] = {
 			gsx_fod_type_show, gsx_fod_type_store),
 };
 
+/* DRV added by wangwei1, gestuer node, start */
+#if IS_ENABLED(CONFIG_PRIZE_COMMON_NODE)
+static struct goodix_ts_core *gtp_core;
+static void gtp_double_type_func(unsigned char on)
+{
+
+	if(1 == on){
+		gtp_core->gesture_type |= GESTURE_DOUBLE_TAP;
+		ts_info("%s enter DOUBLE-TAP gesture\n", __func__);
+	}else if(0 == on){
+		gtp_core->gesture_type &= ~GESTURE_DOUBLE_TAP;
+		ts_info("%s close DOUBLE-TAP gesture\n", __func__);
+	}
+
+}
+extern void prize_common_node_register(char* name,void(*set)(unsigned char on_off));
+#endif
+/* DRV modified by wangwei1 20240321, gesture mode, end */
+
 static int gsx_gesture_init(struct goodix_ts_core *cd,
 		struct goodix_ext_module *module)
 {
@@ -209,6 +233,13 @@ static int gsx_gesture_init(struct goodix_ts_core *cd,
 	gsx->ts_core = cd;
 	gsx->ts_core->gesture_type = 0;
 	atomic_set(&gsx->registered, 1);
+
+	/* DRV added by wangwei1 20231114, gesture mode, start */
+#if IS_ENABLED(CONFIG_PRIZE_COMMON_NODE)
+	gtp_core = cd;
+	prize_common_node_register("GESTURE", &gtp_double_type_func);
+#endif
+	/* DRV added by wangwei1 20231114, gesture mode, end */
 
 	return 0;
 }

@@ -2047,7 +2047,12 @@ static int bq2589x_chg_set_property(struct power_supply *psy,
 	pr_info("psp=%d\n", psp);
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ONLINE:
-		 bq2589x_force_dpdm(bq);
+		bq2589x_force_dpdm(bq);
+		pr_info("%s: val->intval = %d\n", __func__, val->intval);
+		if (!(val->intval)) {
+			pr_info("Trigger dpdm to disconnect adb\n");
+			Charger_Detect_Init();
+		}
 		break;
 	case POWER_SUPPLY_PROP_STATUS:
 			  ret = val->intval ? bq2589x_enable_charger(bq) : bq2589x_disable_charger(bq);

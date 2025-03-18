@@ -138,16 +138,6 @@ struct gpufreq_core_mask_info g_core_mask_table[] = {
 #define SRAM_PARK_VOLT                  (75000)
 
 /**************************************************
- * Power Throttling Setting
- **************************************************/
-#define GPUFREQ_BATT_OC_ENABLE          (1)
-#define GPUFREQ_BATT_PERCENT_ENABLE     (0)
-#define GPUFREQ_LOW_BATT_ENABLE         (1)
-#define GPUFREQ_BATT_OC_FREQ            (474000)
-#define GPUFREQ_BATT_PERCENT_IDX        (0)
-#define GPUFREQ_LOW_BATT_FREQ           (474000)
-
-/**************************************************
  * Adaptive Volt Scaling (AVS) Setting
  **************************************************/
 #define GPUFREQ_AVS_ENABLE              (0)

@@ -799,6 +799,7 @@ static inline void spidev_probe_acpi(struct spi_device *spi) {}
 
 /*-------------------------------------------------------------------------*/
 
+extern int gc9a01_scr_on(void);
 static int spidev_probe(struct spi_device *spi)
 {
 	struct spidev_data	*spidev;

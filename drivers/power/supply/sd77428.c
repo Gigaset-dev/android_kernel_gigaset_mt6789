@@ -832,7 +832,7 @@ static int32_t sd77428_detect_ic(struct sd77428_data *chip)
         sd77428_read_word(chip,(sbsd_cmd_def[SBSF1_CHIPVER] >> SBSD_CMD_Pos) & 0xFF, &chip_id);
         chip_id = chip_id &0xFF;
         pr_info("chip_id = 0x%x\n", chip_id);
-		if(chip_id == 0x12 || chip_id == 0x00)
+		if(chip_id == 0x12)
 		{
 			sd77428_is_ok = true;
 			break;

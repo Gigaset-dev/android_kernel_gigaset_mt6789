@@ -1926,7 +1926,6 @@ static	struct power_supply *sw_psy;
 static	struct power_supply_desc sw_desc;
 static	struct power_supply_config sw_cfg;
 static  unsigned char gesture_switch = 0;
-
 static enum power_supply_property pd_psy_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 };

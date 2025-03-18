@@ -59,7 +59,9 @@
 
 #include "mtk_charger.h"
 
-
+#if IS_ENABLED(CONFIG_PRIZE_CHARGE_CTRL_POLICY)
+extern bool g_charge_is_screen_on;
+#endif /* CONFIG_PRIZE_CHARGE_CTRL_POLICY */
 //prize add by lipengpeng 20210621 start 
 //#if IS_ENABLED(CONFIG_PRIZE_MT5725_SUPPORT_15W)
 extern int get_wireless_charge_current(struct charger_data *pdata);
@@ -68,6 +70,8 @@ extern struct mtk_charger *mt5725_info;
 extern int get_mt5725_charge_protocol(void);
 //#endif
 //prize add by lipengpeng 20210621 end 
+/* pri added for turn Tx power off when charge complete */
+extern void wireless_power_charge_complete(void);
 
 static int _uA_to_mA(int uA)
 {
@@ -140,6 +144,12 @@ static bool select_charging_current_limit(struct mtk_charger *info,
 	bool is_basic = false;
 	u32 ichg1_min = 0, aicr1_min = 0;
 	int ret;
+	// drv add by liuruiqian for temp limit current,20240731 start
+	int battery_ntc;
+	union power_supply_propval prop;
+	struct power_supply *bat_psy = info->bat_psy;
+	struct chg_alg_device *alg_pe = get_chg_alg_by_name("pe");
+	// drv add by liuruiqian for temp limit current,20240731 end
 
 	select_cv(info);
 
@@ -288,29 +298,6 @@ static bool select_charging_current_limit(struct mtk_charger *info,
 
 			printk("gezi is 5725:%d,sm:%d,in_curr:%d,cc:%d\n",get_MT5725_status(),info->sw_jeita.sm,pdata->input_current_limit,pdata->charging_current_limit);
 	}
-#if IS_ENABLED(CONFIG_PRIZE_CHARGE_CTRL_POLICY)
-	if (g_charge_is_screen_on){
-		
-		if(get_MT5725_status() == 0){
-			if (pdata->charging_current_limit > 1000000){
-				pdata->charging_current_limit = 1000000;
-			}
-			if (pdata->input_current_limit > 1000000){
-				pdata->input_current_limit = 1000000;
-			}
-		}
-		else{
-			if (pdata->charging_current_limit > 1300000){
-				pdata->charging_current_limit = 1300000;
-			}
-			if (pdata->input_current_limit > 1300000){
-				pdata->input_current_limit = 1300000;
-			}
-		}
-	}
-	printk("PRIZE master  charge current %d:%d\n",pdata->input_current_limit,pdata->charging_current_limit);	
-	//prize add by sunshuai for Bright screen current limit  for master charge	2019-0429 end
-#endif//prize end
 
 	sc_select_charging_current(info, pdata);
 
@@ -370,6 +357,59 @@ static bool select_charging_current_limit(struct mtk_charger *info,
 	}
 	info->setting.input_current_limit_dvchg1 =
 		pdata_dvchg->thermal_input_current_limit;
+
+// drv mod by liuruiqian for battery_ntc charge limit 20240726 start
+	if (bat_psy == NULL || IS_ERR(bat_psy)) {
+		chr_err("%s retry to get bat_psy\n", __func__);
+		bat_psy = devm_power_supply_get_by_phandle(&info->pdev->dev, "gauge");
+		info->bat_psy = bat_psy;
+	}
+	if (bat_psy == NULL || IS_ERR(bat_psy)) {
+		chr_err("%s Couldn't get bat_psy\n", __func__);
+		battery_ntc = 300;
+	} else {
+		power_supply_get_property(bat_psy,POWER_SUPPLY_PROP_TEMP, &prop);
+		battery_ntc = prop.intval;
+	}
+	if (alg_pe != NULL) {
+		if (chg_alg_is_algo_ready(alg_pe) == ALG_RUNNING){
+			if (battery_ntc >= 400) {
+				if (info->pre_battery_ntc >= 400 && battery_ntc >= 390)
+					battery_ntc = 430;
+				else if (pdata->charging_current_limit > 1500000 ||
+					pdata->charging_current_limit == -1)
+					info->setting.charging_current_limit1 = 1500000;
+			}
+			if (battery_ntc >= 430) {
+				if (info->pre_battery_ntc >= 430 && battery_ntc >= 420)
+					battery_ntc = 450;
+				else if (pdata->charging_current_limit > 1200000 ||
+					pdata->charging_current_limit == -1)
+					info->setting.charging_current_limit1 = 1200000;
+			}
+			if (battery_ntc >= 450) {
+				if (pdata->charging_current_limit > 1000000 ||
+					pdata->charging_current_limit == -1)
+					info->setting.charging_current_limit1 = 1000000;
+			}
+			info->pre_battery_ntc = battery_ntc;
+		}
+		chr_err("%s:battery ntc: %d,limit input current:%d\n", __func__,battery_ntc,info->setting.input_current_limit1);
+	}
+
+#if IS_ENABLED(CONFIG_PRIZE_CHARGE_CTRL_POLICY)
+	if (g_charge_is_screen_on){
+				if (pdata->charging_current_limit > 1000000 ||
+					pdata->charging_current_limit == -1) {
+					setting->charging_current_limit1 = 1000000;
+					chr_err("pe is running!input_current_limit:(%d,%d)\n",
+						pdata->input_current_limit,
+						setting->input_current_limit1);
+				}
+	}
+		printk("PRIZE master  charge current %d:%d\n",pdata->input_current_limit,pdata->charging_current_limit);
+#endif	/* CONFIG_PRIZE_CHARGE_CTRL_POLICY */
+// drv mod by liuruiqian for battery_ntc charge limit 20240726 start
 
 done:
 
@@ -433,10 +473,24 @@ static int do_algorithm(struct mtk_charger *info)
 		if (chg_done) {
 			charger_dev_do_event(info->chg1_dev, EVENT_FULL, 0);
 			info->polling_interval = CHARGING_FULL_INTERVAL;
+/* pri added for turn Tx power off when charge complete start */
+#if defined(CONFIG_PRIZE_MT5725_SUPPORT_15W)
+		if ((info->chr_type == NONSTANDARD_CHARGER) && (get_MT5725_status() == 0))
+			wireless_power_charge_complete();
+#endif /*CONFIG_PRIZE_MT5725_SUPPORT_15W*/
+/* pri added for turn Tx power off when charge complete end */
 			chr_err("%s battery full\n", __func__);
 		} else {
 			charger_dev_do_event(info->chg1_dev, EVENT_RECHARGE, 0);
 			info->polling_interval = CHARGING_INTERVAL;
+/* pri added for turn Tx power off when charge complete start */
+#if defined(CONFIG_PRIZE_MT5725_SUPPORT_15W)
+	if (chg_done) {
+		if ((info->chr_type == NONSTANDARD_CHARGER) && (get_MT5725_status() == 0))
+			wireless_power_charge_complete();
+	}
+#endif /*CONFIG_PRIZE_MT5725_SUPPORT_15W*/
+/* pri added for turn Tx power off when charge complete end */
 			chr_err("%s battery recharge\n", __func__);
 		}
 	}

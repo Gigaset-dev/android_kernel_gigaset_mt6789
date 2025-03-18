@@ -11,3 +11,7 @@
 #if PRI_UDF_FORTSENSE_FS6281 
 #include "./udf_fortsense_fs6281/udf_fortsense_fs6281.dtsi"
 #endif
+
+#if PRI_FOCALTECH_REE_ATA
+#include "./focaltech_ree_ata/focaltech_ree_ata.dtsi"
+#endif

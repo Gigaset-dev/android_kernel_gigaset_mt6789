@@ -15,7 +15,7 @@
 * Reference Design. Use of the Reference Design is at user's discretion to qualify 
 * the final work result.
 *****************************************************************************/
-#include "sd77428.h"
+#include "sd77428_2.h"
 #include "parallel_driver.h"
 
 #ifndef pr_fmt
@@ -32,26 +32,35 @@ do {\
 #endif
 
 // echo 8 4 1 7 > /proc/sys/kernel/printk           //内核终端打印指令
-
+//prize add by lipengpeng 20220711 start
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
+#include "../../misc/mediatek/prize/hardware_info/hardware_info.h"
+#endif
+//prize add by lipengpeng 20220711 end 
 
 static bool sd77428_is_ok = false;
+static bool sd77428_is_ready = false;
 
 
 static struct sd77428_data *g_chip_data = NULL;
+static bool sd77428_hard_opt = false;
 
+static bool sd77428_shipmode_flag = false;          //SD77428是否处于长时间的shipmode关机，电量计需要重新更新soc
+static int  sd77428_shipmode_waitcnt = 0;
+static int32_t sd77428_default_ddv = 150;
 //-----------------------------------------------parameters set-----------------------------------------------------//
-const static  uint16_t  parameters_down_enable  =   0;                           //是否开启参数配置下载
+const static  uint16_t  parameters_down_enable  =   1;                           //是否开启参数配置下载
 const static  uint16_t  BATT_DESIGN_CAPACITY    =   2800;
-const static  uint16_t  BATT_DESIGN_FCC         =   2716;
-const static  uint16_t  BATT_DESIGN_CV          =   4400;
-const static  uint16_t  BATT_DESIGN_EOC         =   180;
-const static  uint16_t  BATT_DESIGN_EOD         =   3400;
-const static  uint16_t  BATT_DESIGN_RSENSE      =   1000;
-const static  uint16_t  BATT_DESIGN_CADC_OFFSET =   0x0;
+const static  uint16_t  BATT_DESIGN_FCC         =   2906;
+const static  uint16_t  BATT_DESIGN_CV          =   4370;
+const static  uint16_t  BATT_DESIGN_EOC         =   500;
+const static  uint16_t  BATT_DESIGN_EOD         =   3425;
+const static  uint16_t  BATT_DESIGN_RSENSE      =   3000;
+const static  int16_t   BATT_DESIGN_CADC_OFFSET =   0x0;
 // const static  uint16_t  SOFT_RESET              =   0x2301;
 // const static  uint16_t  BATT_DESIGN_NTC_SRCTAB  =   0x0102;
 
-static uint16_t gdm_thresh_chg = 1,  gdm_thresh_dsg = 1;    // SBSA0_CONFIGDSG_CHG
+static uint16_t gdm_thresh_chg = 2,  gdm_thresh_dsg = 2;    // SBSA0_CONFIGDSG_CHG
 //static uint8_t calib_sample = 32;                            // SBSA1_CALIBRATION_TIME
 
 static uint8_t effect_mid_windows = 21;                     // SBSA3_FILTER_WIND_LOC
@@ -71,10 +80,10 @@ static uint8_t SECOND_LOCK_TH = 3;                         //SBSA6_FILTER_SECOND
 static uint8_t SECOND_LOCK_TIMER = 240;
 static uint8_t SECOND_UNLOCK_TIMER = 240;
 
-//static uint8_t _IDLE_CHARGE_EST_ = 1;                      //SBSA7_FG_IDLE_SOH
-//static uint8_t FG_idle_60s_enable = 1;                        
-//static uint8_t FG_cc_soh_ratio = 25;                        
-//static uint8_t FG_dc_soh_ratio = 15;  
+static uint8_t _IDLE_CHARGE_EST_ = 1;                      //SBSA7_FG_IDLE_SOH
+static uint8_t FG_idle_60s_enable = 1;                        
+static uint8_t FG_cc_soh_ratio = 25;                        
+static uint8_t FG_dc_soh_ratio = 15;  
 
 static uint16_t FG_idle_delay_curr = 300;                  //SBSA8_FG_IDLE_SYNCCURR
 static uint16_t FG_idle_wave_curr = 20;        
@@ -89,24 +98,24 @@ static uint8_t FG_charge_thm_range1 = 0;
 static uint8_t FG_charge_thm_range2 = 20;                        
 static uint8_t FG_charge_thm_range3 = 40; 
 
-static uint16_t FG_charge_maxdfcc = 12000;                     //SBSAB_FG_CC_DFCC_RANGE
-static uint16_t FG_charge_mindfcc = 900;    
+static uint16_t FG_charge_maxdfcc = 10000;                     //SBSAB_FG_CC_DFCC_RANGE
+static uint16_t FG_charge_mindfcc = 500;    
 
 static uint8_t FG_charge_cv_eoctimes = 25;                      //SBSAC_FG_CC_CV_CURR
 static uint8_t FG_charge_tail_ccratio = 20;                        
 static uint8_t FG_charge_thm_curr = 5;                        
 static uint8_t FG_charge_fast_curr = 5; 
 
-static uint16_t FG_dc_max_dfcc = 12000;                     //SBSAD_FG_CC_DFCC_RANGE
-static uint16_t FG_dc_min_dfcc = 900;    
+static uint16_t FG_dc_max_dfcc = 10000;                     //SBSAD_FG_CC_DFCC_RANGE
+static uint16_t FG_dc_min_dfcc = 500;    
 
 static uint8_t FG_dc_tail_th = 5;                      //SBSAE_FG_DC_TAIL
-static uint8_t FG_dc_soc_des1 = 10;                        
-static uint8_t FG_dc_soc_des2 = 6;                        
-static uint8_t FG_dc_tail_cc = 10; 
+static uint8_t FG_dc_soc_des1 = 25;                        
+static uint8_t FG_dc_soc_des2 = 15;                        
+static uint8_t FG_dc_tail_cc = 15; 
 
-//static uint16_t FG_CC_DFCC_MODE = 0;                     //SBSAF_FG_CC_DFCC_SET
-//static uint16_t FG_CC_hardset_DFCC = 0;  
+static uint16_t FG_CC_DFCC_MODE = 0;                     //SBSAF_FG_CC_DFCC_SET
+static uint16_t FG_CC_hardset_DFCC = 0;  
 
 
 //static uint16_t ntc_reg_enable = 0;                 //SBSB0_NTC_HOLD_TIME
@@ -116,45 +125,51 @@ static uint8_t FG_dc_tail_cc = 10;
 //static uint16_t NTC_pullup_sense = 0;
 
 //-----------------dfcc----------------//
-static short ocv_volt_data[OCV_DATA_NUM] = { 3103, 3372, 3523, 3617, 3675, 3690, 3694, 3696, 3697, 3706, 3717, 3727, 3736, 3744, 3750, 3757, 3765, 3772, 3779, 
-                                             3785, 3792, 3798, 3804, 3809, 3815, 3822, 3829, 3837, 3845, 3852, 3860, 3869, 3878, 3888, 3899, 3912, 3926, 3943, 
-                                             3963, 3982, 4000, 4016, 4030, 4046, 4062, 4078, 4094, 4110, 4127, 4145, 4162, 4179, 4198, 4216, 4234, 4252, 4270, 
-                                             4288, 4306, 4323, 4339, 4355, 4369, 4384, 4400 };
+static short ocv_volt_data[OCV_DATA_NUM] = { 3103, 3242, 3443, 3570, 3639, 3658, 3664, 3666, 3666, 3675, 3688, 3698, 3709, 3716, 3724, 3730, 3738, 3745, 3753, 3760, 
+                                             3764, 3770, 3776, 3781, 3788, 3795, 3805, 3812, 3821, 3847, 3874, 3884, 3894, 3905, 3916, 3932, 3949, 3968, 3988, 4006, 
+                                             4024, 4042, 4058, 4075, 4093, 4109, 4127, 4144, 4165, 4183, 4201, 4221, 4240, 4261, 4279, 4298, 4318, 4336, 4353, 4370, 
+                                             4385, 4401, 4416, 4432, 4458};
+
+static short ocv_soc_value[OCV_DATA_NUM] = {0, 156, 312, 469, 625, 781, 938, 1094, 1250, 1406, 1562, 1719, 1875, 2031, 2188, 2344, 2500, 
+                                            2656, 2812, 2969, 3125, 3281, 3438, 3594, 3750, 3906, 4062, 4219, 4375, 4531, 4688, 4844, 
+                                            5000, 5156, 5312, 5469, 5625, 5781, 5938, 6094, 6250, 6406, 6562, 6719, 6875, 7031, 7188, 
+                                            7344, 7500, 7656, 7812, 7969, 8125, 8281, 8438, 8594, 8750, 8906, 9062, 9219, 9375, 9531, 
+                                            9688, 9844, 10000};
 
 //RC table X Axis value, in mV format
-static short    XAxisElement[XAxis] = { 3100, 3160, 3220, 3280, 3340, 3400, 3460, 3520, 3560, 3600, 3638, 3662, 3704, 3730, 3769, 3780, 3826, 3855, 3890, 3928, 
-                                        3956, 3996, 4021, 4047, 4073, 4110, 4158, 4187, 4216, 4246, 4275, 4302, 4328, 4367, 4402, 4444};
+static short    XAxisElement[XAxis] = { 3100, 3180, 3260, 3340, 3420, 3500, 3540, 3580, 3620, 3660, 3700, 3740, 3755, 3767, 3783, 3800, 3805, 3820, 3844, 3879, 
+                                        3931, 3969, 4003, 4036, 4081, 4109, 4136, 4162, 4192, 4222, 4280, 4310, 4345, 4395, 4424, 4449};
 
 //RC table Y Axis value, in mA format
-static short    YAxisElement[YAxis] = {200, 1200, 2000, 2500};
+static short    YAxisElement[YAxis] = {200, 800, 1500, 3000};
 // RC table Z Axis value, in 10*'C format
 static short    ZAxisElement[ZAxis] = {-100, 0, 200, 400};
 // contents of RC table, its unit is 10000C, 1C = DesignCapacity
 static uint8_t  RCtable[YAxis*ZAxis][XAxis] = {
 //temp = -10 ^C,
-{5,5,6,8,10,13,17,21,25,30,36,40,48,52,57,58,63,66,70,73,76,80,82,85,87,91,95,98,99,100,100,100,100,100,100,100},
-{19,23,28,33,41,49,56,63,68,72,75,77,81,84,87,88,92,94,97,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100},
-{22,26,33,40,48,56,63,69,73,77,80,82,86,88,92,93,99,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100},
-{23,27,34,42,50,58,64,70,74,78,81,83,88,99,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100},
+{5,6,7,9,12,15,18,21,25,31,39,47,49,51,53,55,56,58,60,64,69,72,75,78,82,84,87,89,92,94,99,100,100,100,100,100},
+{13,17,24,31,40,50,56,61,66,72,76,80,82,83,84,86,87,88,90,93,96,98,99,100,100,100,100,100,100,100,100,100,100,100,100,100},
+{29,37,46,56,67,78,85,90,93,97,99,99,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100},
+{50,59,68,77,87,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100},
 //temp = 0 ^C,
-{4,4,4,5,5,6,7,9,12,16,19,22,29,36,44,46,53,56,60,64,66,69,72,74,76,80,84,87,89,92,95,97,99,100,100,100},
-{11,12,15,18,23,29,37,47,53,58,62,65,69,71,74,75,79,81,84,87,89,93,95,97,98,100,100,100,100,100,100,100,100,100,100,100},
-{21,25,31,36,44,52,60,66,70,73,76,78,81,83,86,87,91,94,97,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100},
-{23,29,37,45,55,62,68,74,77,80,83,85,89,93,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100},
+{4,4,5,6,6,8,9,11,14,19,24,33,37,40,43,47,47,50,53,58,63,66,69,71,75,78,80,82,84,87,92,94,98,100,100,100},
+{8,9,12,16,22,30,35,42,49,55,59,64,65,66,68,69,70,71,73,76,80,83,86,88,92,94,96,98,99,100,100,100,100,100,100,100},
+{17,22,29,38,49,59,64,68,71,75,78,81,82,83,84,86,86,87,89,92,95,98,99,100,100,100,100,100,100,100,100,100,100,100,100,100},
+{24,30,38,48,59,68,72,76,79,83,86,89,91,92,93,95,96,97,98,99,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100},
 //temp = 20 ^C,
-{1,1,1,1,2,2,3,3,4,5,6,7,16,20,29,32,42,47,52,56,59,62,65,67,69,73,77,79,82,84,87,89,92,95,99,100},
-{2,2,2,3,3,4,5,7,11,15,20,23,34,39,46,48,54,57,61,64,67,70,72,75,77,80,84,86,89,92,95,97,99,100,100,100},
-{2,3,3,4,5,6,9,14,18,23,30,36,44,48,53,54,60,62,66,69,71,75,77,79,81,84,89,91,94,97,99,100,100,100,100,100},
-{3,3,4,5,6,8,12,17,22,29,37,41,48,52,57,58,63,65,68,72,74,77,79,82,84,87,92,94,97,99,100,100,100,100,100,100},
+{1,1,2,2,3,4,5,5,7,15,22,32,36,38,42,44,45,45,47,52,58,61,64,67,71,73,76,78,80,83,87,90,93,98,100,100},
+{0,0,1,2,3,6,9,15,22,32,40,47,49,51,53,55,56,57,60,63,67,70,73,76,80,82,84,87,89,92,98,100,100,100,100,100},
+{2,3,5,8,13,26,35,42,49,54,58,62,64,65,66,68,68,70,72,75,79,82,85,87,91,94,97,99,100,100,100,100,100,100,100,100},
+{10,13,17,23,32,44,50,55,60,64,68,71,73,74,75,77,77,78,80,83,88,91,94,97,100,100,100,100,100,100,100,100,100,100,100,100},
 //temp = 40 ^C,
-{0,1,1,1,1,2,2,3,4,5,6,7,16,20,28,29,40,46,51,55,57,61,64,67,69,73,77,79,82,84,87,89,91,95,98,100},
-{0,0,0,1,1,2,3,3,5,6,11,15,23,28,37,39,47,51,55,59,62,65,68,70,72,76,80,82,85,87,90,93,95,98,100,100},
-{1,1,1,2,2,3,4,6,8,11,18,22,30,36,43,45,51,55,59,62,65,68,71,73,75,78,82,85,88,90,93,96,98,100,100,100},
-{1,1,1,2,3,4,5,7,9,14,21,25,34,39,46,47,54,57,60,64,67,70,72,75,77,80,84,87,89,92,96,98,99,100,100,100}
+{0,0,1,1,2,3,3,4,5,8,16,24,27,29,32,36,37,40,45,51,56,59,62,66,70,72,75,77,79,82,86,89,92,97,100,100},
+{0,0,1,1,3,6,11,18,26,34,42,49,51,52,54,56,56,58,60,63,68,71,74,77,80,83,85,87,90,93,99,100,100,100,100,100},
+{2,2,3,4,7,12,16,23,30,38,45,51,53,54,56,58,58,59,61,64,68,72,74,77,81,83,85,87,90,92,98,100,100,100,100,100},
+{2,4,6,11,17,26,33,40,46,52,57,61,63,64,65,67,67,69,71,74,78,81,84,86,90,92,94,97,99,100,100,100,100,100,100,100}
 };
 
-//static int cell_temp_data[TEMPERATURE_DATA_NUM] = {1264, 1451, 1672, 1928, 2231, 2591, 3021, 3536, 4156, 4907, 5820, 6936, 8307, 10000, 
-//                                            12100, 14740,18050,22250,27620,34520,43470,55170,70610,90990,118300};
+static int cell_temp_data[TEMPERATURE_DATA_NUM] = {1264, 1451, 1672, 1928, 2231, 2591, 3021, 3536, 4156, 4907, 5820, 6936, 8307, 10000, 
+                                            12100, 14740,18050,22250,27620,34520,43470,55170,70610,90990,118300};
 
 //SOC区间
 static short DFCC_XDATA[DFCC_X] = { 500, 1000, 3000, 5000, 7000, 9000 };
@@ -199,7 +214,7 @@ static signed int param_board_cfg[(PARM_BCFG_MAX)] =
     10,                     // Charge threshold    这里都是模拟量，lsb是4.39453125uV， 需要根据电阻来转化，比如10表示10mA，如果是1毫欧电阻，则表示4.39453125 * 2 /1 mA   ( mV/欧姆 = mA)
     10,                     // DisCharge threshold 模拟量
     7500,                   // fast wkup threshold  模拟量 放大了10 倍
-    10,                     // CADC DB threshold  模拟量
+    5,                     // CADC DB threshold  模拟量
     300,                     // CADC wakeup threshold  模拟量 放大了10 倍
     1000,  //0x09C4, PARM_BCFG_RSENSE, 2500 => 2.5mOhm
     0,                     // Debug mode 0-diasble  1-enbale
@@ -227,7 +242,7 @@ static signed int param_board_cfg[(PARM_BCFG_MAX)] =
     0,                     // Init Soc
     10,                    //sysim
     80,                     // EOC_CDV
-    0,                    // EOD_DDV
+    150,                    // EOD_DDV
     0,//BATT_DESIGN_NTC_SRCTAB,// Temp table indx
     0,                     // cell num
 };
@@ -242,20 +257,29 @@ static int32_t sd77428_i2c_read_bytes(struct sd77428_data* chip, uint8_t cmd, ui
     uint8_t sendbuf[48] = {0};
     uint8_t i2caddr_backup = 0;
     struct i2c_msg msgs[2];
+    uint8_t  reg_addr;
+    if (sd77428_hard_opt)
+    {
+        reg_addr = HARD_DEVICE_REG;
+    }
+    else
+    {
+        reg_addr = SD77428_I2C_ADDR;
+    }
+    mutex_lock(&chip->i2c_rw_lock);
     usleep_range(1000,2000);
 
-    mutex_lock(&chip->i2c_rw_lock);
     i2caddr_backup = chip->client->addr;
-    chip->client->addr = SD77428_I2C_ADDR;
+    chip->client->addr = reg_addr;
 
     sendbuf[0]      = cmd;
 
-    msgs[0].addr   = chip->client->addr;;
+    msgs[0].addr   = chip->client->addr;
     msgs[0].flags  = 0;//W cmd
     msgs[0].buf    = sendbuf;
     msgs[0].len    = 1;    
 
-    msgs[1].addr   = chip->client->addr;;
+    msgs[1].addr   = chip->client->addr;
     msgs[1].flags  = 1;//R cmd
     msgs[1].buf    = val;
     msgs[1].len    = bytes;
@@ -281,10 +305,19 @@ static int32_t sd77428_i2c_write_bytes(struct sd77428_data* chip,uint8_t cmd,uin
     uint8_t sendbuf[48] = {0};
     uint8_t i2caddr_backup = 0;
     struct i2c_msg msgs[1];
-    usleep_range(1000,2000);
+    uint8_t  reg_addr;
+    if (sd77428_hard_opt)
+    {
+        reg_addr = HARD_DEVICE_REG;
+    }
+    else
+    {
+        reg_addr = SD77428_I2C_ADDR;
+    }
     mutex_lock(&chip->i2c_rw_lock);
+    usleep_range(1000,2000);
     i2caddr_backup = chip->client->addr;
-    chip->client->addr = SD77428_I2C_ADDR;
+    chip->client->addr = reg_addr;
 
     sendbuf[0]      = cmd;
     memcpy(sendbuf+1,val,bytes);
@@ -393,7 +426,15 @@ static int32_t sd77428_read_word(struct sd77428_data *chip, uint8_t cmd, uint16_
     uint8_t  rxbuf[32] = {0};
     uint8_t  i = 0;
     uint8_t  pec = 0;
-
+    uint8_t  reg_addr;
+    if (sd77428_hard_opt)
+    {
+        reg_addr = HARD_DEVICE_REG;
+    }
+    else
+    {
+        reg_addr = SD77428_I2C_ADDR;
+    }
     for(i=0;i<4;i++)
     {
         ret = sd77428_i2c_read_bytes(chip,cmd,rxbuf,3);
@@ -401,9 +442,9 @@ static int32_t sd77428_read_word(struct sd77428_data *chip, uint8_t cmd, uint16_
         if(0 == ret)
         {
     #if (1 == PEC_ENABLE)
-            pec = calculate_pec_byte(SD77428_I2C_ADDR << 1,pec);
+            pec = calculate_pec_byte(reg_addr << 1,pec);
             pec = calculate_pec_byte(cmd,pec);
-            pec = calculate_pec_byte(SD77428_I2C_ADDR << 1 | 1,pec);
+            pec = calculate_pec_byte(reg_addr << 1 | 1,pec);
             
             if(rxbuf[2] != calculate_pec_bytes(pec,rxbuf,2))
             {
@@ -434,13 +475,23 @@ static int32_t sd77428_write_word(struct sd77428_data *chip,uint8_t index,uint16
 {
     uint8_t w_buf[3] = {0};
     uint8_t pec = 0;
+    uint8_t  reg_addr;
+    if (sd77428_hard_opt)
+    {
+        reg_addr = HARD_DEVICE_REG;
+    }
+    else
+    {
+        reg_addr = SD77428_I2C_ADDR;
+    }
+
     w_buf[0] = (uint8_t)((data & 0xFF00) >> 8);
     w_buf[1] = (uint8_t)(data & 0x00FF);
 
     // w_buf[0] = (uint8_t)(data & 0x00FF);
     // w_buf[1] = (uint8_t)((data & 0xFF00) >> 8);
     
-    pec = calculate_pec_byte(SD77428_I2C_ADDR << 1,0);
+    pec = calculate_pec_byte(reg_addr << 1,0);
     pec = calculate_pec_byte(index,pec);
     pec = calculate_pec_byte(w_buf[0],pec);
     pec = calculate_pec_byte(w_buf[1],pec);
@@ -457,7 +508,15 @@ static int32_t sd77428_read_sbs(struct sd77428_data *chip, uint8_t cmd, uint8_t 
     uint8_t  pec = 0;
     // uint8_t  read_len = (len >> 2) << 2;
     uint8_t  read_len = len;
-
+    uint8_t  reg_addr;
+    if (sd77428_hard_opt)
+    {
+        reg_addr = HARD_DEVICE_REG;
+    }
+    else
+    {
+        reg_addr = SD77428_I2C_ADDR;
+    }
     for(i=0;i<4;i++)
     {
         ret = sd77428_i2c_read_bytes(chip, cmd, rxbuf, read_len+1);
@@ -469,9 +528,9 @@ static int32_t sd77428_read_sbs(struct sd77428_data *chip, uint8_t cmd, uint8_t 
         if(0 == ret)
         {
     #if (1 == PEC_ENABLE)
-            pec = calculate_pec_byte(SD77428_I2C_ADDR << 1,pec);
+            pec = calculate_pec_byte(reg_addr << 1,pec);
             pec = calculate_pec_byte(cmd,pec);
-            pec = calculate_pec_byte(SD77428_I2C_ADDR << 1 | 1,pec);
+            pec = calculate_pec_byte(reg_addr << 1 | 1,pec);
             pec = calculate_pec_bytes(pec, rxbuf, read_len);
             if(rxbuf[read_len] != pec)
             {
@@ -508,18 +567,27 @@ static int32_t sd77428_write_sbs(struct sd77428_data* chip, uint8_t cmd, uint8_t
     uint32_t i = 0;
     // uint8_t write_len = (len >> 2) << 2;
     uint8_t write_len = len;
-
+    uint8_t  reg_addr;
+    if (sd77428_hard_opt)
+    {
+        reg_addr = HARD_DEVICE_REG;
+    }
+    else
+    {
+        reg_addr = SD77428_I2C_ADDR;
+    }
     for(i=0; i<write_len; i++)
         w_buf[i] = data_buf[i];
 
-    pec = calculate_pec_byte(SD77428_I2C_ADDR << 1,0);
+    pec = calculate_pec_byte(reg_addr << 1,0);
     pec = calculate_pec_byte(cmd,pec);
     pec = calculate_pec_bytes(pec,w_buf,write_len);
     w_buf[write_len] = pec;
 
     return sd77428_i2c_write_bytes(chip,cmd, w_buf, write_len+1);  
 }
-#if 0
+
+#if 1
 static int32_t sd77428_read_block(struct sd77428_data *chip, uint8_t *data_buf,uint32_t len)
 {
     int32_t  ret = -1;
@@ -529,14 +597,22 @@ static int32_t sd77428_read_block(struct sd77428_data *chip, uint8_t *data_buf,u
     uint8_t     index = SD77428_BLOCK_OP;
     // uint32_t read_len = (len >> 2) << 2;
     uint32_t read_len = len;
-
+    uint8_t  reg_addr;
+    if (sd77428_hard_opt)
+    {
+        reg_addr = HARD_DEVICE_REG;
+    }
+    else
+    {
+        reg_addr = SD77428_I2C_ADDR;
+    }
     ret = sd77428_i2c_read_bytes(chip,index,r_buf,read_len+2);
     if (ret < 0) 
         return ret;
 
-    pec = calculate_pec_byte(SD77428_I2C_ADDR << 1,pec);
+    pec = calculate_pec_byte(reg_addr << 1,pec);
     pec = calculate_pec_byte(index,pec);
-    pec = calculate_pec_byte(SD77428_I2C_ADDR << 1 | 1,pec);
+    pec = calculate_pec_byte(reg_addr << 1 | 1,pec);
 
     if(r_buf[read_len+1] == calculate_pec_bytes(pec,r_buf,read_len+1))
     {
@@ -557,21 +633,28 @@ static int32_t sd77428_write_block(struct sd77428_data *chip,uint8_t *data_buf,u
     uint8_t pec = 0;
     uint32_t i = 0;
     uint32_t write_len = (len >> 2) << 2;
-
+    uint8_t  reg_addr;
+    if (sd77428_hard_opt)
+    {
+        reg_addr = HARD_DEVICE_REG;
+    }
+    else
+    {
+        reg_addr = SD77428_I2C_ADDR;
+    }
     w_buf[0] = write_len;
 
     for(i=0;i<w_buf[0];i++)
         w_buf[i+1] = data_buf[i];
 
-    pec = calculate_pec_byte(SD77428_I2C_ADDR << 1,0);
+    pec = calculate_pec_byte(reg_addr << 1,0);
     pec = calculate_pec_byte(SD77428_BLOCK_OP,pec);
     pec = calculate_pec_bytes(pec,w_buf,write_len+1);
     w_buf[write_len+1] = pec;
 
     return sd77428_i2c_write_bytes(chip,SD77428_BLOCK_OP, w_buf, write_len+2);  
 }
-#endif
-#if 0
+
 static int32_t sd77428_read_addr(struct sd77428_data *chip, uint32_t addr, uint32_t* pdata)
 {
     uint8_t buf[4] = {0};
@@ -636,7 +719,7 @@ static int32_t sd77428_unlock(struct sd77428_data *chip)
     if(sd77428_write_word(chip,0x11,0x6318) < 0) 
         goto error;
 
-    if(sd77428_write_word(chip,0x12,0x6301) < 0) 
+    if(sd77428_write_word(chip,0x12,0x6303) < 0) 
         goto error;
 
     if(sd77428_write_word(chip,0x20,0x8001) < 0) 
@@ -656,6 +739,211 @@ error:
     return -1;  
 }
 #endif
+#if 0
+static int32_t sd77428_enable_sleep_cc_option(struct sd77428_data *chip)
+{
+    uint32_t sleep_wk_th = 0;
+    sd77428_hard_opt = 1;
+    pr_info("sd77428_enable_sleep_cc_option.\n");
+    sd77428_unlock(chip);
+    sd77428_write_word(chip,0xEB,0x003F);
+
+    sd77428_write_addr(chip,0x40004200,0x00006318);//unlock
+    sd77428_read_addr(chip, 0x40004244, &sleep_wk_th);
+    pr_info("read sleep_wk_th: %x.\n", sleep_wk_th);
+    //if (sleep_wk_th | 0x00008000)   
+    if (!(sleep_wk_th >> 15))           //if bit15=0, update cc_option =1
+    {
+        sleep_wk_th = sleep_wk_th | 0x00008000;
+        pr_info("update sleep_wk_th: %x.\n", sleep_wk_th);
+        sd77428_write_addr(chip,0x40004244,sleep_wk_th);//set sleep_cc_option = 0, 
+    }
+    sd77428_write_addr(chip,0x40004200,0x0000AA55);//lock
+
+    sd77428_write_word(chip,0x12,0x6300);
+    sd77428_write_word(chip,0x11,0x6300);
+    sd77428_hard_opt = 0;
+    return 0;
+}
+
+static int32_t sd77428_disable_sleep_cc_option(struct sd77428_data *chip)
+{
+    uint32_t sleep_wk_th = 0;
+    sd77428_hard_opt = 1;
+    pr_info("sd77428_disable_sleep_cc_option.\n");
+    sd77428_unlock(chip);
+    sd77428_write_word(chip,0xEB,0x003F);
+
+    sd77428_write_addr(chip,0x40004200,0x00006318);//unlock
+    sd77428_read_addr(chip, 0x40004244, &sleep_wk_th);
+    pr_info("read sleep_wk_th: %x.\n", sleep_wk_th);
+    if (sleep_wk_th & 0x00008000) //if bit15=1, update cc_option =0
+    {
+        sleep_wk_th = sleep_wk_th & 0x00007FFF;
+        pr_info("update sleep_wk_th: %x.\n", sleep_wk_th);
+        sd77428_write_addr(chip,0x40004244,sleep_wk_th);//set sleep_cc_option = 0, 
+    }
+    sd77428_write_addr(chip,0x40004200,0x0000AA55);//lock
+
+    sd77428_write_word(chip,0x12,0x6300);
+    sd77428_write_word(chip,0x11,0x6300);
+    sd77428_hard_opt = 0;
+    return 0;
+}
+#endif
+//download zero cfg_offset
+static int32_t sd77428main_cfg_offset(struct sd77428_data *chip)
+{
+    uint16_t reg_value = 0;                          //I2C expert value
+    uint16_t reg_reload_value = 0;                   //I2C bak value 
+    uint16_t cadc_offset = 0;                        //cadc offset
+    uint16_t cadc_slope = 0;                         //cadc slope
+
+    sd77428_hard_opt = 1;                           //set hard I2C 
+
+    sd77428_write_word(chip,0xEB,0x003F);           //set fastwakeup th
+
+    sd77428_read_word(chip,0xE6,&reg_value);        //read zero cadc offset, assume is 0xFD9F, slope is 0x9F, offset is 0xFD
+    //swap lsb and msb
+    cadc_slope = (reg_value & 0x00FF);
+    cadc_offset = (reg_value & 0xFF00) >> 8;
+    pr_info("sd77428main_cfg_offset reg 0x%x, slope 0x%x, zero_offset 0x%x.\n", reg_value, cadc_slope, cadc_offset);
+
+    if (cadc_offset > 0x80 && cadc_offset <= 0xFD)
+    {
+        cadc_offset = 0xFE;
+        reg_value = (cadc_slope << 8) | cadc_offset;
+        sd77428_write_word(chip,0xE6,reg_value);              //set zero_offset
+        sd77428_read_word(chip,0xE6,&reg_reload_value);       //set zero cadc offset
+        //swap lsb and msb
+        pr_info("sd77428main_cfg_offset update zero_offset 0x%x 0x%x.\n", reg_value, reg_reload_value);
+        reg_reload_value = ((reg_reload_value & 0xFF00) >> 8) | ((reg_reload_value & 0x00FF) << 8);
+        if (reg_reload_value != reg_value)
+        {
+            sd77428_hard_opt = 0;
+            pr_info("sd77428main_cfg_offset zero_offset 0x%x 0x%x failed.\n", reg_value, reg_reload_value);
+            return -1;
+        }
+    }
+    sd77428_hard_opt = 0;                       //recover
+    return 0;
+}
+
+//enable sw_cadc_enable, set high enable coulomb count
+static int32_t sd77428_enable_cadc(struct sd77428_data *chip)
+{
+    int32_t ret = 0;
+    uint32_t sw_cadc_ctrl = 0;
+    sd77428_hard_opt = 1;
+    pr_info("sd77428main_enable_cadc.\n");
+    sd77428_unlock(chip);
+    // sd77428_write_word(chip,0xEB,0x003F);           //set fastwakeup th
+
+    sd77428_write_addr(chip,0x40004200,0x00006318);//unlock
+
+    ret = sd77428_read_addr(chip, 0x400041A0, &sw_cadc_ctrl);
+    pr_info("sd77428main read sw_cadc_ctrl: 0x%x.\n", sw_cadc_ctrl);
+    if (!ret)
+    {
+        sw_cadc_ctrl = sw_cadc_ctrl | 0x00000001;  //set sw_cadc_enable = 1, 
+        pr_info("sd77428main update sw_cadc_ctrl: 0x%x.\n", sw_cadc_ctrl);
+        sd77428_write_addr(chip,0x400041A0,sw_cadc_ctrl);
+    }
+
+    sd77428_write_addr(chip,0x40004200,0x0000AA55);//lock
+    sd77428_write_word(chip,0x12,0x6300);
+    sd77428_write_word(chip,0x11,0x6300);
+    sd77428_hard_opt = 0;
+    return 0;
+}
+//disable sw_cadc_enable, set low to disable coulomb count, when shutdown happen
+static int32_t sd77428_disable_cadc(struct sd77428_data *chip)
+{
+    int32_t ret = 0;
+    uint32_t sw_cadc_ctrl = 0;
+    sd77428_hard_opt = 1;
+    pr_info("sd77428main_disable_cadc.\n");
+    sd77428_unlock(chip);
+    //sd77428_write_word(chip,0xEB,0x003F);
+
+    sd77428_write_addr(chip,0x40004200,0x00006318);//unlock
+    sd77428_read_addr(chip, 0x400041A0, &sw_cadc_ctrl);
+    pr_info("sd77428main read sw_cadc_ctrl: 0x%x.\n", sw_cadc_ctrl);
+    if (!ret)
+    {
+        sw_cadc_ctrl = sw_cadc_ctrl & 0x0000FFFE;       //set sw_cadc_enable = 0
+        pr_info("sd77428main update sw_cadc_ctrl: 0x%x.\n", sw_cadc_ctrl);
+        sd77428_write_addr(chip,0x400041A0,sw_cadc_ctrl);//set sw_cadc_enable = 0, 
+    }
+
+    sd77428_write_addr(chip,0x40004200,0x0000AA55);//lock
+    sd77428_write_word(chip,0x12,0x6300);
+    sd77428_write_word(chip,0x11,0x6300);
+    sd77428_hard_opt = 0;
+    return 0;
+}
+
+//set param_ddv to disbale fastdsg
+static int32_t sd77428_disable_fastdsg(struct sd77428_data *chip)
+{
+    uint32_t param_ddv = 0;
+    uint8_t retry_cnt;
+
+    sd77428_hard_opt = 1;
+    
+    pr_info("sd77428main_disable_fastdsg.\n");
+    sd77428_unlock(chip);
+
+    for (retry_cnt = 0; retry_cnt < 4; ++retry_cnt)
+    {
+        
+        // sd77428_read_addr(chip,0x20000818,&sd77428_default_ddv);      //read param_ddv
+        sd77428_write_addr(chip,0x20000818,BATT_DESIGN_EOD);          //set param_ddv = eod, 
+        sd77428_read_addr(chip,0x20000818,&param_ddv);                //read param_ddv
+        pr_info("sd77428main set param_ddv default:0x%x, eod:0x%x, new:0x%x.\n", sd77428_default_ddv, BATT_DESIGN_EOD, param_ddv);
+        
+        if (BATT_DESIGN_EOD == param_ddv)
+        {
+            break;
+        }
+    }
+    sd77428_write_word(chip,0x12,0x6300);
+    sd77428_write_word(chip,0x11,0x6300);
+
+    sd77428_hard_opt = 0;
+
+    return 0;
+}
+//set param_ddv to recover fastdsg
+static int32_t sd77428_enable_fastdsg(struct sd77428_data *chip)
+{
+    uint32_t param_ddv = 0;
+    uint8_t retry_cnt;
+
+    sd77428_hard_opt = 1;
+    
+    pr_info("sd77428main_enable_fastdsg.\n");
+    sd77428_unlock(chip);
+
+    for (retry_cnt = 0; retry_cnt < 4; ++retry_cnt)
+    {
+        sd77428_write_addr(chip,0x20000818,sd77428_default_ddv);          //set param_ddv = eod, 
+        sd77428_read_addr(chip,0x20000818,&param_ddv);                //read param_ddv
+        pr_info("sd77428main set param_ddv default:%d. set:%d.\n", sd77428_default_ddv, param_ddv);
+       
+        if (sd77428_default_ddv == param_ddv)
+        {
+            break;
+        }
+    }
+    sd77428_write_word(chip,0x12,0x6300);
+    sd77428_write_word(chip,0x11,0x6300);
+
+    sd77428_hard_opt = 0;
+
+    return 0;
+}
+
 //SBSA3_FILTER_WIND_LOC, SBSA5_FILTER_ENABLE
 static int32_t sd77428_set_sbs_params(struct sd77428_data *chip, uint8_t cmd, uint32_t param, uint8_t len)
 {
@@ -681,6 +969,7 @@ static int32_t sd77428_get_sbs_params(struct sd77428_data *chip, uint8_t cmd, ui
 
 
 //-----------------------------------------------------power_supply-----------------------------------------------------//
+#if 0
 static enum power_supply_property sd77428_battery_props[] = {
     POWER_SUPPLY_PROP_STATUS,
     POWER_SUPPLY_PROP_PRESENT,
@@ -692,11 +981,13 @@ static enum power_supply_property sd77428_battery_props[] = {
     POWER_SUPPLY_PROP_CHARGE_NOW,
     POWER_SUPPLY_PROP_HEALTH,
 };
+
 static char *sd77428_supplied_from[] = {
     "usb",
     "charger",
     "ac",
 };
+
 static int32_t sd77428_battery_get_property(struct power_supply *psy, enum power_supply_property psp, union power_supply_propval *val)
 {
     struct sd77428_data *chip = (struct sd77428_data *)power_supply_get_drvdata(psy);
@@ -765,7 +1056,7 @@ static void sd77428_external_power_changed(struct power_supply *psy)
     dev_info(chip->dev,"enter\n");
     if(true == sd77428_is_ok)
     {
-        cancel_delayed_work(&chip->sd77428_work);
+        cancel_delayed_work_sync(&chip->sd77428_work);
         schedule_delayed_work(&chip->sd77428_work,0);
         power_supply_changed(chip->bat);
     }
@@ -776,13 +1067,13 @@ static int32_t sd77428_power_supply_init(struct sd77428_data *chip)
     chip->bat_cfg.drv_data          = chip;
     chip->bat_cfg.of_node           = chip->client->dev.of_node;
 
-    chip->bat_desc.name             = "sd77428";
+    chip->bat_desc.name             = "sd77428_main";
     chip->bat_desc.type             = POWER_SUPPLY_TYPE_BATTERY;
     chip->bat_desc.properties       = sd77428_battery_props;
     chip->bat_desc.num_properties = ARRAY_SIZE(sd77428_battery_props);
     chip->bat_desc.get_property     = sd77428_battery_get_property;
     chip->bat_desc.no_thermal       = 1;
-    chip->bat_desc.external_power_changed = sd77428_external_power_changed;
+    //chip->bat_desc.external_power_changed = sd77428_external_power_changed;
 
     chip->bat = devm_power_supply_register(chip->dev,&chip->bat_desc,&chip->bat_cfg);
 
@@ -793,12 +1084,13 @@ static int32_t sd77428_power_supply_init(struct sd77428_data *chip)
     }
     else
     {
-        chip->bat->supplied_from = sd77428_supplied_from;
-        chip->bat->num_supplies  = ARRAY_SIZE(sd77428_supplied_from);
+        //chip->bat->supplied_from = sd77428_supplied_from;
+        //chip->bat->num_supplies  = ARRAY_SIZE(sd77428_supplied_from);
     }
 
     return 0;
 }
+#endif
 //---------------------------------------------------------------------------------------------------------------------//
 
 //-----------------------------------------------------sysfs接口-------------------------------------------------------//
@@ -854,6 +1146,12 @@ static struct attribute_group sd77428_attribute_group = {
 //--------------------------------------------------驱动导出符号接口-------------------------------------------------------//
 ////EXPORT_SYMBOL ,在函数模块后调用，使用EXPORT_SYMBOL可以将一个函数以符号的方式导出给其他模块使用
 //符号的意思就是函数的入口地址，或者说是把这些符号和对应的地址保存起来的，在内核运行的过程中，可以找到这些符号对应的地址的。
+int32_t sd77428main_chip_ok(void)
+{
+    return sd77428_is_ready;
+}
+EXPORT_SYMBOL(sd77428main_chip_ok);
+
 int32_t sd77428main_get_remaincap(void)
 {
     batt_data_t* pinfo = &g_chip_data->batt_info;
@@ -868,6 +1166,32 @@ int32_t sd77428main_get_soc(void)
 }
 EXPORT_SYMBOL(sd77428main_get_soc);
 
+
+int32_t sd77428main_get_ext_charger(void)
+{
+    if (g_chip_data)
+	{
+		batt_data_t* pinfo = &g_chip_data->batt_info;
+		return pinfo->ext_charger;
+	}
+	else
+	{
+		return 0;
+	}
+}
+EXPORT_SYMBOL(sd77428main_get_ext_charger);
+
+#if 0
+int32_t sd77428main_set_ext_charger(int16_t charge_state)
+{
+	int16_t charger_state_cmd = 0;
+	charger_state_cmd =(charge_state & 0x00ff) << 8 | (charge_state & 0xFF00);
+    return sd77428_write_word(g_chip_data, (sbsd_cmd_def[SBS91_EXTCHGSTS] >> SBSD_CMD_Pos) & 0xFF, charge_state);
+}
+EXPORT_SYMBOL(sd77428main_set_ext_charger);
+#endif
+
+
 int32_t sd77428main_get_soh(void)
 {
     batt_data_t* pinfo = &g_chip_data->batt_info;
@@ -875,12 +1199,12 @@ int32_t sd77428main_get_soh(void)
 }
 EXPORT_SYMBOL(sd77428main_get_soh);
 
-int32_t sd77428main_get_battry_current(void)
+int32_t sd77428main_get_battery_current(void)
 {
     batt_data_t* pinfo = &g_chip_data->batt_info;
     return pinfo->batt_current;
 }
-EXPORT_SYMBOL(sd77428main_get_battry_current);
+EXPORT_SYMBOL(sd77428main_get_battery_current);
 
 int32_t sd77428main_get_battery_voltage(void)
 {
@@ -895,6 +1219,20 @@ int32_t sd77428main_get_battery_temp(void)
     return pinfo->batt_temp;
 }
 EXPORT_SYMBOL(sd77428main_get_battery_temp);
+
+int32_t sd77428main_get_battery_dfcc(void)
+{
+    batt_data_t* pinfo = &g_chip_data->batt_info;
+    return pinfo->batt_dfcc;
+}
+EXPORT_SYMBOL(sd77428main_get_battery_dfcc);
+
+int32_t sd77428main_get_battery_cc(void)
+{
+    batt_data_t* pinfo = &g_chip_data->batt_info;
+    return pinfo->batt_cc;
+}
+EXPORT_SYMBOL(sd77428main_get_battery_cc);
 
 struct i2c_client * sd77428main_get_client(void)
 {
@@ -932,20 +1270,31 @@ static int32_t sd77428_init_batt_info(struct sd77428_data *chip)
     chip->batt_info.batt_rsoc = 1;
     chip->batt_info.batt_soh = 100;
     chip->batt_info.batt_fcc = BATT_DESIGN_FCC; 
+    chip->batt_info.batt_dfcc = BATT_DESIGN_FCC; 
+    chip->batt_info.batt_cc = 0; 
     chip->batt_info.batt_capacity = BATT_DESIGN_CAPACITY;
+	
+	#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO_BAT)&&IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
+	sprintf(current_battery_info.batt_versions,"%d",BATT_DESIGN_FCC);
+	strcpy(current_battery_info.chip,"sd77428");
+	#endif
     return 0;
 }
 
 static void sd77428_get_batt_info(struct sd77428_data *chip)
 {   
     int32_t ret = 0;
+    int16_t batt_temp = 0;
     batt_data_t* pinfo = &chip->batt_info;
 
-    ret = sd77428_read_word(chip, (sbsd_cmd_def[SBS02_EXTTMP] >> SBSD_CMD_Pos) & 0xFF, &pinfo->batt_temp);
+
+    ret = sd77428_read_word(chip, (sbsd_cmd_def[SBS02_EXTTMP] >> SBSD_CMD_Pos) & 0xFF, &batt_temp);
     if(0 == ret)
-        pinfo->batt_temp -= 2730;
+        batt_temp -= 2730;
     else
-        pinfo->batt_temp = 250;
+        batt_temp = 250;
+
+     pinfo->batt_temp = batt_temp;
 
     ret = sd77428_read_word(chip, (sbsd_cmd_def[SBS04_BATTVOLT] >> SBSD_CMD_Pos) & 0xFF, &pinfo->batt_voltage);
     ret += sd77428_read_word(chip, (sbsd_cmd_def[SBS10_BATTCURR] >> SBSD_CMD_Pos) & 0xFF, &pinfo->batt_current);
@@ -957,9 +1306,13 @@ static void sd77428_get_batt_info(struct sd77428_data *chip)
     ret += sd77428_read_word(chip, (sbsd_cmd_def[SBS65_CYCLECNT] >> SBSD_CMD_Pos) & 0xFF, &pinfo->batt_cyclecnt);
 
     ret += sd77428_read_word(chip,(sbsd_cmd_def[SBS91_EXTCHGSTS] >> SBSD_CMD_Pos) & 0xFF, &pinfo->ext_charger);
+
+    ret += sd77428_read_word(chip,(sbsd_cmd_def[SBS93_DFCC] >> SBSD_CMD_Pos) & 0xFF, &pinfo->batt_dfcc);
+    ret += sd77428_read_word(chip,(sbsd_cmd_def[SBS90_CC] >> SBSD_CMD_Pos) & 0xFF, &pinfo->batt_cc);
+
     if (ret == 0)
     {
-    batt_dbg("sd77428_mainpack vbat:%d, ibat:%05d, tbat:%d, rsoc:%03d, fcc:%d, dcap:%d, soh:%d, cycle:%d, rc:%d, ext_chg %d\n",
+    batt_dbg("sd77428_mainpack vbat:%d, ibat:%05d, tbat:%d, rsoc:%03d, fcc:%d, dcap:%d, soh:%d, cycle:%d, rc:%d, dfcc:%d, cc:%d, ext_chg %d\n",
         pinfo->batt_voltage,
         pinfo->batt_current,
         pinfo->batt_temp,
@@ -969,9 +1322,16 @@ static void sd77428_get_batt_info(struct sd77428_data *chip)
         pinfo->batt_soh,
         pinfo->batt_cyclecnt,
         pinfo->batt_rc,
+        pinfo->batt_dfcc,
+        pinfo->batt_cc,
         pinfo->ext_charger);
     }
     // power_supply_changed(chip->bat);
+    if (!sd77428_is_ready)
+    {
+        sd77428_is_ready = true;
+        batt_dbg("sd77428_mainpack is ready.\n");
+    }
 }
 
 static void sd77428_check_charge_type(struct sd77428_data *chip)
@@ -982,7 +1342,8 @@ static void sd77428_check_charge_type(struct sd77428_data *chip)
     chip->adapter_status = O2_CHARGER_BATTERY;
 
     if(!chip->ac_psy)
-        chip->ac_psy = power_supply_get_by_name ("ac");
+        //chip->ac_psy = power_supply_get_by_name ("ac");
+        chip->ac_psy = power_supply_get_by_name ("charger");
 
     if(chip->ac_psy)
     {
@@ -991,17 +1352,8 @@ static void sd77428_check_charge_type(struct sd77428_data *chip)
             chip->adapter_status = O2_CHARGER_AC;
     }
     
-    if(!chip->usb_psy)
-        chip->usb_psy= power_supply_get_by_name ("usb");
 
-    if(chip->usb_psy)
-    {
-        ret = power_supply_get_property(chip->usb_psy, POWER_SUPPLY_PROP_ONLINE, &val_usb);
-        if (0 == ret && val_usb.intval)
-            chip->adapter_status = O2_CHARGER_USB;
-    }
-
-    // pr_info("val_usb.intval %d adapter_status:%d\n",val_usb.intval, chip->adapter_status);
+    pr_info("val_usb.intval %d adapter_status:%d\n",val_usb.intval, chip->adapter_status);
 }
 
 static void sd77428_update_charger_info(struct sd77428_data *chip)
@@ -1010,17 +1362,18 @@ static void sd77428_update_charger_info(struct sd77428_data *chip)
     //sd77428_check_charge_full(chip);
 
     // pr_info("status %d, full %d\n",chip->adapter_status,chip->chg_full);
-/*
     if(O2_CHARGER_USB == chip->adapter_status || O2_CHARGER_AC == chip->adapter_status)
     {
-        if(chip->chg_full) 
-            sd77428_write_sbs(chip,EX_CHARGER_TYPE_CMD,charger_full,4);
+        if(chip->chg_full)
+            // sd77428_write_sbs(chip,(sbsd_cmd_def[SBS91_EXTCHGSTS] >> SBSD_CMD_Pos) & 0xFF, charger_full,4);
+            sd77428_set_sbs_params(chip, (sbsd_cmd_def[SBS91_EXTCHGSTS] >> SBSD_CMD_Pos) & 0xFF, charger_full, 2);
         else
-            sd77428_write_sbs(chip,EX_CHARGER_TYPE_CMD,charger_connected,4);
+            // sd77428_write_sbs(chip,(sbsd_cmd_def[SBS91_EXTCHGSTS] >> SBSD_CMD_Pos) & 0xFF, charger_connected,4);
+            sd77428_set_sbs_params(chip, (sbsd_cmd_def[SBS91_EXTCHGSTS] >> SBSD_CMD_Pos) & 0xFF, charger_connected, 2);
     }
     else
-        sd77428_write_sbs(chip,EX_CHARGER_TYPE_CMD,charger_unknown,4);
-*/
+        // sd77428_write_sbs(chip,(sbsd_cmd_def[SBS91_EXTCHGSTS] >> SBSD_CMD_Pos) & 0xFF, charger_unknown,4);
+        sd77428_set_sbs_params(chip, (sbsd_cmd_def[SBS91_EXTCHGSTS] >> SBSD_CMD_Pos) & 0xFF, charger_disconnected, 2);
 }
 
 static int32_t sd77428_detect_ic(struct sd77428_data *chip)
@@ -1969,6 +2322,33 @@ static uint16_t _test_reg_table_func3(struct sd77428_data *chip)
 #endif
 //-------------------------------------------------------------------------------------------------------------------//
 //-----------------------------------------------参数下载 function-----------------------------------------------------//
+//check and clear bank1, in case soc = 0% lock
+static int32_t check_reset_bank1(struct sd77428_data *chip)
+{
+    //step 1 get current rsoc
+    int32_t     ret = 0;
+    uint16_t    batt_rsoc;      //Relative State Of Charged, present percentage of battery capacity
+
+    ret = sd77428_read_word(chip, (sbsd_cmd_def[SBS1C_RSOC] >> SBSD_CMD_Pos) & 0xFF, &batt_rsoc);
+    pr_info("sd77428main check BANK1 %d.\r\n", batt_rsoc);
+
+    if (batt_rsoc == 0)
+    {
+        //check whether need clear bank1 of not
+        if(sd77428_set_sbs_params(chip, (sbsd_cmd_def[SBSF9_SPECIAL] >> SBSD_CMD_Pos) & 0xFF, 0x2801, 2) < 0)
+        {
+            pr_info("sd77428main clear BANK1 Failed.\r\n");
+            return 1;
+        }
+        else
+        {
+            pr_info("sd77428main clear BANK1 Successed.\r\n");
+        }
+        msleep(1);
+    }
+    return 0;
+}
+
 //download algorithm parameters
 static uint16_t parameters_down_level1(struct sd77428_data *chip)
 {
@@ -2069,14 +2449,14 @@ static uint16_t parameters_down_level1(struct sd77428_data *chip)
     usleep_range(5000, 10000);
 
     //step 6 SBSA7_FG_IDLE_SOH
-    sd77428_set_sbs_charparams(chip, (sbsd_cmd_def[SBSA7_FG_IDLE_SOH] >> SBSD_CMD_Pos) & 0xFF, 0, SECOND_LOCK_TH, SECOND_LOCK_TIMER, SECOND_UNLOCK_TIMER);
+    sd77428_set_sbs_charparams(chip, (sbsd_cmd_def[SBSA7_FG_IDLE_SOH] >> SBSD_CMD_Pos) & 0xFF, _IDLE_CHARGE_EST_, FG_idle_60s_enable, FG_cc_soh_ratio, FG_dc_soh_ratio);
     usleep_range(5000, 10000);
     sd77428_get_sbs_charparams(chip, (sbsd_cmd_def[SBSA7_FG_IDLE_SOH] >> SBSD_CMD_Pos) & 0xFF, &param_l1, &param_l2, &param_l3, &param_l4);
     pr_info("SBSA7_FG_IDLE_SOH recall data: (%d, %d, %d, %d).\r\n", param_l1, param_l2, param_l3, param_l4);
-    if (param_l1 != 0 ||
-        param_l2 != SECOND_LOCK_TH ||
-        param_l3 != SECOND_LOCK_TIMER ||
-        param_l4 != SECOND_UNLOCK_TIMER)
+    if (param_l1 != _IDLE_CHARGE_EST_ ||
+        param_l2 != FG_idle_60s_enable ||
+        param_l3 != FG_cc_soh_ratio ||
+        param_l4 != FG_dc_soh_ratio)
     {
         pr_info("SBSA7_FG_IDLE_SOH Set Failed.\r\n");
         paramdown_result += (1 << 1);
@@ -2215,22 +2595,22 @@ static uint16_t parameters_down_level1(struct sd77428_data *chip)
     }
     usleep_range(5000, 10000);
 
-    // //step 14 SBSAF_FG_CC_DFCC_SET
-    // sd77428_set_sbs_shortparams(chip, (sbsd_cmd_def[SBSAF_FG_CC_DFCC_SET] >> SBSD_CMD_Pos) & 0xFF, FG_CC_DFCC_MODE, FG_CC_hardset_DFCC);
-    // usleep_range(5000, 10000);
-    // sd77428_get_sbs_shortparams(chip, (sbsd_cmd_def[SBSAF_FG_CC_DFCC_SET] >> SBSD_CMD_Pos) & 0xFF, &param_high, &param_low);
-    // pr_info("SBSAF_FG_CC_DFCC_SET recall data: (%d, %d).\r\n", param_high, param_low);
-    // if (param_high != FG_CC_DFCC_MODE ||
-    //     param_low != FG_CC_hardset_DFCC )
-    // {
-    //     pr_info("SBSAF_FG_CC_DFCC_SET Set Failed.\r\n");
-    //     paramdown_result += (1 << 7);
-    // }
-    // else
-    // {
-    //     pr_info("SBSAF_FG_CC_DFCC_SET Set Success.\r\n");
-    // }
-    // usleep_range(5000, 10000);
+    //step 14 SBSAF_FG_CC_DFCC_SET
+    sd77428_set_sbs_shortparams(chip, (sbsd_cmd_def[SBSAF_FG_CC_DFCC_SET] >> SBSD_CMD_Pos) & 0xFF, FG_CC_DFCC_MODE, FG_CC_hardset_DFCC);
+    usleep_range(5000, 10000);
+    sd77428_get_sbs_shortparams(chip, (sbsd_cmd_def[SBSAF_FG_CC_DFCC_SET] >> SBSD_CMD_Pos) & 0xFF, &param_high, &param_low);
+    pr_info("SBSAF_FG_CC_DFCC_SET recall data: (%d, %d).\r\n", param_high, param_low);
+    if (param_high != FG_CC_DFCC_MODE ||
+        param_low != FG_CC_hardset_DFCC )
+    {
+        pr_info("SBSAF_FG_CC_DFCC_SET Set Failed.\r\n");
+        paramdown_result += (1 << 7);
+    }
+    else
+    {
+        pr_info("SBSAF_FG_CC_DFCC_SET Set Success.\r\n");
+    }
+    usleep_range(5000, 10000);
 
     // //step 15 SBSB0_NTC_HOLD_TIME
     // sd77428_set_sbs_shortparams(chip, (sbsd_cmd_def[SBSB0_NTC_HOLD_TIME] >> SBSD_CMD_Pos) & 0xFF, ntc_reg_enable, ntc_reg_holdtime);
@@ -2436,7 +2816,7 @@ static uint16_t parameters_down_level4(struct sd77428_data *chip)
 
     return paramdown_result;
 }
-#if 0
+
 //download NTC-Temperature table 
 static uint16_t parameters_down_level5(struct sd77428_data *chip)
 {
@@ -2476,7 +2856,6 @@ static uint16_t parameters_down_level5(struct sd77428_data *chip)
 
     return paramdown_result;
 }
-#endif
 //download DFCC Soc, curr, Temptable 
 static uint16_t parameters_down_level6(struct sd77428_data *chip)
 {
@@ -2615,7 +2994,7 @@ static uint16_t parameters_down_level8(struct sd77428_data *chip)
             sd77428_set_sbs_params(chip, (sbsd_cmd_def[SBS66_DSNCAP+i] >> SBSD_CMD_Pos) & 0xFF, param_board_cfg[i], 4);
             usleep_range(5000, 10000);
             sd77428_get_sbs_params(chip, (sbsd_cmd_def[SBS66_DSNCAP+i] >> SBSD_CMD_Pos) & 0xFF, &param, 4);
-            //pr_info("SBS0x84 hiscc recall data: (%d).\r\n", param);
+            pr_info("SBS0x84 hiscc recall data: (%d).\r\n", param);
             if (param != param_board_cfg[i])
             {
                 pr_info("SBS0x84 hiscc Set Failed.\r\n");
@@ -2633,7 +3012,7 @@ static uint16_t parameters_down_level8(struct sd77428_data *chip)
             usleep_range(5000, 10000);
             sd77428_get_sbs_params(chip, (sbsd_cmd_def[SBS66_DSNCAP+i] >> SBSD_CMD_Pos) & 0xFF, &param, 2);
             param_low = (int16_t)param;
-            //pr_info("SBS SBS66_DSNCAP+%d recall data: (%d).\r\n", i, param_low);
+            pr_info("SBS SBS66_DSNCAP+%d recall data: (%d).\r\n", i, param_low);
             if (param_low != param_board_cfg[i])
             {
                 pr_info("SBS SBS66_DSNCAP+%d Set Failed.\r\n", i);
@@ -2652,7 +3031,7 @@ static uint16_t parameters_down_level8(struct sd77428_data *chip)
     usleep_range(5000, 10000);
     sd77428_get_sbs_params(chip, (sbsd_cmd_def[SBS8D_CADCZEROOFFSET] >> SBSD_CMD_Pos) & 0xFF, &param, 2);
     param_low = (int16_t)param;
-    //pr_info("SBS0x8d cadc offset recall data: (%d).\r\n", param_low);
+    pr_info("SBS0x8d cadc offset recall data: (%d).\r\n", param_low);
     if (param_low  != BATT_DESIGN_CADC_OFFSET)
     {
         pr_info("SBS0x8d cadc offset Set Failed.\r\n");
@@ -2661,6 +3040,14 @@ static uint16_t parameters_down_level8(struct sd77428_data *chip)
     else
     {
         //pr_info("SBS0x8d cadc offset Set Success.\r\n");
+    }
+    msleep(1);
+
+    //set cadc trim value
+    if(sd77428main_cfg_offset(chip) < 0)
+    {
+        pr_info("sd77428main_cfg_offset Set Failed.\r\n");
+        paramdown_result += (1 << 9);
     }
     msleep(1);
 
@@ -2687,6 +3074,82 @@ static uint16_t parameters_down_level8(struct sd77428_data *chip)
 //-------------------------------------------------------------------------------------------------------------------//
 
 //---------------------------------------------------------驱动计算接口-----------------------------------------------------------//
+static int32_t lut_soc_by_ocv(uint16_t ocv_volt)
+{
+    uint16_t ocv_soc = 0;
+    uint16_t idx = 0;
+    if (ocv_volt <= ocv_volt_data[0])
+    {
+        ocv_soc = ocv_soc_value[0];
+    }
+    else if(ocv_volt >= ocv_volt_data[OCV_DATA_NUM-1])
+    {
+        ocv_soc = ocv_volt_data[OCV_DATA_NUM-1];
+    }
+    else
+    {
+        for (idx = 0; idx < OCV_DATA_NUM-1; ++idx)
+        {
+            if (ocv_volt >= ocv_volt_data[idx] && ocv_volt < ocv_volt_data[idx+1])
+            {
+                ocv_soc = ocv_soc_value[idx];
+                break;
+            }
+        }
+    }
+    return ocv_soc;
+}
+
+static int32_t check_lut_ocvsoc(struct sd77428_data *chip)
+{
+    //step1, 获取当前电压，电流，soc
+    int32_t     ret = 0;
+    int16_t     batt_im_rsense = 10;    //电池内阻估计
+    uint16_t    batt_voltage;   //Voltage of battery, in mV
+    int16_t     batt_current;   //Current of battery, in mA; plus value means charging, minus value means discharging
+    uint16_t    batt_rsoc;      //Relative State Of Charged, present percentage of battery capacity
+
+    int16_t     batt_ocv_volt;  // batt ocv voltage 
+    int16_t     batt_ocv_soc;   // bat ocv volt lut soc
+    int16_t     batt_end_volt;  // batt end discharge voltage 
+    int16_t     batt_end_soc;   // batt edd reserve soc
+
+    ret = sd77428_read_word(chip, (sbsd_cmd_def[SBS04_BATTVOLT] >> SBSD_CMD_Pos) & 0xFF, &batt_voltage);
+    ret += sd77428_read_word(chip, (sbsd_cmd_def[SBS10_BATTCURR] >> SBSD_CMD_Pos) & 0xFF, &batt_current);
+    ret += sd77428_read_word(chip, (sbsd_cmd_def[SBS1C_RSOC] >> SBSD_CMD_Pos) & 0xFF, &batt_rsoc);
+    batt_rsoc = batt_rsoc * 100;
+
+    if (ret == 0)
+    {
+        //step2，查表获取对应的ocv-soc
+        batt_ocv_volt = batt_voltage - (batt_current * batt_im_rsense)/1000;
+        batt_ocv_soc = lut_soc_by_ocv(batt_ocv_volt);
+
+        batt_end_volt = BATT_DESIGN_EOD - (batt_current * batt_im_rsense)/1000;
+        batt_end_soc = lut_soc_by_ocv(batt_end_volt);
+
+        pr_info("sd77428main check_lut_ocv current:%d,rsocnow：%d, lut soc (%d, %d)--(%d, %d).\r\n", batt_current, batt_rsoc, batt_ocv_volt, batt_ocv_soc, batt_end_volt, batt_end_soc);
+
+        //step3，计算比较当前的soc与lut ocv-soc
+        if (batt_rsoc - batt_ocv_soc > 2000 ||
+            batt_ocv_soc - batt_rsoc > 2000 ||
+            (batt_ocv_volt < BATT_DESIGN_EOD - 150 && batt_rsoc > 500)
+            )
+        {
+            //step4, 检查bank1的soc值, 如果是0%, 则清掉
+            check_reset_bank1(chip);
+            //step5, 重新软件复位，初始化fw，计算新的soc
+            //sbs fin 0x8f
+            sd77428_set_sbs_params(chip, (sbsd_cmd_def[SBS8F_SBSSENDFINISHED] >> SBSD_CMD_Pos) & 0xFF, 0, 2);
+            // usleep_range(5000, 10000);
+            // msleep(1500);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+#if 0
 //参数表下载任务
 static void sd77428_params_down_work(struct work_struct *work)
 {
@@ -2766,9 +3229,9 @@ static void sd77428_params_down_work(struct work_struct *work)
     ret += paramdown_result;
     if (paramdown_result)        pr_info("-----------------4 parameters_down_level4 failed, code %02x. -----------------\r\n", paramdown_result);
 
-    // paramdown_result = parameters_down_level5(chip);
-    // ret += paramdown_result;
-    // if (paramdown_result)        pr_info("-----------------5 parameters_down_level5 failed, code %02x. -----------------\r\n", paramdown_result);
+    paramdown_result = parameters_down_level5(chip);
+    ret += paramdown_result;
+    if (paramdown_result)        pr_info("-----------------5 parameters_down_level5 failed, code %02x. -----------------\r\n", paramdown_result);
 
     paramdown_result = parameters_down_level6(chip);
     ret += paramdown_result;
@@ -2786,6 +3249,7 @@ static void sd77428_params_down_work(struct work_struct *work)
     if (!ret)
     {
         pr_info("++++++++++++++++++++Parameters Download Sucess.++++++++++++++++++++\r\n");
+        //sd77428_set_sbs_params(chip, (sbsd_cmd_def[SBSF9_SPECIAL] >> SBSD_CMD_Pos) & 0xFF, 0x2301, 2);
         goto out;
     }
     else
@@ -2797,6 +3261,102 @@ static void sd77428_params_down_work(struct work_struct *work)
 out:
     schedule_delayed_work(&chip->sd77428_work, (2*HZ));
 }
+#endif
+
+static void sd77428_params_down_work(struct work_struct *work)
+{
+    uint32_t max_download_th = 3;
+    uint32_t down_retry_cnt = 0;
+    uint32_t ret = 0;
+    struct sd77428_data *chip = container_of(work, struct sd77428_data, sd77428_download_work.work);
+    
+    pr_info("Start parameters down work.\n");
+
+    if(false == sd77428_is_ok)      goto failed;
+
+    for (down_retry_cnt = 0; down_retry_cnt < max_download_th; ++down_retry_cnt)
+    {
+        ret = check_reset_bank1(chip);
+        if (!ret) break;
+        pr_info("-----------------0 check_reset_bank1 failed, code %02x. retry %d. -----------------\r\n", ret, down_retry_cnt);
+    }
+    if (down_retry_cnt >= max_download_th) goto failed;
+
+    for (down_retry_cnt = 0; down_retry_cnt < max_download_th; ++down_retry_cnt)
+    {
+        ret = parameters_down_level1(chip);
+        if (!ret) break;
+        pr_info("-----------------1 parameters_down_level1 failed, code %02x. retry %d. -----------------\r\n", ret, down_retry_cnt);
+    }
+    if (down_retry_cnt >= max_download_th) goto failed;
+
+    for (down_retry_cnt = 0; down_retry_cnt < max_download_th; ++down_retry_cnt)
+    {
+        ret = parameters_down_level2(chip);
+        if (!ret) break;
+        pr_info("-----------------2 parameters_down_level2 failed, code %02x. retry %d. -----------------\r\n", ret, down_retry_cnt);
+    }
+    if (down_retry_cnt >= max_download_th) goto failed;
+
+
+    for (down_retry_cnt = 0; down_retry_cnt < max_download_th; ++down_retry_cnt)
+    {
+        ret = parameters_down_level3(chip);
+        if (!ret) break;
+        pr_info("-----------------3 parameters_down_level3 failed, code %02x. retry %d. -----------------\r\n", ret, down_retry_cnt);
+    }
+    if (down_retry_cnt >= max_download_th) goto failed;
+
+    for (down_retry_cnt = 0; down_retry_cnt < max_download_th; ++down_retry_cnt)
+    {
+        ret = parameters_down_level4(chip);
+        if (!ret) break;
+        pr_info("-----------------4 parameters_down_level4 failed, code %02x. retry %d. -----------------\r\n", ret, down_retry_cnt);
+    }
+    if (down_retry_cnt >= max_download_th) goto failed;
+
+    for (down_retry_cnt = 0; down_retry_cnt < max_download_th; ++down_retry_cnt)
+    {
+        ret = parameters_down_level5(chip);
+        if (!ret) break;
+        pr_info("-----------------5 parameters_down_level5 failed, code %02x. retry %d. -----------------\r\n", ret, down_retry_cnt);
+    }
+    if (down_retry_cnt >= max_download_th) goto failed;
+
+    for (down_retry_cnt = 0; down_retry_cnt < max_download_th; ++down_retry_cnt)
+    {
+        ret = parameters_down_level6(chip);
+        if (!ret) break;
+        pr_info("-----------------6 parameters_down_level6 failed, code %02x. retry %d. -----------------\r\n", ret, down_retry_cnt);
+    }
+    if (down_retry_cnt >= max_download_th) goto failed;
+
+    for (down_retry_cnt = 0; down_retry_cnt < max_download_th; ++down_retry_cnt)
+    {
+        ret = parameters_down_level7(chip);
+        if (!ret) break;
+        pr_info("-----------------7 parameters_down_level7 failed, code %02x. retry %d. -----------------\r\n", ret, down_retry_cnt);
+    }
+    if (down_retry_cnt >= max_download_th) goto failed;
+
+    for (down_retry_cnt = 0; down_retry_cnt < max_download_th; ++down_retry_cnt)
+    {
+        ret = parameters_down_level8(chip);
+        if (!ret) break;
+        pr_info("-----------------8 parameters_down_level8 failed, code %02x. retry %d. -----------------\r\n", ret, down_retry_cnt);
+    }
+    if (down_retry_cnt >= max_download_th) goto failed;
+
+    pr_info("++++++++++++++++++++Parameters Download Sucess.++++++++++++++++++++\r\n");
+    schedule_delayed_work(&chip->sd77428_work, (2*HZ));
+    return;
+
+failed:
+    pr_info("Parameters Download Failed. \r\n");
+    sd77428_set_sbs_params(chip, (sbsd_cmd_def[SBSF9_SPECIAL] >> SBSD_CMD_Pos) & 0xFF, 0x2301, 2);
+    schedule_delayed_work(&chip->sd77428_work, (2*HZ));
+    return;
+}
 
 static void sd77428_battery_work(struct work_struct *work)
 {
@@ -2804,7 +3364,27 @@ static void sd77428_battery_work(struct work_struct *work)
 
     if(false == sd77428_is_ok)
         goto out;
-    
+
+    if (sd77428_shipmode_flag)
+    {
+        if (sd77428_shipmode_waitcnt == 0)
+        {
+            //cfg fastdsg disable
+            sd77428_disable_fastdsg(chip);
+        }
+
+        // sd77428_shipmode_waitcnt += INIT_DELAY/1000;
+        sd77428_shipmode_waitcnt += INIT_DELAY /(HZ);
+
+        if (sd77428_shipmode_waitcnt > 30)  
+        {
+            sd77428_enable_fastdsg(chip);
+
+            sd77428_shipmode_flag = false;
+            sd77428_shipmode_waitcnt = 0;
+        }
+    }
+
     sd77428_update_charger_info(chip);
 
     sd77428_get_batt_info(chip);
@@ -2816,7 +3396,8 @@ out:
 int32_t sd77428main_suspend(struct device *dev)
 {
     struct sd77428_data *chip  = i2c_get_clientdata(to_i2c_client(dev));
-    cancel_delayed_work(&chip->sd77428_work);
+    cancel_delayed_work_sync(&chip->sd77428_work);
+    pr_info("sd77428main is suspend\n");
     return 0;
 }
 
@@ -2824,7 +3405,8 @@ int32_t sd77428main_resume(struct device *dev)
 {
     struct sd77428_data *chip = i2c_get_clientdata(to_i2c_client(dev));
     if(true == sd77428_is_ok)
-        schedule_delayed_work(&chip->sd77428_work,INIT_DELAY);
+        schedule_delayed_work(&chip->sd77428_work,msecs_to_jiffies(20));
+    pr_info("sd77428main is resume. sd77428_is_ok %d\n", sd77428_is_ok);
     return 0;
 }
 
@@ -2833,8 +3415,8 @@ int32_t sd77428main_remove(struct i2c_client *client)
     struct sd77428_data *chip = i2c_get_clientdata(client);
     
     sysfs_remove_group(&(chip->client->dev.kobj), &sd77428_attribute_group);
-    power_supply_unregister(chip->bat);
-    cancel_delayed_work(&chip->sd77428_work);
+    // power_supply_unregister(chip->bat);
+    cancel_delayed_work_sync(&chip->sd77428_work);
     pr_info("sd77428main is remove\n");
 
     return 0;
@@ -2843,14 +3425,41 @@ int32_t sd77428main_remove(struct i2c_client *client)
 void sd77428main_shutdown(struct i2c_client *client)
 {
     struct sd77428_data *chip = i2c_get_clientdata(client);
-    
+    // sd77428_disable_sleep_cc_option(chip);
+    if (sd77428_shipmode_flag)
+    {
+        sd77428_enable_fastdsg(chip);
+        sd77428_shipmode_flag = false;
+    }
+    //set sw_cadc_enable disable, when shutdown, avoid CC change when poweroff
+    sd77428_disable_cadc(chip);
+
     sysfs_remove_group(&(chip->client->dev.kobj), &sd77428_attribute_group);
-    power_supply_unregister(chip->bat);
-    cancel_delayed_work(&chip->sd77428_work);
+    // power_supply_unregister(chip->bat);
+    cancel_delayed_work_sync(&chip->sd77428_work);
     pr_info("sd77428main is shutdown\n");
 }
 //---------------------------------------------------------------------------------------------------------------------//
+static int32_t check_param_update(struct sd77428_data *chip)
+{
+    int16_t  param_low = 0; //param_high = 0,
+    uint32_t param = 0;
 
+    sd77428_get_sbs_params(chip, (sbsd_cmd_def[SBS66_DSNCAP] >> SBSD_CMD_Pos) & 0xFF, &param, 2);
+    param_low = (int16_t)param;
+
+    if (param_low != param_board_cfg[0] || param_low == 4900)
+    {
+       pr_info("sd77428main Chip SBS66_DSNCAP is %d, need update params.\r\n", param_low);
+       return 1;
+    }
+    else
+    {
+       pr_info("sd77428main Chip SBS66_DSNCAP is %d, do not need update params.\r\n", param_low);
+       return 0;
+    }
+    return 0;
+}
 
 int32_t sd77428main_ic_init(struct sd77428_data *chip)
 {
@@ -2862,25 +3471,55 @@ int32_t sd77428main_ic_init(struct sd77428_data *chip)
         pr_err("Detect sd77428 ic failed, exit.\n");
         return -ENODEV;
     }
+    // sd77428_enable_sleep_cc_option(chip);
+
+    //enable sw_cadc_enable when driver start
+    sd77428_enable_cadc(chip);
     
     //init the hardware adc register config
     sd77428_init_batt_info(chip);
+    g_chip_data = chip;
 
     INIT_DELAYED_WORK(&chip->sd77428_work, sd77428_battery_work);
-    schedule_delayed_work(&chip->sd77428_work, (15*HZ));   //60                   //linux的队列任务管理，共享工作队列
 
     if (parameters_down_enable)
     {
-        INIT_DELAYED_WORK(&chip->sd77428_download_work, sd77428_params_down_work);
-        schedule_delayed_work(&chip->sd77428_download_work, (2*HZ));             //linux的队列任务管理，共享工作队列
+        //check param need download or not
+        if (check_param_update(chip))
+        {
+            sd77428_shipmode_flag = true;                                             //shipmode wakeup, reinit soc
+
+            schedule_delayed_work(&chip->sd77428_work, (12*HZ));                      //linux的队列任务管理，共享工作队列
+
+            INIT_DELAYED_WORK(&chip->sd77428_download_work, sd77428_params_down_work);
+            // schedule_delayed_work(&chip->sd77428_download_work, (1*HZ));             //linux的队列任务管理，共享工作队列
+            schedule_delayed_work(&chip->sd77428_download_work, msecs_to_jiffies(100));
+        }
+        else
+        {
+            msleep(1100);
+            ret = check_lut_ocvsoc(chip);
+            if (ret)
+            {
+                //need update ocv soc
+                sd77428_shipmode_flag = true;                                             //shipmode wakeup, reinit soc
+                schedule_delayed_work(&chip->sd77428_work, (1*HZ));                      //linux的队列任务管理，共享工作队列
+            }
+            else
+            {
+                schedule_delayed_work(&chip->sd77428_work, msecs_to_jiffies(500));
+            }
+        }
     }    
 
+#if 0
     sd77428_power_supply_init(chip);
-
+#endif
+    
     ret = sysfs_create_group(&(chip->dev->kobj), &sd77428_attribute_group);
     if (ret < 0) 
         pr_err("create sysfs failed %d\n",ret);
-    
-    g_chip_data = chip;
+
+
     return 0;
 }

@@ -46,7 +46,7 @@
 static DEFINE_SPINLOCK(imgsensor_drv_lock);
 static struct imgsensor_info_struct imgsensor_info = {
 	.sensor_id = SC202CSMACROMIPI_SENSOR_ID,
-	.checksum_value = 0x8bb8002f,
+	.checksum_value = 0x2727baba, // 0x8bb8002f,  drv modify ata
 
 	.pre = {
 		.pclk = 72000000,
@@ -136,11 +136,11 @@ static struct imgsensor_info_struct imgsensor_info = {
 	.ihdr_le_firstline = 0,
 	.sensor_mode_num = 5,
 
-	.cap_delay_frame = 2,
-	.pre_delay_frame = 2,
-	.video_delay_frame = 2,
-	.hs_video_delay_frame = 2,
-	.slim_video_delay_frame = 2,
+	.cap_delay_frame = 1,
+	.pre_delay_frame = 1,
+	.video_delay_frame = 1,
+	.hs_video_delay_frame = 1,
+	.slim_video_delay_frame = 1,
 
 	.isp_driving_current = ISP_DRIVING_6MA,
 	.sensor_interface_type = SENSOR_INTERFACE_TYPE_MIPI,
@@ -185,7 +185,7 @@ static kal_uint16 read_cmos_sensor(kal_uint32 addr)
 {
 	kal_uint16 get_byte = 0;
 	char pu_send_cmd[2] = {(char)(addr >> 8), (char)(addr & 0xFF) };
-	iReadRegI2C(pu_send_cmd, 2, (u8 *)&get_byte, 1, imgsensor.i2c_write_id);
+	iReadRegI2CTiming(pu_send_cmd, 2, (u8 *)&get_byte, 1, imgsensor.i2c_write_id,imgsensor_info.i2c_speed);
 
 	return get_byte;
 }
@@ -193,7 +193,7 @@ static kal_uint16 read_cmos_sensor(kal_uint32 addr)
 static void write_cmos_sensor(kal_uint32 addr, kal_uint32 para)
 {
 	char pu_send_cmd[3] = {(char)(addr >> 8), (char)(addr & 0xFF), (char)(para & 0xFF)};
-	iWriteRegI2C(pu_send_cmd, 3, imgsensor.i2c_write_id);
+	iWriteRegI2CTiming(pu_send_cmd, 3, imgsensor.i2c_write_id,imgsensor_info.i2c_speed);
 }
 static void set_dummy(void)
 {

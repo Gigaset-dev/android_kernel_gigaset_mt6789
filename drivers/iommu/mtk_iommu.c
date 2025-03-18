@@ -4,6 +4,7 @@
  * Author: Yong Wu <yong.wu@mediatek.com>
  */
 #define pr_fmt(fmt)    "mtk_iommu: " fmt
+//#define IOMMU_SECURE_DEBUG
 
 #include <linux/bitfield.h>
 #include <linux/bug.h>
@@ -227,6 +228,7 @@
 #define PM_OPS_SKIP			BIT(22)
 #define SHARE_PGTABLE			BIT(23)
 #define IOMMU_NO_SMCCC			BIT(24)
+#define HAS_EMI_PM			BIT(25)
 
 #define POWER_ON_STA		1
 #define POWER_OFF_STA		0
@@ -260,7 +262,7 @@ struct mtk_iommu_domain {
 static const struct iommu_ops mtk_iommu_ops;
 
 static bool pd_sta[MM_IOMMU_NUM];
-static spinlock_t tlb_locks[MM_IOMMU_NUM];
+static spinlock_t *tlb_locks[MM_IOMMU_NUM];
 static struct notifier_block mtk_pd_notifiers[MM_IOMMU_NUM];
 static bool hypmmu_type2_en;
 static struct mutex init_mutexs[PGTBALE_NUM];
@@ -2119,14 +2121,17 @@ static int mtk_iommu_pd_callback(struct notifier_block *nb,
 {
 	unsigned long lock_flags;
 
-	spin_lock_irqsave(&tlb_locks[nb->priority], lock_flags);
+	if (nb->priority < 0 || nb->priority >= MM_IOMMU_NUM)
+		return NOTIFY_DONE;
+
+	spin_lock_irqsave(tlb_locks[nb->priority], lock_flags);
 
 	if (flags == GENPD_NOTIFY_ON)
 		pd_sta[nb->priority] = POWER_ON_STA;
 	else if (flags == GENPD_NOTIFY_PRE_OFF)
 		pd_sta[nb->priority] = POWER_OFF_STA;
 
-	spin_unlock_irqrestore(&tlb_locks[nb->priority], lock_flags);
+	spin_unlock_irqrestore(tlb_locks[nb->priority], lock_flags);
 
 	return NOTIFY_OK;
 }
@@ -2880,7 +2885,7 @@ skip_smi:
 		}
 
 		r = dev_pm_genpd_add_notifier(dev, &mtk_pd_notifiers[iommu_id]);
-		tlb_locks[iommu_id] = data->tlb_lock;
+		tlb_locks[iommu_id] = &data->tlb_lock;
 		pr_info("%s add_notifier dev:%s, disp_power_on:%d, iommu:%d\n",
 			__func__, dev_name(dev), disp_power_on, iommu_id);
 		if (r)
@@ -2936,7 +2941,7 @@ static int mtk_iommu_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static int __maybe_unused mtk_iommu_runtime_suspend(struct device *dev)
+static int mtk_iommu_hw_suspend(struct device *dev)
 {
 	struct mtk_iommu_data *data = dev_get_drvdata(dev);
 	struct mtk_iommu_suspend_reg *reg = &data->reg;
@@ -2953,12 +2958,14 @@ static int __maybe_unused mtk_iommu_runtime_suspend(struct device *dev)
 	}
 
 	spin_lock_irqsave(&data->tlb_lock, flags);
-	if (!mtk_iommu_power_get(data)) {
-		pr_notice("%s, iommu:(%d,%d) power off dev:%s\n",
-			  __func__, data->plat_data->iommu_type, data->plat_data->iommu_id,
-			  dev_name(data->dev));
-		spin_unlock_irqrestore(&data->tlb_lock, flags);
-		return 0;
+	if (data->plat_data->iommu_type != APU_IOMMU) {
+		if (!mtk_iommu_power_get(data)) {
+			pr_notice("%s, iommu:(%d,%d) power off dev:%s\n",
+				  __func__, data->plat_data->iommu_type,
+				  data->plat_data->iommu_id, dev_name(data->dev));
+			spin_unlock_irqrestore(&data->tlb_lock, flags);
+			return 0;
+		}
 	}
 
 	reg->wr_len_ctrl = readl_relaxed(base + REG_MMU_WR_LEN_CTRL);
@@ -2980,7 +2987,9 @@ static int __maybe_unused mtk_iommu_runtime_suspend(struct device *dev)
 		mtk_iommu_mau_reg_backup(data);
 #endif
 
-	mtk_iommu_power_put(data);
+	if (data->plat_data->iommu_type != APU_IOMMU)
+		mtk_iommu_power_put(data);
+
 	spin_unlock_irqrestore(&data->tlb_lock, flags);
 
 #if IS_ENABLED(CONFIG_MTK_IOMMU_MISC_DBG)
@@ -2991,7 +3000,7 @@ static int __maybe_unused mtk_iommu_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused mtk_iommu_runtime_resume(struct device *dev)
+static int mtk_iommu_hw_resume(struct device *dev)
 {
 	struct mtk_iommu_data *data = dev_get_drvdata(dev);
 	struct mtk_iommu_suspend_reg *reg = &data->reg;
@@ -3020,12 +3029,14 @@ static int __maybe_unused mtk_iommu_runtime_resume(struct device *dev)
 		return 0;
 
 	spin_lock_irqsave(&data->tlb_lock, flags);
-	if (!mtk_iommu_power_get(data)) {
-		pr_notice("%s, iommu:(%d,%d) power off dev:%s\n",
-			  __func__, data->plat_data->iommu_type, data->plat_data->iommu_id,
-			  dev_name(data->dev));
-		spin_unlock_irqrestore(&data->tlb_lock, flags);
-		return 0;
+	if (data->plat_data->iommu_type != APU_IOMMU) {
+		if (!mtk_iommu_power_get(data)) {
+			pr_notice("%s, iommu:(%d,%d) power off dev:%s\n",
+				  __func__, data->plat_data->iommu_type, data->plat_data->iommu_id,
+				  dev_name(data->dev));
+			spin_unlock_irqrestore(&data->tlb_lock, flags);
+			return 0;
+		}
 	}
 
 	writel_relaxed(reg->tbw_id, base + REG_MMU_TBW_ID);
@@ -3048,7 +3059,9 @@ static int __maybe_unused mtk_iommu_runtime_resume(struct device *dev)
 		mtk_iommu_mau_reg_restore(data);
 #endif
 
-	mtk_iommu_power_put(data);
+	if (data->plat_data->iommu_type != APU_IOMMU)
+		mtk_iommu_power_put(data);
+
 	spin_unlock_irqrestore(&data->tlb_lock, flags);
 
 #if IS_ENABLED(CONFIG_MTK_IOMMU_MISC_DBG)
@@ -3058,7 +3071,48 @@ static int __maybe_unused mtk_iommu_runtime_resume(struct device *dev)
 	return 0;
 }
 
+static int __maybe_unused mtk_iommu_runtime_suspend(struct device *dev)
+{
+	struct mtk_iommu_data *data = dev_get_drvdata(dev);
+
+	if (!MTK_IOMMU_HAS_FLAG(data->plat_data, HAS_EMI_PM))
+		return mtk_iommu_hw_suspend(dev);
+
+	return 0;
+}
+
+static int __maybe_unused mtk_iommu_runtime_resume(struct device *dev)
+{
+	struct mtk_iommu_data *data = dev_get_drvdata(dev);
+
+	if (!MTK_IOMMU_HAS_FLAG(data->plat_data, HAS_EMI_PM))
+		return mtk_iommu_hw_resume(dev);
+
+	return 0;
+}
+
+static int __maybe_unused mtk_iommu_suspend(struct device *dev)
+{
+	struct mtk_iommu_data *data = dev_get_drvdata(dev);
+
+	if (MTK_IOMMU_HAS_FLAG(data->plat_data, HAS_EMI_PM))
+		return mtk_iommu_hw_suspend(dev);
+
+	return 0;
+}
+
+static int __maybe_unused mtk_iommu_resume(struct device *dev)
+{
+	struct mtk_iommu_data *data = dev_get_drvdata(dev);
+
+	if (MTK_IOMMU_HAS_FLAG(data->plat_data, HAS_EMI_PM))
+		return mtk_iommu_hw_resume(dev);
+
+	return 0;
+}
+
 #if IS_ENABLED(CONFIG_MTK_IOMMU_MISC_SECURE)
+#ifdef IOMMU_SECURE_DEBUG
 static int mtk_dump_reg(const struct mtk_iommu_data *data,
 	unsigned int start, unsigned int length)
 {
@@ -3116,12 +3170,15 @@ static int mtk_dump_rs_sta_info(const struct mtk_iommu_data *data, int mmu)
 			    REG_MMU_RS_VA(mmu, 0),
 			    MTK_IOMMU_RS_COUNT * 4);
 }
+#endif /* IOMMU_SECURE_DEBUG */
 #endif
 
 static void mtk_dump_reg_for_hang_issue(struct mtk_iommu_data *data)
 {
 #if IS_ENABLED(CONFIG_MTK_IOMMU_MISC_SECURE)
+#ifdef IOMMU_SECURE_DEBUG
 	int cnt, ret, i, dump_count = 1;
+#endif /* IOMMU_SECURE_DEBUG */
 #endif
 	void __iomem *base = data->base;
 
@@ -3152,6 +3209,7 @@ static void mtk_dump_reg_for_hang_issue(struct mtk_iommu_data *data)
 		readl_relaxed(base + REG_MMU_CTRL_REG));
 
 #if IS_ENABLED(CONFIG_MTK_IOMMU_MISC_SECURE)
+#ifdef IOMMU_SECURE_DEBUG
 	ret = ao_secure_dbg_switch_by_atf(data->plat_data->iommu_type,
 			data->plat_data->iommu_id, 1);
 	if (ret) {
@@ -3173,6 +3231,7 @@ static void mtk_dump_reg_for_hang_issue(struct mtk_iommu_data *data)
 			data->plat_data->iommu_id, 0);
 	if (ret)
 		pr_err("%s, failed to disable secure debug\n", __func__);
+#endif /* IOMMU_SECURE_DEBUG */
 #endif
 	pr_info("%s done, (%d, %d)\n", __func__, data->plat_data->iommu_type,
 		data->plat_data->iommu_id);
@@ -3225,6 +3284,7 @@ EXPORT_SYMBOL_GPL(mtk_iommu_dbg_hang_detect);
 
 static const struct dev_pm_ops mtk_iommu_pm_ops = {
 	SET_RUNTIME_PM_OPS(mtk_iommu_runtime_suspend, mtk_iommu_runtime_resume, NULL)
+	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(mtk_iommu_suspend, mtk_iommu_resume)
 	SET_LATE_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
 				     pm_runtime_force_resume)
 };
@@ -3244,7 +3304,7 @@ static const struct mtk_iommu_plat_data mt2712_data = {
 static const struct mtk_iommu_plat_data mt6739_data = {
 	.m4u_plat      = M4U_MT6739,
 	.flags         = HAS_SUB_COMM | OUT_ORDER_WR_EN | WR_THROT_EN |
-			 NOT_STD_AXI_MODE | SHARE_PGTABLE,
+			 NOT_STD_AXI_MODE | SHARE_PGTABLE | HAS_EMI_PM,
 	.inv_sel_reg   = REG_MMU_INV_SEL_GEN1,
 	.iova_region   = single_domain,
 	.iova_region_nr = ARRAY_SIZE(single_domain),
@@ -3255,7 +3315,7 @@ static const struct mtk_iommu_plat_data mt6739_data = {
 static const struct mtk_iommu_plat_data mt6761_data = {
 	.m4u_plat      = M4U_MT6761,
 	.flags         = HAS_SUB_COMM | OUT_ORDER_WR_EN | WR_THROT_EN |
-			 NOT_STD_AXI_MODE | SHARE_PGTABLE,
+			 NOT_STD_AXI_MODE | SHARE_PGTABLE | HAS_EMI_PM,
 	.inv_sel_reg   = REG_MMU_INV_SEL_GEN1,
 	.iova_region   = single_domain,
 	.iova_region_nr = ARRAY_SIZE(single_domain),
@@ -3266,7 +3326,7 @@ static const struct mtk_iommu_plat_data mt6761_data = {
 static const struct mtk_iommu_plat_data mt6765_data = {
 	.m4u_plat      = M4U_MT6765,
 	.flags         = HAS_SUB_COMM | OUT_ORDER_WR_EN | WR_THROT_EN |
-			 NOT_STD_AXI_MODE | SHARE_PGTABLE,
+			 NOT_STD_AXI_MODE | SHARE_PGTABLE | HAS_EMI_PM,
 	.inv_sel_reg   = REG_MMU_INV_SEL_GEN1,
 	.iova_region   = single_domain,
 	.iova_region_nr = ARRAY_SIZE(single_domain),
@@ -3277,7 +3337,7 @@ static const struct mtk_iommu_plat_data mt6765_data = {
 static const struct mtk_iommu_plat_data mt6768_data = {
 	.m4u_plat      = M4U_MT6768,
 	.flags         = HAS_SUB_COMM | OUT_ORDER_WR_EN | WR_THROT_EN |
-			 NOT_STD_AXI_MODE | SHARE_PGTABLE,
+			 NOT_STD_AXI_MODE | SHARE_PGTABLE | HAS_EMI_PM,
 	.inv_sel_reg   = REG_MMU_INV_SEL_GEN1,
 	.iova_region   = single_domain,
 	.iova_region_nr = ARRAY_SIZE(single_domain),
@@ -3421,7 +3481,8 @@ static const struct mtk_iommu_plat_data mt6879_data_apu0 = {
 static const struct mtk_iommu_plat_data mt6893_data_iommu0 = {
 	.m4u_plat        = M4U_MT6893,
 	.flags           = NOT_STD_AXI_MODE | HAS_SUB_COMM | OUT_ORDER_WR_EN | WR_THROT_EN |
-			   HAS_BCLK | IOVA_34_EN | GET_DOM_ID_LEGACY | SHARE_PGTABLE,
+			   HAS_BCLK | IOVA_34_EN | GET_DOM_ID_LEGACY |
+			   SHARE_PGTABLE | IOMMU_SEC_BK_EN,
 	/* not use larbid_remap */
 	.larbid_remap    = {{0}, {1}, {4, 5}, {7}, {2}, {9, 11, 19, 20},
 			    {0, 14, 16}, {0, 13, 18, 17}},
@@ -3435,9 +3496,9 @@ static const struct mtk_iommu_plat_data mt6893_data_iommu0 = {
 
 static const struct mtk_iommu_plat_data mt6893_data_iommu1 = {
 	.m4u_plat        = M4U_MT6893,
-	.flags           = NOT_STD_AXI_MODE | HAS_SUB_COMM | OUT_ORDER_WR_EN |
-			   WR_THROT_EN | HAS_BCLK | IOVA_34_EN |
-			   GET_DOM_ID_LEGACY | SHARE_PGTABLE,
+	.flags           = NOT_STD_AXI_MODE | HAS_SUB_COMM | OUT_ORDER_WR_EN | WR_THROT_EN |
+			   HAS_BCLK | IOVA_34_EN | GET_DOM_ID_LEGACY |
+			   SHARE_PGTABLE | IOMMU_SEC_BK_EN,
 	/* not use larbid_remap */
 	.larbid_remap    = {{0}, {1}, {4, 5}, {7}, {2}, {9, 11, 19, 20},
 			    {0, 14, 16}, {0, 13, 18, 17}},

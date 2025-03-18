@@ -41,14 +41,14 @@ do {								\
 
 #define pe_info(fmt, args...)					\
 do {								\
-	if (1) { \
+	if (pe_get_debug_level() >= PE_INFO_LEVEL) { \
 		pr_notice(fmt, ##args);				\
 	}							\
 } while (0)
 
 #define pe_dbg(fmt, args...)					\
 do {								\
-	if (1) {	\
+	if (pe_get_debug_level() >= PE_DEBUG_LEVEL) {	\
 		pr_notice(fmt, ##args);				\
 	}							\
 } while (0)

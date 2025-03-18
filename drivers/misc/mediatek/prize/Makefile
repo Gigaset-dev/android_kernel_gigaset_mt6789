@@ -35,12 +35,25 @@ obj-$(CONFIG_PRIZE_COMMON_NODE) += prize_common_node/
 #drv add by wmd 20230529,add digital lcd,start
 obj-$(CONFIG_PRIZE_DIGITAL_LCD) += dlcd/
 #drv add by wmd 20230529,add digital lcd,end 
-#drv add by liuxuhui for sensor hall start --- 20231123
+#drv-add by shenwenbin for oled panel 20231213 start
+obj-$(CONFIG_PRIZE_OLED_NODE) += prize_oled_node/
+#drv-add by shenwenbin for oled panel 20231213 end
+#drv add by lipengpeng 20231223 start
+obj-$(CONFIG_CAMERA_TTM)		+= ttm/
+obj-$(CONFIG_CAMERA_SERIAL_CAMERA)		+= serial_camera/
+#drv add by lipengpeng 20231223 end
+#DRV added by chenjiaxi, add miniscreen driver, start
+obj-$(CONFIG_DRV_MINISCREEN) += miniscreen/
+#DRV added by chenjiaxi, add miniscreen driver, end
+obj-$(CONFIG_DRV_ADC_GMS_DETECT) += gms_adc/
+obj-$(CONFIG_PRIZE_LEPTON_FILR)		+= FILR/
+# pri BQS33-208 added by ocean 20240625 begin
+obj-$(CONFIG_PRIZE_SIM_STATE) += prize_sim_state/
+# pri BQS33-208 added by ocean 20240625 end
+obj-$(CONFIG_PRIZE_CAMPING_LIGHT) += camping_light/
+#drv add by yaozhipeng for sensor hall start --- 20241118
 obj-$(CONFIG_PRIZE_HALL) += hall/
-#drv add by liuxuhui for sensor hall end --- 20231123
+#drv add by yaozhipeng for sensor hall end --- 20241118
 #drv add by yaozhipeng for sensor 3d hall start --- 20240130
 obj-$(CONFIG_3D_HALL_IST8309) += hall_ist8309/
 #drv add by yaozhipeng for sensor 3d hall end --- 20240130
-#drv added by chenjiaxi, add miniscreen driver, start
-obj-$(CONFIG_DRV_MINISCREEN) += miniscreen/
-#drv added by chenjiaxi, add miniscreen driver, end

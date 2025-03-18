@@ -41,6 +41,13 @@
 #define GOODIX_IC_INFO_ADDR_BRA		0x10068
 #define GOODIX_IC_INFO_ADDR			0x10070
 
+/* DRV added by wangwei1, hardware info, start */
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
+#include "../../../misc/mediatek/prize/hardware_info/hardware_info.h"
+extern struct hardware_info current_tp_info;
+#endif
+/* DRV added by wangwei1, hardware info, end */
+
 
 enum brl_request_code {
 	BRL_REQUEST_CODE_CONFIG = 0x01,
@@ -795,6 +802,14 @@ static int brl_read_version(struct goodix_ts_core *cd,
 	ts_info("vid:%*ph", (int)sizeof(version->patch_vid),
 		version->patch_vid);
 	ts_info("sensor_id:%d", version->sensor_id);
+
+/* DRV added by wangwei1, hardware info, start */
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
+	sprintf(current_tp_info.chip, "GT%s-%s", version->patch_pid,temp_pid);
+	sprintf(current_tp_info.id,"sensor_id:%d FW:%02x", version->sensor_id, version->patch_vid[0]);
+	//sprintf(current_tp_info.more,"sensor_id:%d",version->sensor_id);
+#endif
+/* DRV added by wangwei1, hardware info, end */
 
 	return 0;
 }

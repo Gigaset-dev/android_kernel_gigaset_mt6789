@@ -2151,6 +2151,14 @@ static int dpmaif_tx_done_kernel_thread(void *arg)
 				__func__, txq->index);
 			continue;
 		}
+
+		if (dpmaif_wait_resume_done()) {
+			//if resume not done, will waiting 1ms
+			hrtimer_start(&txq->tx_done_timer,
+				ktime_set(0, 1000000), HRTIMER_MODE_REL);
+			continue;
+		}
+
 		if (atomic_read(&txq->tx_resume_done)) {
 			CCCI_ERROR_LOG(dpmaif_ctrl->md_id, TAG,
 				"txq%d done/resume: 0x%x, 0x%x, 0x%x\n",
@@ -2792,6 +2800,24 @@ static void dpmaif_irq_cb(struct hif_dpmaif_ctrl *hif_ctrl)
 			"DPMAIF IRQ L2(%x/%x)(%x/%x)!\n",
 			L2TISAR0, L2RISAR0, L2TIMR0, L2RIMR0);
 
+	/* check UL&DL mask status register */
+	if (((L2TIMR0 & AP_UL_L2INTR_Msk_Check) != AP_UL_L2INTR_Msk_Check) ||
+		((L2RIMR0 & AP_DL_L2INTR_Msk_Check) != AP_DL_L2INTR_Msk_Check)) {
+		/* if has error bit, set mask */
+		DPMA_WRITE_AO_UL(NRL2_DPMAIF_AO_UL_AP_L2TIMSR0, ~(AP_UL_L2INTR_En_Msk));
+		/* use msk to clear dummy interrupt */
+		DPMA_WRITE_PD_MISC(DPMAIF_PD_AP_UL_L2TISAR0, ~(AP_UL_L2INTR_En_Msk));
+
+		/* if has error bit, set mask */
+		DPMA_WRITE_AO_UL(NRL2_DPMAIF_AO_UL_APDL_L2TIMSR0, ~(AP_DL_L2INTR_En_Msk));
+		/* use msk to clear dummy interrupt */
+		DPMA_WRITE_PD_MISC(DPMAIF_PD_AP_DL_L2TISAR0, ~(AP_DL_L2INTR_En_Msk));
+		CCCI_NORMAL_LOG(0, TAG, "[%s]mask:dl=0x%x(0x%x) ul=0x%x(0x%x)\n",
+			__func__,
+			DPMA_READ_AO_UL(NRL2_DPMAIF_AO_UL_APDL_L2TIMR0), L2RIMR0,
+			DPMA_READ_AO_UL(NRL2_DPMAIF_AO_UL_AP_L2TIMR0), L2TIMR0);
+	}
+
 	/* TX interrupt */
 	if (L2TISAR0) {
 		L2TISAR0 &= ~(L2TIMR0);
@@ -2955,10 +2981,17 @@ static int dpmaif_rx_buf_init(struct dpmaif_rx_queue *rxq)
 		kfree(rxq->pit_base);
 		return -ENOMEM;
 	}
+#if IS_ENABLED(CONFIG_ARCH_DMA_ADDR_T_64BIT)
 	CCCI_BOOTUP_LOG(-1, TAG, "%s:rxq pit_phy_addr=0x%llx,pit_base=0x%p\r\n",
 		__func__, rxq->pit_phy_addr, rxq->pit_base);
 	CCCI_NORMAL_LOG(-1, TAG, "%s:rxq pit_phy_addr=0x%llx,pit_base=0x%p\r\n",
 		__func__, rxq->pit_phy_addr, rxq->pit_base);
+#else
+	CCCI_BOOTUP_LOG(-1, TAG, "%s:rxq pit_phy_addr=0x%lx,pit_base=0x%p\r\n",
+		__func__, rxq->pit_phy_addr, rxq->pit_base);
+	CCCI_NORMAL_LOG(-1, TAG, "%s:rxq pit_phy_addr=0x%lx,pit_base=0x%p\r\n",
+		__func__, rxq->pit_phy_addr, rxq->pit_base);
+#endif
 #endif
 	memset(rxq->pit_base, 0, dpmaif_ctrl->dl_pit_size);
 	/* dpmaif_pit_init(rxq->pit_base, rxq->pit_size_cnt); */
@@ -3879,6 +3912,21 @@ static int dpmaif_resume(unsigned char hif_id)
 	/*IP don't power down before*/
 	if (drv3_dpmaif_check_power_down() == false) {
 		CCCI_DEBUG_LOG(0, TAG, "sys_resume no need restore\n");
+	} else {
+		/* DL set mask */
+		DPMA_WRITE_AO_UL(NRL2_DPMAIF_AO_UL_APDL_L2TIMSR0, ~(AP_DL_L2INTR_En_Msk));
+		/* use msk to clear dummy interrupt */
+		DPMA_WRITE_PD_MISC(DPMAIF_PD_AP_DL_L2TISAR0, ~(AP_DL_L2INTR_En_Msk));
+
+		/* UL set mask */
+		DPMA_WRITE_AO_UL(NRL2_DPMAIF_AO_UL_AP_L2TIMSR0, ~(AP_UL_L2INTR_En_Msk));
+		/* use msk to clear dummy interrupt */
+		DPMA_WRITE_PD_MISC(DPMAIF_PD_AP_UL_L2TISAR0, ~(AP_UL_L2INTR_En_Msk));
+
+		CCCI_NORMAL_LOG(0, TAG, "[%s]mask:dl=0x%x ul=0x%x\n",
+			__func__,
+			DPMA_READ_AO_UL(NRL2_DPMAIF_AO_UL_APDL_L2TIMR0),
+			DPMA_READ_AO_UL(NRL2_DPMAIF_AO_UL_AP_L2TIMR0));
 	}
 
 	return 0;
@@ -3934,6 +3982,10 @@ static int dpmaif_pre_stop(unsigned char hif_id)
 {
 	if (hif_id != DPMAIF_HIF_ID)
 		return -1;
+
+	if (dpmaif_ctrl->dpmaif_state == HIFDPMAIF_STATE_PWROFF
+		|| dpmaif_ctrl->dpmaif_state == HIFDPMAIF_STATE_MIN)
+		return 0;
 
 	dpmaif_stop_hw();
 

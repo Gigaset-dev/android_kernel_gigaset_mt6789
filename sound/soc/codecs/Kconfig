@@ -51,6 +51,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_ALC5623
 	imply SND_SOC_ALC5632
 	imply SND_SOC_AW87XXX
+	imply SND_SOC_AW87XXX_V2_13_0
 	imply SND_SOC_AW883XX
 	imply SND_SOC_BT_SCO
 	imply SND_SOC_BD28623
@@ -170,6 +171,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_RT5512
 #prize add by lipengpeng 20220606 start
 	imply SND_SOC_AW8839X
+	imply SND_SOC_AW8839X_STEREO	
 #prize add by lipengpeng 20220606 end
 	imply SND_SOC_FS1599
 	imply SND_SOC_RT5514
@@ -271,7 +273,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_WM8782
 	imply SND_SOC_WM8804_I2C
 #prize added by pengzhipeng, FSA4480, 20221103-start
-	imply SND_SOC_FSA4480_I2C
+	imply SND_SOC_FSA4480_SWITCH
 #prize added by pengzhipeng, FSA4480, 20221103-end
 	imply SND_SOC_WM8804_SPI
 	imply SND_SOC_WM8900
@@ -1187,6 +1189,9 @@ config SND_SOC_AW8839X
 	  amplifier which contain speaker protection,
 	  multi-band DRC, equalizer function. It would
 	  be set to yes if device with AW8839X on it.
+config SND_SOC_AW8839X_STEREO
+	tristate "Mediatek AW8839X speaker amplifier stereo"
+	depends on I2C
 	  
 #prize add by lipengpeng 20220606 end 
 	  
@@ -1373,6 +1378,7 @@ config SND_SOC_STA529
 config SND_SOC_STAC9766
 	tristate
 	depends on SND_SOC_AC97_BUS
+	select REGMAP_AC97
 
 config SND_SOC_STI_SAS
 	tristate "codec Audio support for STI SAS codec"
@@ -1833,7 +1839,7 @@ config SND_SOC_WSA881X
 config SND_SOC_ZL38060
 	tristate "Microsemi ZL38060 Connected Home Audio Processor"
 	depends on SPI_MASTER
-	select GPIOLIB
+	depends on GPIOLIB
 	select REGMAP
 	help
 	  Support for ZL38060 Connected Home Audio Processor from Microsemi,
@@ -1878,12 +1884,14 @@ config SND_SOC_FS1599
     help
         This option enables support for FS1599 series Smart PA.
 #prize added by pengzhipeng, fs1599, 20221103-end
+
 #prize added by pengzhipeng, FSA4480, 20221103-start
-config SND_SOC_FSA4480_I2C
+config SND_SOC_FSA4480_SWITCH
 	tristate "SoC Audio for awinic FSA4480 series"
 	help
         This option enables support for FSA4480.
 #prize added by pengzhipeng, FSA4480, 20221103-start
+
 config SND_SOC_MT6366
 	tristate "MediaTek MT6366 Codec driver"
 	depends on MFD_MT6366
@@ -2056,5 +2064,16 @@ config SND_SMARTPA_AW881XX_V1_3_0
           This option enables support for aw881xx series Smart PA.
 	   
 #prize add by wuhui 20210623 end
+#prize hjw for typec accdet start
+config PRIZE_TYPEC_ACCDET
+	tristate "PRIZE_TYPEC_ACCDET driver"
+	help
+	  PRIZE_TYPEC_ACCDET
+	  
+config PRIZE_TYPEC_SM_NKJ
+	tristate "PRIZE_TYPEC_SM_NKJ driver"
+	help
+	  PRIZE_TYPEC_SM_NKJ
+#prize hjw for typec accdet end
 
 endmenu

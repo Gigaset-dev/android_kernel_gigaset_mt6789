@@ -1425,13 +1425,14 @@ config CDFINGER_REE
       Say Y here if you have Focaltech touch panel.
       If unsure, say N.
 
+#prize add by zhangli 20241022 start
 config TOUCHSCREEN_CHIPONR_TDDI
     bool "chipone-tddi touch"
     default n
     help
       Say Y here if you have Focaltech touch panel.
       If unsure, say N.
-	  
+#prize add by zhangli 20241022 end	  
       
 #prize add by lipengpeng 20220518 end
 

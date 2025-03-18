@@ -114,16 +114,6 @@ static struct mtk_spk_i2c_ctrl mtk_spk_list[MTK_SPK_TYPE_NUM] = {
 	},
 #endif /* CONFIG_SND_SOC_CS35L45 */
 
-//prize add by lipengpeng 20220607 start
-#if IS_ENABLED(CONFIG_SND_SOC_AW8839X)
-        [MTK_SPK_AWINIC_AW883XX] = {
-                //.i2c_probe = aw883xx_i2c_probe,
-                //.i2c_remove = aw883xx_i2c_remove,
-                .codec_dai_name = "aw883xx-aif-6-34",
-                .codec_name = "aw883xx_smartpa.6-0034",
-        },
-#endif 
-//prize add by lipengpeng 20220607 end
 };
 
 static int mtk_spk_i2c_probe(struct i2c_client *client,
@@ -240,7 +230,8 @@ int mtk_spk_update_info(struct snd_soc_card *card,
 	const int i2s_num = 2;
 	unsigned int i2s_set[2] = {0};
 //prize add by pengzhipeng 20230105 start
-#if IS_ENABLED(CONFIG_SND_SOC_FS1599)
+#if IS_ENABLED(CONFIG_SND_SOC_FS1599) || IS_ENABLED(CONFIG_SND_SOC_AW87XXX) || IS_ENABLED(CONFIG_SND_SOC_AW87XXX_V2_13_0)
+	mtk_spk_type = MTK_SPK_NOT_SMARTPA;
 #else
     mtk_spk_type=5;//prize add by lipengpeng 20220607
 #endif
@@ -413,7 +404,6 @@ IS_ENABLED(CONFIG_MTK_SCP_AUDIO)
 EXPORT_SYMBOL(mtk_spk_recv_ipi_buf_from_dsp);
 
 static const struct i2c_device_id mtk_spk_i2c_id[] = {
-	{ "tfa9874", 0},
 	{ "speaker_amp", 0},
 	{}
 };

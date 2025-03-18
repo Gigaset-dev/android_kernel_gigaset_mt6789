@@ -1128,11 +1128,11 @@ static int husb311_get_message(struct tcpc_device *tcpc, uint32_t *payload,
 {
 	struct husb311_chip *chip = tcpc_get_dev_data(tcpc);
 	int rv;
+	//int cur_cnt;
 	uint8_t type, cnt = 0;
 	uint8_t buf[4];
-	// drv del tankaikun, fix pd_set_cap pd rdy timeout, 20231118 start
-	//const uint16_t alert_rx =
-	//	TCPC_V10_REG_ALERT_RX_STATUS|TCPC_V10_REG_RX_OVERFLOW;
+	const uint16_t alert_rx =
+		TCPC_V10_REG_ALERT_RX_STATUS|TCPC_V10_REG_RX_OVERFLOW;
 
 	rv = husb311_block_read(chip->client,
 			TCPC_V10_REG_RX_BYTE_CNT, 4, buf);
@@ -1141,7 +1141,7 @@ static int husb311_get_message(struct tcpc_device *tcpc, uint32_t *payload,
 	*msg_head = *(uint16_t *)&buf[2];
 
 	if(*msg_head == 0x0) {
-		tcpci_init(tcpc, false); //drv hjw for apdo   true ---> false
+		tcpci_init(tcpc, false);//drv hjw for apdo error  true --> false
 		pr_err("%s: msg_head=0x%x\n", __func__, *msg_head);
 		return -1;
 	}
@@ -1155,9 +1155,11 @@ static int husb311_get_message(struct tcpc_device *tcpc, uint32_t *payload,
 
 	*frame_type = (enum tcpm_transmit_type) type;
 
-	// drv del tankaikun, fix pd_set_cap pd rdy timeout, 20231118
+
+//prize add by lipengpeng 20220729 end 	 
 	/* Read complete, clear RX status alert bit */
-	//tcpci_alert_status_clear(tcpc, alert_rx);
+	tcpci_alert_status_clear(tcpc, alert_rx);
+
 	/*mdelay(1); */
 	return rv;
 }
@@ -1338,7 +1340,7 @@ static void check_printk_performance(void)
 		nsrem = do_div(t2, 1000000000);
 		pr_info("t2-t1 = %lu\n",
 				(unsigned long)nsrem /  1000);
-		PD_BUG_ON(nsrem > 100*1000);
+		//PD_BUG_ON(nsrem > 100*1000); // drv del tankaikun, 20231214
 	}
 #endif /* CONFIG_PD_DBG_INFO */
 }

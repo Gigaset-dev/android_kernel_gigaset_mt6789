@@ -38,6 +38,8 @@ typedef struct batt_data {
     int16_t     batt_temp;      //Temperature of battery
     uint16_t    batt_capacity;  //adjusted residual capacity
     uint16_t    batt_fcc;
+    uint16_t    batt_dfcc;
+    uint16_t    batt_cc;
     
     int16_t    ext_charger;
     
@@ -45,6 +47,12 @@ typedef struct batt_data {
     // uint8_t  charge_end;
 }batt_data_t;
 
+typedef struct pack_fuse_data {
+    uint16_t    pack_fuse_rsoc;      // fuse rsoc now
+    uint16_t    pack_fuse_voltage;   //fuse Voltage of battery, in mV
+    int16_t     pack_fuse_current;   //fuse Current of battery, in mA; plus value means charging, minus value means discharging
+    int16_t     pack_fuse_temp;      //fuse Temperature of battery
+}pack_fuse_data_t;
 
 struct fg_bms_chip
 {
@@ -59,6 +67,7 @@ struct fg_bms_chip
     // struct delayed_work sd77428_mainwork;
     // struct delayed_work sd77428_rntwork;
     struct delayed_work sd77428_download_work;
+    struct delayed_work chip_fuse_work;
 
     struct power_supply *bat;
     struct power_supply_desc bat_desc;
@@ -70,7 +79,8 @@ struct fg_bms_chip
     bool chg_full;
     uint8_t err_times;
     batt_data_t batt_info;
-
+    pack_fuse_data_t pack_fuse_info;
+    
     //sd77122
     int32_t  irq_gpio;
     int32_t  irq;
@@ -115,3 +125,23 @@ extern int32_t sd77122_enter_parrell_to_prep_mode(void);
 extern int32_t sd77122_judge_protect_or_prep_mode(void);
 extern int32_t sd77122_parallel_ilimit(int32_t timeout, int32_t curr);
 extern int32_t sd77122_prep_ilimit(int32_t timeout, int32_t curr);
+
+//----------------------------------------------------------------------//
+extern int32_t sd77428main_chip_ok(void);
+extern int32_t sd77428rnt_chip_ok(void);
+extern int32_t sd77428main_get_battery_voltage(void);
+extern int32_t sd77428rnt_get_battery_voltage(void);
+extern int32_t sd77428main_get_battery_current(void);
+extern int32_t sd77428rnt_get_battery_current(void);
+extern int32_t sd77428main_get_battery_temp(void);
+extern int32_t sd77428rnt_get_battery_temp(void);
+extern int32_t sd77428main_get_soc(void);
+extern int32_t sd77428rnt_get_soc(void);
+
+extern int32_t sd77428main_get_ext_charger(void);
+// extern int32_t sd77428main_set_ext_charger(int16_t charge_state);
+
+extern int32_t fg_fuse_voltage(void);
+extern int32_t fg_fuse_current(void);
+extern int32_t fg_fuse_thm(void);
+extern int32_t fg_fuse_rsoc(void);

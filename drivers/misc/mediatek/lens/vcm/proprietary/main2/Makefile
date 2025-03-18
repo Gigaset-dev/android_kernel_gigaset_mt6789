@@ -25,6 +25,7 @@ obj-$(CONFIG_MTK_LENS)    += main2af.o
 
 main2af-y  += main2_lens.o
 main2af-y  += common/aw86014af/AW86014AF.o
+main2af-y  += common/aw86014pcsraf/AW86014PCSRAF.o
 main2af-y  += common/ak7371af/AK7371AF.o
 main2af-y  += common/ak7374af/AK7374AF.o
 main2af-y  += common/bu64748af/bu64748_function.o
@@ -41,3 +42,6 @@ main2af-y  += common/gt9772af/GT9772AF.o
 # prize add by zhuzhengjiang for af start
 main2af-y  += common/aw86017csraf/AW86017CSRAF.o
 # prize add by zhuzhengjiang for af end
+#prize add by lipengpeng 20210511 start 
+main2af-y  += common/dw9800waf/DW9800WAF.o
+#prize add by lipengpeng 20210511 start

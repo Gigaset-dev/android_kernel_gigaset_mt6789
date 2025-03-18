@@ -48,6 +48,8 @@
 #define HWV_PLL_SET_STA			(0x1464)
 #define HWV_PLL_CLR_STA			(0x1468)
 
+static unsigned int suspend_cnt;
+
 /*
  * clkchk dump_regs
  */
@@ -801,6 +803,22 @@ static void dump_hwv_pll_reg(struct regmap *regmap, u32 shift)
 	BUG_ON(1);
 }
 
+static bool suspend_retry(bool reset_cnt)
+{
+	if (reset_cnt == true) {
+		suspend_cnt = 0;
+		return true;
+	}
+
+	suspend_cnt++;
+	pr_notice("%s: suspend cnt: %d\n", __func__, suspend_cnt);
+
+	if (suspend_cnt < 2)
+		return false;
+
+	return true;
+}
+
 /*
  * init functions
  */
@@ -818,10 +836,13 @@ static struct clkchk_ops clkchk_mt6895_ops = {
 	.dump_hwv_history = dump_hwv_history,
 	.is_cg_chk_pwr_on = is_cg_chk_pwr_on,
 	.dump_hwv_pll_reg = dump_hwv_pll_reg,
+	.suspend_retry = suspend_retry,
 };
 
 static int clk_chk_mt6895_probe(struct platform_device *pdev)
 {
+	suspend_cnt = 0;
+
 	init_regbase();
 
 	set_clkchk_notify();

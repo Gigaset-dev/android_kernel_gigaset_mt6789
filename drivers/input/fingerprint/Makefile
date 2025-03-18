@@ -44,9 +44,10 @@ obj-$(CONFIG_MICROARRAY_FP) += microarray_fp/
 #prize add by wangyongsheng 20210327 end
 #prize add by tangcong  20210827 start 
 obj-$(CONFIG_MTK_FINGERPRINT_FORTSENSE) += fortsense_driver_all_in_one/
+obj-$(CONFIG_FINGERPRINT_FOCALTECH_REE_ATA)	+= focaltech_ree_ata/
 #prize add by tangcong  20210827 end 
-#drv by liaojie for udf_fortsense_fs6281,20230911 start
-obj-$(CONFIG_UDF_FORTSENSE_FS6281) += udf_fortsense_fs6281/
-#drv by liaojie for udf_fortsense_fs6281,20230911 end
+#prize add by dengbinggui  20240927 start 
+obj-$(CONFIG_PRI_FINGER_ATA_NODE) += pri_finger_ftm_node/
+#prize add by dengbinggui  20240927 end
 FINGERPRINT_LISTS := $(subst ",,$(CONFIG_MTK_FINGERPRINT_SUPPORT_LIST))
 obj-y += $(foreach FINGERPRINT,$(FINGERPRINT_LISTS),$(FINGERPRINT)/)

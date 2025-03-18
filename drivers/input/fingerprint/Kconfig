@@ -166,16 +166,11 @@ config MICROARRAY_FP
     help
 		microarray fingerprint.
 endif
-
-if MTK_FINGERPRINT_SELECT = "udf_fortsense_fs6281"
-config UDF_FORTSENSE_FS6281
-    bool "udf_fortsense_fs6281 Fingerprint"
-    default y
-    help
-    	udf_fortsense_fs6281 fingerprint.
-endif
 #prize-add finger-wangyongsheng-20210327-end
 
+# drv add goodix fingerprint start
+source "drivers/input/fingerprint/goodix-gw9518/Kconfig"
+# drv add goodix fingerprint end
 
 endmenu
 
@@ -188,7 +183,12 @@ config MTK_FINGERPRINT_SUPPORT
       Say Y here if you have Focaltech touch panel.
       If unsure, say N.
 
-
+config MTK_FINGERPRINT_SUPPORT_LIST
+       string "fingerprint name for Mediatek package"
+       help
+         Set fingerprint IC name if you have fingerprint.
+         To compile this dirver for used fingerprint IC.
+      
 config MTK_FINGERPRINT_FORTSENSE
 	tristate "fingerprint Driver for fortsense_driver_all_in_one IC"
 	bool "Fortsense Fingerprint"
@@ -198,9 +198,20 @@ config MTK_FINGERPRINT_FORTSENSE
 	  in the kernel.Say Y here if you want to
 	  use mediatek fingerprint driver,fingerprint
 	  driver will support fingerprint function
-	  
+
+config CDFINGER_REE
+    bool "cdfinger Fingerprint"
+    default n
+    help
+       cdfinger fingerprint.
+			  
 #prize add by lipengpeng 20220630 end
+
+#prize-add ata test node 20240927 by dengbinggui 20240927 start
+source "drivers/input/fingerprint/pri_finger_ftm_node/Kconfig"
+#prize-add ata test node 20240927 by dengbinggui 20240927 end
 
 #prize-add finger-durunshen-20230410-start
 source "drivers/input/fingerprint/focaltech_fp/Kconfig" 
+source "drivers/input/fingerprint/focaltech_ree_ata/Kconfig"
 #prize-add finger-durunshen-20230410-end

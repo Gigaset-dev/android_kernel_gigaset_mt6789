@@ -30,17 +30,6 @@ const char *sys_mode[]=
   "sleep_parallel",
   "Reserved",  
 };
-#if 0
-struct sd77122_chip 
-{
-	struct device *dev;
-	struct i2c_client * client;
-	struct delayed_work sd77122_work;
-	struct delayed_work sd77122_prep_work;
-	struct mutex i2c_rw_lock;
-	int32_t	component_id;
-};
-#endif
 
 struct sd77122_chip *g_sd77122_chip = NULL;
 
@@ -53,8 +42,8 @@ static int32_t sd77122_read_data(struct sd77122_chip *chip, uint8_t addr, uint8_
 	int32_t ret = 0;
 	int32_t i = 0;
 	uint8_t i2caddr_backup = 0;
-	usleep_range(1000,2000);
 	mutex_lock(&chip->i2c_rw_lock);
+	usleep_range(1000,2000);
 	i2caddr_backup = chip->client->addr;
 	chip->client->addr = SD77122_SLAVE_ADDRESS >> 1;
 	for(i=0; i<4; i++)
@@ -76,8 +65,8 @@ static int32_t sd77122_write_data(struct sd77122_chip *chip, uint8_t addr, uint8
 	int32_t ret = 0;
 	int32_t i = 0;
 	uint8_t i2caddr_backup = 0;
-	usleep_range(1000,2000);
 	mutex_lock(&chip->i2c_rw_lock);
+	usleep_range(1000,2000);
 	i2caddr_backup = chip->client->addr;
 	chip->client->addr = SD77122_SLAVE_ADDRESS >> 1;
 	for(i=0; i<4; i++)
@@ -789,11 +778,41 @@ static void sd77122_hw_init(void)
 
 static void sd77122_work_func(struct work_struct *work)
 {
-	struct sd77122_chip *chip = container_of(work, struct sd77122_chip,sd77122_work.work);
+    union power_supply_propval val_ac = {0};
+	int32_t ret= 0;
+	int32_t ext_charger = -1;			//charger adapter insert status
 
-	//sd77122_judge_protect_or_prep_mode();//ver A1
+    struct sd77122_chip *chip = container_of(work, struct sd77122_chip,sd77122_work.work);
+    sd77122_dump_msg(chip);
 
-	sd77122_dump_msg(chip);
+    //ext_charger = sd77428main_get_ext_charger();
+    // ext_charger = power_supply_get_by_name("charger");
+    if(!chip->ac_psy)
+    {
+    	//chip->ac_psy = power_supply_get_by_name ("ac");
+        chip->ac_psy = power_supply_get_by_name("charger");
+    }
+
+    if(chip->ac_psy)
+    {
+        ret = power_supply_get_property(chip->ac_psy, POWER_SUPPLY_PROP_ONLINE, &val_ac);
+        if (0 == ret && val_ac.intval)
+        {
+        	ext_charger = 1;
+            // chip->adapter_status = O2_CHARGER_AC;
+        }
+    }
+    if (ext_charger > 0) //adapter charger in
+    {
+        pr_info("sd77122 charger %d, set BAT_CURR_LMT_EN_MASK on.\r\n", ext_charger);
+        sd77122_update(chip,SD77122_R0A, 0x1, BAT_CURR_LMT_EN_MASK,BAT_CURR_LMT_EN_SHIFT);
+    }
+    else
+    {
+        pr_info("sd77122 charger %d, set BAT_CURR_LMT_EN_MASK off.\r\n", ext_charger);
+        sd77122_update(chip,SD77122_R0A, 0x0, BAT_CURR_LMT_EN_MASK,BAT_CURR_LMT_EN_SHIFT);
+    }
+
 	schedule_delayed_work(&chip->sd77122_work, msecs_to_jiffies(5000));
 }
 //-------------------------------------------------------------interrupt process-----------------------------------------//
@@ -1087,6 +1106,9 @@ int32_t sd77122_ic_init(struct sd77122_chip *chip)
 		return -ENODEV;
 	}
 	g_sd77122_chip = chip;
+	//exit ship mode
+	pr_info("sd77122 exit ship mode.\n");
+	sd77122_exit_ship_mode();
 
 	sd77122_get_component_id(chip);
 	sd77122_hw_init();
@@ -1100,7 +1122,7 @@ int32_t sd77122_ic_init(struct sd77122_chip *chip)
 
 	INIT_DELAYED_WORK(&chip->sd77122_work, sd77122_work_func);
 	//INIT_DELAYED_WORK(&g_sd77122_chip->sd77122_prep_work, sd77122_prep_work_func);
-	schedule_delayed_work(&chip->sd77122_work, msecs_to_jiffies(1000));
+	schedule_delayed_work(&chip->sd77122_work, msecs_to_jiffies(2000));
 
 	ret = sd77122_create_sysfs(chip);
 	if (ret)
@@ -1115,86 +1137,83 @@ int32_t sd77122_ic_init(struct sd77122_chip *chip)
 
 int32_t sd77122_resume(struct device *dev_chip)
 {
+	
 	struct sd77122_chip *chip = i2c_get_clientdata(to_i2c_client(dev_chip));
-
+	sd77122_update(chip,SD77122_R0A, 0x1, BAT_CURR_LMT_EN_MASK,BAT_CURR_LMT_EN_SHIFT);
+	pr_info("sd77122 is resume\n");
+	
 	if(chip == NULL)
 		return 0;
-
+	schedule_delayed_work(&chip->sd77122_work,msecs_to_jiffies(50));
 	return 0;
 }
 
 int32_t sd77122_suspend(struct device *dev_chip)
 {
+	int32_t ret= 0;
+	int32_t ext_charger = -1;			//charger adapter insert status
+    union power_supply_propval val_ac = {0};
 	struct sd77122_chip *chip = i2c_get_clientdata(to_i2c_client(dev_chip));
+    // ext_charger = power_supply_get_by_name("charger");
+    if(!chip->ac_psy)
+    {
+    	//chip->ac_psy = power_supply_get_by_name ("ac");
+        chip->ac_psy = power_supply_get_by_name("charger");
+    }
+
+    if(chip->ac_psy)
+    {
+        ret = power_supply_get_property(chip->ac_psy, POWER_SUPPLY_PROP_ONLINE, &val_ac);
+        if (0 == ret && val_ac.intval)
+        {
+        	ext_charger = 1;
+            // chip->adapter_status = O2_CHARGER_AC;
+        }
+    }
+	if (ext_charger > 0) //adapter charger in
+    {
+        pr_info("sd77122 charger %d, set BAT_CURR_LMT_EN_MASK on.\r\n", ext_charger);
+        sd77122_update(chip,SD77122_R0A, 0x1, BAT_CURR_LMT_EN_MASK,BAT_CURR_LMT_EN_SHIFT);
+    }
+    else
+    {
+        pr_info("sd77122 charger %d, set BAT_CURR_LMT_EN_MASK off.\r\n", ext_charger);
+        sd77122_update(chip,SD77122_R0A, 0x0, BAT_CURR_LMT_EN_MASK,BAT_CURR_LMT_EN_SHIFT);
+    }
+	pr_info("sd77122 is suspend\n");
+
 	if(chip == NULL)
 		return 0;
-
+	cancel_delayed_work_sync(&chip->sd77122_work);
 	return 0;
 }
 int32_t sd77122_remove(struct i2c_client *client)
 {
 	struct sd77122_chip *chip = i2c_get_clientdata(client);
+	//sd77122_update(chip,SD77122_R0A, 0x0, BAT_CURR_LMT_EN_MASK,BAT_CURR_LMT_EN_SHIFT);
 
+	//set ship enter shipmode
+	sd77122_write_word(chip,SD77122_R06,ENTER_SHIP_MODE);
+	pr_info("sd77122 is remove and enter ship mode.\n");
+
+	if(chip == NULL)
+		return 0;
 	cancel_delayed_work_sync(&chip->sd77122_work);
 
 	mutex_destroy(&chip->i2c_rw_lock);
-
 	return 0;
 }
 void sd77122_shutdown(struct i2c_client *client)
 {
-	// struct sd77122_chip *chip = i2c_get_clientdata(client);
+	struct sd77122_chip *chip = i2c_get_clientdata(client);
+	//sd77122_update(chip,SD77122_R0A, 0x0, BAT_CURR_LMT_EN_MASK,BAT_CURR_LMT_EN_SHIFT);
+
+	//set ship enter shipmode
+	sd77122_write_word(chip,SD77122_R06,ENTER_SHIP_MODE);
+	pr_info("sd77122 is shutdown and enter ship mode.\n");
+
+	if(chip == NULL)
+		return;
+	cancel_delayed_work_sync(&chip->sd77122_work);
 	// sd77122_set_charger_en(chip,0);
 }
-#if 0
-static const struct dev_pm_ops sd77122_pm_ops = {
-	.resume			= sd77122_resume,
-	.suspend		= sd77122_suspend,
-};
-
-static const struct of_device_id sd77122_of_match[] = {
-	{.compatible = "bigmtech,sd77122"},
-	{},
-};
-
-static const struct i2c_device_id sd77122_i2c_id[] = { 
-	{"sd77122",   0}, 
-	{ },
-
-};
-
-static struct i2c_driver sd77122_driver = {
-	.driver = {
-		.name 			 = "sd77122",
-		.owner 			 = THIS_MODULE,
-		.pm				 = &sd77122_pm_ops,
-		.of_match_table = sd77122_of_match,
-	},
-	.id_table 	= sd77122_i2c_id,
-	.probe 		= sd77122_ic_init,
-	.remove		= sd77122_remove,
-	.shutdown	= sd77122_shutdown,
-};
-
-static int32_t __init sd77122_init(void)
-{
-	if (0 != i2c_add_driver(&sd77122_driver)) 
-		pr_info("failed to register sd77122 i2c driver.\n");
-	else 
-		pr_info("Success to register sd77122 i2c driver.\n");
-	
-	return 0;
-}
-
-static void __exit sd77122_exit(void)
-{
-	i2c_del_driver(&sd77122_driver);
-}
-
-module_init(sd77122_init);
-module_exit(sd77122_exit);
-
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("sd77122 Driver");
-MODULE_AUTHOR("cheng.huang <cheng.huang@bigmtech.com>");
-#endif

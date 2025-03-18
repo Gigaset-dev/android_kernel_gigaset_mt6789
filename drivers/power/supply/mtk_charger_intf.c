@@ -152,7 +152,21 @@ int get_battery_temperature(struct mtk_charger *info)
 	struct power_supply *bat_psy = NULL;
 	int ret = 0;
 	int tmp_ret = 0;
-
+	//drv huangjiwu 20231124 for cw2217  start
+#if IS_ENABLED(CONFIG_BATTERY_CW2217)
+	struct power_supply *bms_psy = NULL;
+	bms_psy = power_supply_get_by_name("cw-bat");
+	if (IS_ERR_OR_NULL(bms_psy)) {
+		pr_err("%s Couldn't get bms_psy\n", __func__);
+	}
+	else{
+		ret = power_supply_get_property(bms_psy,POWER_SUPPLY_PROP_TEMP, &prop);
+		ret = prop.intval / 10;
+		chr_err("gezi %s:%d\n", __func__,ret);
+		return ret;
+	}
+#endif
+	//drv huangjiwu 20231124 for cw2217  end
 	bat_psy = info->bat_psy;
 
 	if (bat_psy == NULL || IS_ERR(bat_psy)) {
@@ -224,6 +238,27 @@ static int get_pmic_vbus(struct mtk_charger *info, int *vchr)
 	union power_supply_propval prop;
 	static struct power_supply *chg_psy;
 	int ret;
+
+
+	//drv huangjiwu for pimc vbus start
+#if IS_ENABLED(CONFIG_READ_PMIC_VBUS)
+	static struct power_supply *batt_psy;
+
+	if(batt_psy == NULL)
+		batt_psy = power_supply_get_by_name("battery");
+
+	if (IS_ERR_OR_NULL(batt_psy)) {
+		pr_err("%s Couldn't get batt_psy\n", __func__);
+	} else {
+		ret = power_supply_get_property(batt_psy,
+			POWER_SUPPLY_PROP_INPUT_VOLTAGE_LIMIT, &prop);
+		*vchr = prop.intval;
+		chr_err("vbus:%s:%d\n", __func__, *vchr);
+
+		return ret;
+	}
+#endif
+	//drv huangjiwu for pimc vbus end
 
 	if (chg_psy == NULL)
 		chg_psy = power_supply_get_by_name("mtk_charger_type");

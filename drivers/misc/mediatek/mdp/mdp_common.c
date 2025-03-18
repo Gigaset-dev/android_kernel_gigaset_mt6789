@@ -287,28 +287,36 @@ s32 cmdq_mdp_get_smi_usage(void)
 	return atomic_read(&mdp_ctx.mdp_smi_usage);
 }
 
-static void cmdq_mdp_common_clock_enable(u64 engine_flag)
+static s32 cmdq_mdp_common_clock_enable(u64 engine_flag)
 {
 	s32 smi_ref = atomic_inc_return(&mdp_ctx.mdp_smi_usage);
+	s32 err = 0;
 
 	CMDQ_LOG_CLOCK("%s MDP SMI clock enable %d, engine_flag:%llx\n",
 		__func__, smi_ref, engine_flag);
-	cmdq_mdp_get_func()->mdpEnableCommonClock(true, engine_flag);
-
+	err = cmdq_mdp_get_func()->mdpEnableCommonClock(true, engine_flag);
+	if (err != 0) {
+		CMDQ_ERR("%s common_clock_enable failed\n", __func__);
+		return TASK_STATE_ERROR;
+	}
 	CMDQ_PROF_MMP(mdp_mmp_get_event()->MDP_clock_smi,
 		MMPROFILE_FLAG_PULSE, smi_ref, 1);
+	return err;
 }
 
-static void cmdq_mdp_common_clock_disable(u64 engine_flag)
+static s32 cmdq_mdp_common_clock_disable(u64 engine_flag)
 {
 	s32 smi_ref = atomic_dec_return(&mdp_ctx.mdp_smi_usage);
+	s32 err = 0;
+
 	CMDQ_LOG_CLOCK("%s MDP SMI clock disable %d, engine_flag:%llx\n",
 		__func__, smi_ref, engine_flag);
 	if (smi_ref >= 0)
-		cmdq_mdp_get_func()->mdpEnableCommonClock(false, engine_flag);
+		err = cmdq_mdp_get_func()->mdpEnableCommonClock(false, engine_flag);
 	CMDQ_PROF_MMP(mdp_mmp_get_event()->MDP_clock_smi,
 		MMPROFILE_FLAG_PULSE, smi_ref, 0);
 
+	return err;
 }
 
 static s32 cmdq_mdp_clock_enable(u64 engine_flag)
@@ -601,15 +609,16 @@ static u64 cmdq_mdp_get_engine_flag_for_enable_clock(
 	return engine_flag_clk;
 }
 
-static void cmdq_mdp_lock_thread(struct cmdqRecStruct *handle)
+static s32 cmdq_mdp_lock_thread(struct cmdqRecStruct *handle)
 {
 	u64 engine_flag = handle->engineFlag;
 	s32 thread = handle->thread;
+	s32 err = 0;
 
 	if (unlikely(thread < 0)) {
 		CMDQ_ERR("%s invalid thread:%d engine:0x%llx\n",
 			__func__, thread, engine_flag);
-		return;
+		return TASK_STATE_ERROR;
 	}
 	/* engine clocks enable flag decide here but call clock on before flush
 	 * common clock enable here to avoid disable when mdp engines still
@@ -617,7 +626,9 @@ static void cmdq_mdp_lock_thread(struct cmdqRecStruct *handle)
 	 */
 	CMDQ_MSG("%s handle:0x%p pkt:0x%p engine:0x%016llx\n",
 		__func__, handle, handle->pkt, handle->engineFlag);
-	cmdq_mdp_common_clock_enable(handle->engineFlag);
+	err = cmdq_mdp_common_clock_enable(handle->engineFlag);
+	if (err != 0)
+		return TASK_STATE_ERROR;
 
 	CMDQ_PROF_START(current->pid, __func__);
 
@@ -636,9 +647,14 @@ static void cmdq_mdp_lock_thread(struct cmdqRecStruct *handle)
 #ifdef CMDQ_SECURE_PATH_SUPPORT
 	else
 		cmdq_sec_mbox_enable(((struct cmdq_client *) handle->pkt->cl)->chan);
+
+	if(handle->pkt_rb)
+		cmdq_mbox_enable(((struct cmdq_client *) handle->pkt_rb->cl)->chan);
+
 #endif
 
 	CMDQ_PROF_END(current->pid, __func__);
+	return err;
 }
 
 static u64 cmdq_mdp_get_not_used_engine(const u64 engine_flag)
@@ -741,6 +757,10 @@ static void cmdq_mdp_handle_stop(struct cmdqRecStruct *handle)
 #ifdef CMDQ_SECURE_PATH_SUPPORT
 	else
 		cmdq_sec_mbox_disable(((struct cmdq_client *)handle->pkt->cl)->chan);
+
+	if(handle->pkt_rb)
+		cmdq_mbox_disable(((struct cmdq_client *) handle->pkt_rb->cl)->chan);
+
 #endif
 
 	cmdq_mdp_common_clock_disable(handle->engineFlag);
@@ -913,7 +933,7 @@ static s32 cmdq_mdp_find_free_thread(struct cmdqRecStruct *handle)
 
 static s32 cmdq_mdp_consume_handle(void)
 {
-	s32 err;
+	s32 err = 0;
 	struct cmdqRecStruct *handle = NULL, *temp;
 	u32 index;
 	bool acquired = false;
@@ -982,7 +1002,14 @@ static s32 cmdq_mdp_consume_handle(void)
 		}
 
 		/* lock thread for counting and clk */
-		cmdq_mdp_lock_thread(handle);
+		err = cmdq_mdp_lock_thread(handle);
+		if (err != 0) {
+			mutex_unlock(&mdp_thread_mutex);
+			CMDQ_ERR("fail to lock handle or power on: 0x%p\n", handle);
+			/* remove from list */
+			list_del_init(&handle->list_entry);
+			break;
+		}
 		mutex_unlock(&mdp_thread_mutex);
 
 		/* remove from list */
@@ -1038,7 +1065,7 @@ static s32 cmdq_mdp_consume_handle(void)
 		wake_up_all(&mdp_thread_dispatch);
 	}
 
-	return 0;
+	return err;
 }
 
 static void cmdq_mdp_consume_wait_item(struct work_struct *ignore)
@@ -1832,6 +1859,7 @@ s32 cmdq_mdp_wait(struct cmdqRecStruct *handle,
 				 * so that it won't be consumed in the future
 				 */
 				list_del_init(&handle->list_entry);
+				cmdq_task_destroy(handle);
 				mutex_unlock(&mdp_task_mutex);
 				CMDQ_TRACE_FORCE_END();
 				return -ETIMEDOUT;
@@ -2539,7 +2567,7 @@ long cmdq_mdp_get_module_base_VA_MMSYS_CONFIG(void)
 	return cmdq_mmsys_base;
 }
 
-static void cmdq_mdp_enable_common_clock_virtual(bool enable, u64 engine_flag)
+static s32 cmdq_mdp_enable_common_clock_virtual(bool enable, u64 engine_flag)
 {
 #ifdef CMDQ_PWR_AWARE
 #if IS_ENABLED(CONFIG_MTK_SMI)
@@ -2547,7 +2575,7 @@ static void cmdq_mdp_enable_common_clock_virtual(bool enable, u64 engine_flag)
 
 	if (!mdp_ctx.larb) {
 		CMDQ_ERR("%s smi larb not support\n", __func__);
-		return;
+		return TASK_STATE_ERROR;
 	}
 
 	if (enable)
@@ -2555,11 +2583,14 @@ static void cmdq_mdp_enable_common_clock_virtual(bool enable, u64 engine_flag)
 	else
 		mtk_smi_larb_put(mdp_ctx.larb);
 
-	if (ret)
+	if (ret) {
 		CMDQ_ERR("%s %s fail ret:%d\n",
 			__func__, enable ? "enable" : "disable", ret);
+		return TASK_STATE_ERROR;
+	}
 #endif	/* CONFIG_MTK_SMI */
 #endif	/* CMDQ_PWR_AWARE */
+	return 0;
 }
 
 /* Common Code */
@@ -2576,10 +2607,13 @@ void cmdq_mdp_unmap_mmsys_VA(void)
 
 static void mdp_request_voltage(unsigned long frequency, bool is_mdp)
 {
-	int low_volt, ret = 0;
+	int low_volt = 0, ret = 0;
 	int index = 0;
 	u64 *freqs = is_mdp ? mdp_pmqos_freq : isp_pmqos_freq;
 	int *volts = is_mdp ? mdp_volts : isp_volts;
+
+	if (!freqs || !volts)
+		return;
 
 	if (!frequency) {
 		low_volt = 0;
@@ -3942,7 +3976,7 @@ const char *cmdq_mdp_get_rdma_state(u32 state)
 
 void cmdq_mdp_dump_rdma(const unsigned long base, const char *label)
 {
-	u32 value[44] = { 0 };
+	u32 value[45] = { 0 };
 	u32 state = 0;
 	u32 grep = 0;
 
@@ -3996,7 +4030,8 @@ void cmdq_mdp_dump_rdma(const unsigned long base, const char *label)
 	value[40] = CMDQ_REG_GET32(base + 0x098);
 	value[41] = CMDQ_REG_GET32(base + 0x148);
 	value[42] = CMDQ_REG_GET32(base + 0x150);
-	value[43] = CMDQ_REG_GET32(base + 0x0);
+	value[43] = CMDQ_REG_GET32(base + 0x018);
+	value[44] = CMDQ_REG_GET32(base + 0x0);
 
 	CMDQ_ERR(
 		"=============== [CMDQ] %s Status ====================================\n",
@@ -4046,7 +4081,7 @@ void cmdq_mdp_dump_rdma(const unsigned long base, const char *label)
 	CMDQ_ERR(
 		"MDP_RDMA_SRC_OFFSET_WP: 0x%08x, MDP_RDMA_SRC_OFFSET_HP: 0x%08x\n",
 		value[41], value[42]);
-	CMDQ_ERR("RDMA_EN: 0x%08x\n", value[43]);
+	CMDQ_ERR("MDP_RDMA_INTERRUPT_STATUS: 0x%08x RDMA_EN: 0x%08x\n", value[43], value[44]);
 
 	/* parse state */
 	CMDQ_ERR("RDMA ack:%d req:%d ufo:%d\n", (value[9] >> 11) & 0x1,

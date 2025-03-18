@@ -30,11 +30,14 @@
 /* prize added by pengzhipeng, fs1599, 20221103-end */
 
 /*add by anhengxuan for aw87xxx audio PA,20220402,start*/
-#ifdef CONFIG_SND_SOC_AW87XXX
+#if IS_ENABLED(CONFIG_SND_SOC_AW87XXX) || IS_ENABLED(CONFIG_SND_SOC_AW87XXX_V2_13_0)
 extern int aw87xxx_set_profile(int dev_index, char *profile);
 static char *aw_profile[] = {"Music", "Off"};
 enum aw87xxx_dev_index {
  AW_DEV_0 = 0,
+ AW_DEV_1 = 1,
+ AW_DEV_2 = 2,
+ AW_DEV_3 = 3,
 };
 #endif
 /*add by anhengxuan for aw87xxx audio PA,20220402,end*/
@@ -107,7 +110,7 @@ static int mt6789_mt6366_spk_amp_event(struct snd_soc_dapm_widget *w,
 	struct snd_soc_dapm_context *dapm = w->dapm;
 	struct snd_soc_card *card = dapm->card;
 /*add by anhengxuan for aw87xxx audio PA,20220402,start*/
-#ifdef CONFIG_SND_SOC_AW87XXX
+#if IS_ENABLED(CONFIG_SND_SOC_AW87XXX) || IS_ENABLED(CONFIG_SND_SOC_AW87XXX_V2_13_0)
 	int ret;
 #endif
 /*add by anhengxuan for aw87xxx audio PA,20220402,end*/
@@ -122,13 +125,21 @@ static int mt6789_mt6366_spk_amp_event(struct snd_soc_dapm_widget *w,
 #endif
 /* prize added by chenjiaxi, fs1599, 20221103-end */
 		/*add by pengzhipeng for aw87xxx audio PA,20220402,start*/
-#ifdef CONFIG_SND_SOC_AW87XXX
+#if IS_ENABLED(CONFIG_SND_SOC_AW87XXX) || IS_ENABLED(CONFIG_SND_SOC_AW87XXX_V2_13_0)
 	 ret = aw87xxx_set_profile(AW_DEV_0, aw_profile[0]);
+	 if (ret < 0) {
+		 pr_err("[Awinic] %s: set profile[%s] failed",
+		 __func__, aw_profile[0]);
+		 return ret;
+	 }
+#if IS_ENABLED(CONFIG_SND_SOC_AW87XXX_DUAL)
+	 	 ret = aw87xxx_set_profile(AW_DEV_1, aw_profile[0]);
 	 if (ret < 0) {
 	 pr_err("[Awinic] %s: set profile[%s] failed",
 	 __func__, aw_profile[0]);
 	 return ret;
 	 }
+#endif
 #endif
 /*add by anhengxuan for aw87xxx audio PA,20220402,end*/
 		break;
@@ -140,13 +151,21 @@ static int mt6789_mt6366_spk_amp_event(struct snd_soc_dapm_widget *w,
 #endif
 /* prize added by pengzhipeng, fs1599, 20221103-end */
 /*add by anhengxuan for aw87xxx audio PA,20220402,start*/
-#ifdef CONFIG_SND_SOC_AW87XXX
+#if IS_ENABLED(CONFIG_SND_SOC_AW87XXX) || IS_ENABLED(CONFIG_SND_SOC_AW87XXX_V2_13_0)
 	 ret = aw87xxx_set_profile(AW_DEV_0, aw_profile[1]);
 	 if (ret < 0) {
 	 pr_err("[Awinic] %s: set profile[%s] failed",
 	 __func__, aw_profile[1]);
 	 return ret;
- }
+	 }
+#if IS_ENABLED(CONFIG_SND_SOC_AW87XXX_DUAL)
+	 	 ret = aw87xxx_set_profile(AW_DEV_1, aw_profile[1]);
+	 if (ret < 0) {
+	 pr_err("[Awinic] %s: set profile[%s] failed",
+	 __func__, aw_profile[1]);
+	 return ret;
+	 }
+#endif	 
 #endif
 /*add by anhengxuan for aw87xxx audio PA,20220402,end*/
 		break;
@@ -1167,14 +1186,23 @@ int mtk_update_scp_audio_info(struct snd_soc_card *card,
 }
 #endif
 //prize add by lipengpeng 20220615 start 
+#if IS_ENABLED(CONFIG_SND_SOC_AW8839X)
 struct snd_soc_dai_link_component awinic_codecs[] = 
 { 
- {
+ { 
   .of_node = NULL, 
   .dai_name = "aw883xx-aif-6-34", 
   .name = "aw883xx_smartpa.6-0034", 
+ },
+#if IS_ENABLED(CONFIG_SND_SOC_AW8839X_STEREO)
+  { 
+  .of_node = NULL, 
+  .dai_name = "aw883xx-aif-6-36", 
+  .name = "aw883xx_smartpa.6-0036", 
  }, 
+#endif
 };
+#endif
 //prize add by lipengpeng 20220615 end 
 static int mt6789_mt6366_dev_probe(struct platform_device *pdev)
 {
@@ -1220,27 +1248,37 @@ static int mt6789_mt6366_dev_probe(struct platform_device *pdev)
 
 		if (!strcmp(dai_link->name, "Speaker Codec")) {
 //prize add by lipengpeng 20220615 start 
-			//ret = snd_soc_of_get_dai_link_codecs(
-			//			&pdev->dev, spk_node, dai_link);
-			//if (ret < 0) {
-			//	dev_err(&pdev->dev,
-			//		"Speaker Codec get_dai_link fail: %d\n", ret);
-			//	return -EINVAL;
-			//}
+#if !IS_ENABLED(CONFIG_SND_SOC_AW8839X)
+			ret = snd_soc_of_get_dai_link_codecs(
+						&pdev->dev, spk_node, dai_link);
+			if (ret < 0) {
+				dev_err(&pdev->dev,
+					"Speaker Codec get_dai_link fail: %d\n", ret);
+				return -EINVAL;
+			}
+#else
 			dai_link->codecs = awinic_codecs;
-			//dai_link->num_codecs=2; //prize add by lipengpeng 20220615 start
+#if IS_ENABLED(CONFIG_SND_SOC_AW8839X_STEREO)
+			dai_link->num_codecs=2; //prize add by lipengpeng 20220615 start
+#endif
+#endif
 //prize add by lipengpeng 20220615 end 
 		} else if (!strcmp(dai_link->name, "Speaker Codec Ref")) {
 //prize add by lipengpeng 20220615 start 
+#if IS_ENABLED(CONFIG_SND_SOC_AW8839X)
 			dai_link->codecs = awinic_codecs;
-		//	dai_link->num_codecs=2; //prize add by lipengpeng 20220615 start
-			//ret = snd_soc_of_get_dai_link_codecs(
-			//			&pdev->dev, spk_node, dai_link);
-			//if (ret < 0) {
-			//	dev_err(&pdev->dev,
-			//		"Speaker Codec Ref get_dai_link fail: %d\n", ret);
-			//	return -EINVAL;
-			//}
+#if IS_ENABLED(CONFIG_SND_SOC_AW8839X_STEREO)
+			dai_link->num_codecs=2; //prize add by lipengpeng 20220615 start
+#endif
+#else
+			ret = snd_soc_of_get_dai_link_codecs(
+						&pdev->dev, spk_node, dai_link);
+			if (ret < 0) {
+				dev_err(&pdev->dev,
+					"Speaker Codec Ref get_dai_link fail: %d\n", ret);
+				return -EINVAL;
+			}
+#endif
 //prize add by lipengpeng 20220615 end
 		}
 	}

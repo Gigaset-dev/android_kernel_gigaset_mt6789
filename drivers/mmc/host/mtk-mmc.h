@@ -599,6 +599,7 @@ struct mtk_mmc_compatible {
 #define MSDC_NEW_RX_V2		(2)
 #define support_new_rx(x)	((x) != 0)
 	bool set_crypto_enable_in_sw;
+	u32 autok_ver;
 };
 
 struct msdc_tune_para {
@@ -652,6 +653,10 @@ struct msdc_host {
 	struct pinctrl_state *pins_default;
 	struct pinctrl_state *pins_uhs;
 	struct pinctrl_state *pins_pull_down;
+#if IS_ENABLED(CONFIG_MMC_DEBUG)
+	int dump_gpio_start; /* gpio start num */
+	int dump_gpio_end; /* gpio end num */
+#endif
 	struct delayed_work req_timeout;
 	int irq;		/* host interrupt */
 	int eint_irq;	        /* device interrupt */
@@ -691,7 +696,9 @@ struct msdc_host {
 	int	id;		/* host id */
 	bool tuning_in_progress;
 	u32 need_tune;
+	int autok_vcore; /* vcore value when executing autok */
 	bool is_autok_done;
+	bool is_skip_hs200_tune;
 	int autok_error;
 	u32 tune_latch_ck_cnt;
 	u8 autok_res[AUTOK_VCORE_NUM+1][TUNING_PARA_SCAN_COUNT];
@@ -750,5 +757,10 @@ static u32 bad_sd_forget[BAD_SD_DETECTER_COUNT] = {3};
  * unit: clock
  */
 static unsigned long bad_sd_timer[BAD_SD_DETECTER_COUNT] = {0};
+
+/*vendor manufacturer id
+ */
+#define CID_MANFID_HONGXINYU    0xD6
+#define CID_MANFID_CHANGCUN	0x9B
 
 #endif  /* _MTK_MMC_H_ */

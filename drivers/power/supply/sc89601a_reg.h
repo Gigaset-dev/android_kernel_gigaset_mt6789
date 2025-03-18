@@ -260,6 +260,19 @@
 #define SC89601A_REG_0E              0x0E
 #define SC89601A_THERM_STAT_MASK     0x80
 #define SC89601A_THERM_STAT_SHIFT    7
+#define SC89601A_VBAT_MASK           0x7F
+#define SC89601A_VBAT_SHIFT          0
+#define SC89601A_VBAT_BASE           2304
+#define SC89601A_VBAT_LSB            20
+
+/* Register 0x0E*/
+#define SC89601A_REG_0E              0x0E
+#define SC89601A_VSYS_MASK           0x7F
+#define SC89601A_VSYS_SHIFT          0
+#define SC89601A_VSYS_BASE           2304
+#define SC89601A_VSYS_LSB            20
+
+#define SC89601A_REG_0F				 0x0F
 
 /* Register 0x11*/
 #define SC89601A_REG_11              0x11
@@ -282,6 +295,10 @@
 #define SC89601A_REG_13              0x13
 #define SC89601A_VDPM_STAT_MASK      0x80
 #define SC89601A_VDPM_STAT_SHIFT     7
+#define SC89601A_IDPM_MASK           0x3F
+#define SC89601A_IDPM_SHIFT          0
+#define SC89601A_IDPM_BASE           100
+#define SC89601A_IDPM_LSB            50
 
 
 /* Register 0x14*/

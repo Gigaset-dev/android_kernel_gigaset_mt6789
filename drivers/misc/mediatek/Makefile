@@ -20,6 +20,12 @@ obj-$(CONFIG_MTK_ECCCI_DRIVER) +=  eccci/
 obj-$(CONFIG_MTK_ECCCI_C2K_USB) += c2k_usb/
 obj-$(CONFIG_MTK_PID_MAP) += pidmap/
 obj-$(CONFIG_MTK_TINYSYS_SSPM_SUPPORT) += sspm/
+#prize liuyong ,add  health info, 20231018, start
+obj-$(CONFIG_PRIZE_HARDWARE_INFO) += prize/
+#prize liuyong ,add  health info, 20231018, end
+# drv add  tp gestue, 20231018, start
+obj-$(CONFIG_PRIZE_COMMON_NODE) += prize/
+# drv add  tp gestue, 20231018, end
 obj-$(CONFIG_MTK_TINYSYS_SCMI) += tinysys_scmi/
 obj-$(CONFIG_MTK_TINYSYS_MCUPM_SUPPORT) += mcupm/
 obj-$(CONFIG_MTK_SUBPMIC_MISC) += subpmic/

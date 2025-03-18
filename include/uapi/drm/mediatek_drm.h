@@ -973,7 +973,6 @@ struct drm_mtk_chist_config {
 	struct drm_mtk_channel_config chist_config[MTK_DRM_DISP_CHIST_CHANNEL_COUNT];
 };
 
-
 struct drm_mtk_ccorr_caps {
 	unsigned int ccorr_bit;
 	unsigned int ccorr_number;

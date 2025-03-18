@@ -35,7 +35,7 @@
 #include "mtk_disp_bdg.h"
 #include "mtk_dsi.h"
 
-#define ESD_TRY_CNT 20  //prize
+#define ESD_TRY_CNT 20  //prize add by zhangli
 #define ESD_CHECK_PERIOD 2000 /* ms */
 static DEFINE_MUTEX(pinctrl_lock);
 

@@ -21,6 +21,12 @@
 #define FOR_CE_TEST
 #endif
 
+// drv add by liuruiqian for temp limit current,20240731 start
+#if IS_ENABLED(CONFIG_PRIZE_CHARGE_CTRL_POLICY)
+extern bool g_charge_is_screen_on;
+#endif /* CONFIG_PRIZE_CHARGE_CTRL_POLICY */
+// drv add by liuruiqian for temp limit current,20240731 start
+
 //config battery charge full voltage
 #define BATT_SCREENT_ON_CURR        1800
 
@@ -824,10 +830,30 @@ static bool usbpd_pm_get_charge_cmd_stat(struct usbpd_pm *pdpm)
 #define TEMP_T0_T1_CURR		3240 /*0 - 15度 1500ma * 9.5v / 4.4v*/
 #define TEMP_T1_T2_CURR		BATT_FAST_CHG_CURR /*15 - 45度 不限制*/
 #define TEMP_T2_T3_CURR		1800/*45 - 55度 2500ma * 9.5v / 4.4v*/
+// drv add by liuruiqian for temp limit current,20240731 start
+#define IBUS_2P5			5000/*2.5A*/
+#define IBUS_2P3			4000/*2.3A*/
+#define IBUS_1P5			2800/*1.5A*/
+#define IBUS_1				1800/*1A*/
+// drv add by liuruiqian for temp limit current,20240731 end
 
 #ifdef FOR_CE_TEST
 static int usbpd_pm_get_thermal_curr(struct usbpd_pm *pdpm)
 {
+// drv mod by liuruiqian for temp limit current,20240731 start
+	struct mtk_charger *info = NULL;
+
+	if (!pdpm->mtk_master_charger_psy) {
+		pdpm->mtk_master_charger_psy = power_supply_get_by_name("mtk-master-charger");
+		if(pdpm->mtk_master_charger_psy == NULL){
+			pr_err("pdpm get mtk_master_charger_psy err\n");
+			return -ENODEV;
+		}
+	}
+	info = (struct mtk_charger *)power_supply_get_drvdata(pdpm->mtk_master_charger_psy);
+	if(!info){
+		return -ENODEV;
+	}
     if (pdpm->batt_temp <= 0 || pdpm->batt_temp >= 500) {
 		pdpm->thermal_curr = TEMP_T0_T5_CURR;
     }
@@ -837,16 +863,38 @@ static int usbpd_pm_get_thermal_curr(struct usbpd_pm *pdpm)
 	else if (pdpm->batt_temp > 150 && pdpm->batt_temp <= 400) {
         pdpm->thermal_curr = TEMP_T1_T2_CURR;
     }
-	else if (pdpm->batt_temp > 400 && pdpm->batt_temp <= 450) {
-        pdpm->thermal_curr = TEMP_T1_T2_CURR - 2000;
-    }
-    else if (pdpm->batt_temp > 450 && pdpm->batt_temp <= 500) {
-		pdpm->thermal_curr = TEMP_T2_T3_CURR;
-    }
 	else{
-		pdpm->thermal_curr = TEMP_T1_T2_CURR;
+		pdpm->thermal_curr = TEMP_T2_T3_CURR;
 	}
-	pr_err("gezi---------%s---------temp :%d curr:%d\n",__func__,pdpm->batt_temp,pdpm->thermal_curr);
+	if (pdpm->batt_temp >= 380) {
+		if (info->pre_battery_ntc >= 400 && pdpm->batt_temp >= 390)
+			pdpm->batt_temp = 400;
+        else
+			pdpm->thermal_curr = IBUS_2P5;
+    }
+    if (pdpm->batt_temp >= 400) {
+		if (info->pre_battery_ntc >= 430 && pdpm->batt_temp >= 420)
+			pdpm->batt_temp = 450;
+		else
+			pdpm->thermal_curr = IBUS_2P3;
+    }
+	if (pdpm->batt_temp >= 430) {
+		if (info->pre_battery_ntc >= 45 && pdpm->batt_temp >= 440)
+			pdpm->batt_temp = 450;
+		else
+			pdpm->thermal_curr = IBUS_1P5;
+	}
+	if (pdpm->batt_temp >= 450)
+		pdpm->thermal_curr = IBUS_1;
+	info->pre_battery_ntc = pdpm->batt_temp ;
+#if IS_ENABLED(CONFIG_PRIZE_CHARGE_CTRL_POLICY)
+	if (g_charge_is_screen_on) {
+		if (pdpm->thermal_curr > IBUS_1P5)
+			pdpm->thermal_curr = IBUS_1P5;
+	}
+#endif /* CONFIG_PRIZE_CHARGE_CTRL_POLICY */
+	pr_err("gezi---------%s---------temp :%d pre_temp :%d curr:%d\n",__func__,pdpm->batt_temp,info->pre_battery_ntc,pdpm->thermal_curr);
+// drv mod by liuruiqian for temp limit current,20240731 end
     return pdpm->thermal_curr;
 }
 #endif
@@ -907,11 +955,6 @@ static int usbpd_pm_fc2_charge_algo(struct usbpd_pm *pdpm)
 	ibat_limit = min(ibat_limit,usbpd_pm_get_thermal_curr(pdpm));
 #endif	
 
-#if IS_ENABLED(CONFIG_PRIZE_CHARGE_CTRL_POLICY)
-	if(g_charge_is_screen_on){
-		ibat_limit = min(ibat_limit, BATT_SCREENT_ON_CURR);
-	}
-#endif
 
 	//ibat_limit = pm_config.bat_curr_lp_lmt;
 	

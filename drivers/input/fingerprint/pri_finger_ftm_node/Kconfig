@@ -1,0 +1,5 @@
+config PRI_FINGER_ATA_NODE
+    tristate "pri Fingerprint ata test node"
+    default n
+    help
+    priFingerprintata

@@ -12,7 +12,7 @@
 &chosen {
 
 };
-
+//prize add by ganlijun 20241025 start
 &i2c0{
 		sm5602@71 {
 		compatible = "sm,sm5602";
@@ -82,6 +82,7 @@
 	    };
 	};
 };
+
 
 
 &i2c2 {
@@ -508,6 +509,8 @@
 	charging_host_charger_current = <1500000>;
 };
 
+//prize add by ganlijun 20241025 end
+
 /*
 &mtk_leds {
 	compatible = "mediatek,i2c-leds";
@@ -529,7 +532,7 @@
                 pwm_config = <0 1 0 0 0>;
         };
 };
-
+/*prize add by zhangli 20241022 end*/
 
 &pio {
 	mtkfb_pins_lcm_led_en1: lcm_led_en1_gpio {
@@ -568,8 +571,10 @@
 			pinmux = <PINMUX_GPIO83__FUNC_DSI_TE>;
 		};
 	};
+	//prize add by zhangli 20241022 start
 	lcd_bias_pins_default: default {
 	};
+	//prize add by zhangli 20241022 end
 };
 
 &mtkfb {
@@ -593,7 +598,7 @@
 	pinctrl-2 = <&mtkfb_pins_lcm_dsi_te>;
 	status = "okay";
 };
-
+/*prize add by zhangli 20241022 start*/
 &dsi0 {
 	status = "okay";
 	#address-cells = <1>;
@@ -613,7 +618,6 @@
 			};
 		};
 	};
-
 	panel2@0 {
 		compatible = "qcg,nt36672e,vdo,60hz";
 		reg = <1>;
@@ -629,7 +633,6 @@
 			};
 		};
 	};
-
 	ports {
 		port {
 			dsi_out: endpoint {
@@ -638,13 +641,9 @@
 		};
 	};
 };
-
-
-
+/*prize add by zhangli 20241022 end*/
 /* FINGERPRINT start */
-
-
-/* prize-add-pengzhipeng-20191011-start */
+/* prize add by ganlijun 20241025 start */
 &spi1{
 	#address-cells = <1>;
 	#size-cells = <0>;
@@ -776,7 +775,7 @@
 		};
 	};
 };
-
+/*prize add by ganlijun 20241025 end*/
 
 /* GPS GPIO standardization start */
 &pio {
@@ -850,14 +849,16 @@
 		re-max= <40000>;
 		rename-flag= <1>;
 		status = "okay";
-	};
 
+	/*prize add by zhangli 20241022 start*/
+	};
 	I2C_LCD_BIAS:I2C_LCD_BIAS@3e {
 		compatible = "mediatek,I2C_LCD_BIAS";
 		reg = <0x3e>;
 		status = "okay";
+        /*prize add by zhangli 20241022 end*/
 	};
-
+	
 };
 
 &sound {
@@ -868,7 +869,7 @@
 };
 
 &pdc {
-	pd_vbus_upper_bound = <12000000>;
+	pd_vbus_upper_bound = <9000000>;
 };
 
 /*******************************************
@@ -898,7 +899,6 @@
 		status = "okay";
 	};
 };
-
 
 /* CONSYS GPIO standardization */
 &pio {
@@ -1010,7 +1010,11 @@
 	};
 
 };
-
+//prize add by ganlijun 20241029 start 
+&utos {
+	microtrust,real-drv = <1>;
+};
+//prize add by ganlijun 20241029 end
 /*******************************************
 * typec wireless start
 *******************************************/
@@ -1125,7 +1129,9 @@
 		};
 	};
 };
-/* prize pengzhipeng modify  add key 301, 20200103 begin */
+
+#include <k6789v1_64/cust.dtsi>
+/* drv modify by wenyulong for add key 301, 20241031 begin */
 &keypad {
 
 	mediatek,hw-init-map = <114 381 0 0 0 0 0 0 0 0 0 0 0 0 0 0
@@ -1133,13 +1139,5 @@
 	 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 >;
 
 };
-/* prize pengzhipeng modify  add key 301, 20200103 end */
-
-//prize add by lipengpeng 20220704 for tee start 
-&utos {
-	microtrust,real-drv = <1>;
-};
-//prize add by lipengpeng 20220704 for tee end
-
-#include <k6789v1_64/cust.dtsi>
+/* drv modify by wenyulong for add key 301, 20241031 end */
 /*End of this file, DO NOT ADD ANYTHING HERE*/

@@ -752,7 +752,7 @@ static s32 hdr_reconfig_frame(struct mml_comp *comp, struct mml_task *task,
 	}
 
 	result = get_hdr_comp_config_result(task);
-	if (!result || !hdr_frm->config_success) {
+	if (!result || !hdr_frm->config_success || !result->hdr_reg_cnt) {
 		mml_pq_err("%s: not get result from user lib", __func__);
 		ret = -EBUSY;
 		goto err;
@@ -962,7 +962,7 @@ static void hdr_task_done_readback(struct mml_comp *comp, struct mml_task *task,
 		kfree(task->pq_task->hdr_hist[pipe]);
 		task->pq_task->hdr_hist[pipe] = NULL;
 	} else
-		mml_pq_put_readback_buffer(task, pipe, task->pq_task->hdr_hist[pipe]);
+		mml_pq_put_readback_buffer(task, pipe, &(task->pq_task->hdr_hist[pipe]));
 exit:
 	mml_pq_trace_ex_end();
 }

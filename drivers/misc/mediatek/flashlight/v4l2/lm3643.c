@@ -635,7 +635,9 @@ static int lm3643_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 {
 	pr_info("%s\n", __func__);
 
-	lm3643_set_driver(1);
+// prize modify by chenwenhui start
+	// lm3643_set_driver(1);
+// prize modify by chenwenhui end
 
 	return 0;
 }
@@ -643,8 +645,9 @@ static int lm3643_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 static int lm3643_close(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 {
 	pr_info("%s\n", __func__);
-
-	lm3643_set_driver(0);
+// prize modify by chenwenhui start
+	// lm3643_set_driver(0);
+// prize modify by chenwenhui end
 
 	return 0;
 }

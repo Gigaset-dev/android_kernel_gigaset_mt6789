@@ -3451,17 +3451,6 @@ static kal_uint32 set_test_pattern_mode(kal_uint32 modes,
  * GLOBALS AFFECTED
  *
  *************************************************************************/
- #define MODULE_ID_OFFSET_IMX350MAIN 0x0001
- static kal_uint16 read_module_id_imx350main(void)
-{
-	kal_uint16 get_byte = 0;
-	char pusendcmd[2] = {(char)(MODULE_ID_OFFSET_IMX350MAIN >> 8), (char)(MODULE_ID_OFFSET_IMX350MAIN & 0xFF)};
-
-	iReadRegI2C(pusendcmd, 2, (u8 *)&get_byte, 1, 0xA0/*EEPROM_READ_ID*/);
-	pr_err("the module id is %d\n", get_byte);
-	return get_byte;
-}
-
 static kal_uint32 get_imgsensor_id(UINT32 *sensor_id)
 {
 	kal_uint8 i = 0;
@@ -3469,9 +3458,6 @@ static kal_uint32 get_imgsensor_id(UINT32 *sensor_id)
 	/* sensor have two i2c address 0x6c 0x6d & 0x21 0x20,
 	 * we should detect the module used i2c address
 	 */
-	 
-	printk("read_module_id_imx350main=%d\n",read_module_id_imx350main());
-	
 	while (imgsensor_info.i2c_addr_table[i] != 0xff) {
 		spin_lock(&imgsensor_drv_lock);
 		imgsensor.i2c_write_id = imgsensor_info.i2c_addr_table[i];

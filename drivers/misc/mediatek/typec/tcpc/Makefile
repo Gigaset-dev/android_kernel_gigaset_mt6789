@@ -8,7 +8,9 @@ obj-$(CONFIG_TCPC_MT6362)		+= tcpc_mt6362.o
 obj-$(CONFIG_TCPC_MT6370)		+= tcpc_mt6370.o
 obj-$(CONFIG_TCPC_MT6375)		+= tcpc_mt6375.o
 obj-$(CONFIG_TCPC_RT1711H)		+= tcpc_rt1711h.o
-
+#drv add by zhaopengge 20231129---start	 
+obj-$(CONFIG_TCPC_HUSB311)		+= tcpc_husb311.o
+#drv add by zhaopengge 20231129---end	 
 tcpc_class-objs := tcpci_core.o tcpci_typec.o tcpci_timer.o tcpm.o tcpci.o tcpci_alert.o
 
 ifdef CONFIG_USB_POWER_DELIVERY
@@ -24,3 +26,6 @@ tcpc_class-objs += tcpci_event.o \
 		pd_policy_engine_dbg.o pd_policy_engine_com.o pd_dpm_alt_mode_dc.o
 endif
 obj-$(CONFIG_TCPC_CLASS) += tcpc_class.o tcpci_late_sync.o pd_dbg_info.o rt_pd_manager.o
+
+#drv add tankaikun, add aw35615 logic ic, 20231010
+obj-$(CONFIG_AW35615_PD) += aw35615/

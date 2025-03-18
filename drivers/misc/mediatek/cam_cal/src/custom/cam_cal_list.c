@@ -32,6 +32,7 @@ struct stCAM_CAL_LIST_STRUCT g_camCalList[] = {
 	{IMX686_SENSOR_ID, 0xA0, Common_read_region, MAX_EEPROM_SIZE_16K},
 	{HI846_SENSOR_ID, 0xA0, Common_read_region, MAX_EEPROM_SIZE_16K},
 	{S5KGD1SP_SENSOR_ID, 0xA8, Common_read_region, MAX_EEPROM_SIZE_16K},
+	{HI5022WIDE_SENSOR_ID, 0xA0, Common_read_region},
 	{S5K2T7SP_SENSOR_ID, 0xA4, Common_read_region},
 	{IMX386_SENSOR_ID, 0xA0, Common_read_region},
 	{S5K2L7_SENSOR_ID, 0xA0, Common_read_region},
@@ -48,9 +49,12 @@ struct stCAM_CAL_LIST_STRUCT g_camCalList[] = {
 	{GC08A3SUB_SENSOR_ID, 0xB4, Common_read_region},
 	{OV16A1Q_SENSOR_ID, 0xA0, Common_read_region},
 	{GC08A3WIDE_SENSOR_ID, 0xA2, Common_read_region},
+    {GC08A8WIDE_SENSOR_ID, 0xA2, Common_read_region},
 	{OV50A40_SENSOR_ID, 0xA0, Common_read_region},
 	{HI1336WIDE_SENSOR_ID, 0xA0, Common_read_region},
+	{OV50C40_SENSOR_ID, 0xB0, Common_read_region},
 	//prize add by linchong 20220614 end
+	{OVA0B40_SENSOR_ID, 0xA0, Common_read_region},
 	/*  ADD before this line */
 	{0, 0, 0}       /*end of list */
 };

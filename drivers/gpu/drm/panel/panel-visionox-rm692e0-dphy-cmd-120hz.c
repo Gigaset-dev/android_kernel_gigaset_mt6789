@@ -29,11 +29,6 @@
 #include "../mediatek/mediatek_v2/mtk_drm_graphics_base.h"
 #endif
 
-#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
-#include "../../../misc/mediatek/prize/hardware_info/hardware_info.h"
-extern struct hardware_info current_lcm_info;
-#endif
-
 struct lcm {
 	struct device *dev;
 	struct drm_panel panel;
@@ -44,8 +39,6 @@ struct lcm {
 	struct gpio_desc *vldo18_gpio;
 	bool prepared;
 	bool enabled;
-	bool doze_en;
-	bool hbm_en;
 
 	int error;
 };
@@ -129,7 +122,7 @@ static void lcm_dcs_write(struct lcm *ctx, const void *data, size_t len)
 
 static void lcm_panel_init(struct lcm *ctx)
 {
-	pr_err("%s+\n", __func__);
+dev_info(ctx->dev, "%s\n", __func__);
 	
 lcm_dcs_write_seq_static(ctx,0xFE,0xD2);// switch to D2 page  
 
@@ -265,6 +258,536 @@ lcm_dcs_write_seq_static(ctx,0x52,0xFE);
 
 lcm_dcs_write_seq_static(ctx,0xFE,0x41);
 lcm_dcs_write_seq_static(ctx,0xD6,0x04);
+lcm_dcs_write_seq_static(ctx,0xFE,0x00);
+
+lcm_dcs_write_seq_static(ctx,0x77,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x3C);
+lcm_dcs_write_seq_static(ctx,0x78,0x3E);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2B);
+lcm_dcs_write_seq_static(ctx,0x78,0x2F);
+lcm_dcs_write_seq_static(ctx,0x78,0x35);
+lcm_dcs_write_seq_static(ctx,0x78,0x39);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x1D);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);
+lcm_dcs_write_seq_static(ctx,0x78,0x25);   //-3.0
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);
+lcm_dcs_write_seq_static(ctx,0x78,0x2A);  //-2.5
+lcm_dcs_write_seq_static(ctx,0x78,0x1D); //-3.8
 
 lcm_dcs_write_seq_static(ctx,0xfe,0x41);
 lcm_dcs_write_seq_static(ctx,0xd6,0x00);
@@ -301,11 +824,11 @@ lcm_dcs_write_seq_static(ctx,0x35,0x00);
 lcm_dcs_write_seq_static(ctx,0xFE,0x00);
 
 lcm_dcs_write_seq_static(ctx,0x11);
-msleep(120);
-lcm_dcs_write_seq_static(ctx,0x29);
 msleep(50);
+lcm_dcs_write_seq_static(ctx,0x29);
+msleep(250);
 
-	pr_err("%s-\n", __func__);
+	pr_info("%s-\n", __func__);
 }
 
 static int lcm_disable(struct drm_panel *panel)
@@ -315,7 +838,6 @@ static int lcm_disable(struct drm_panel *panel)
 	if (!ctx->enabled)
 		return 0;
 
-	// pr_err("%s\n", __func__);
 	if (ctx->backlight) {
 		ctx->backlight->props.power = FB_BLANK_POWERDOWN;
 		backlight_update_status(ctx->backlight);
@@ -333,7 +855,6 @@ static int lcm_unprepare(struct drm_panel *panel)
 	if (!ctx->prepared)
 		return 0;
 
-	pr_err("%s+\n", __func__);
 	lcm_dcs_write_seq_static(ctx, 0x28);
 	msleep(70);
 	lcm_dcs_write_seq_static(ctx, 0x10);
@@ -384,11 +905,7 @@ static int lcm_unprepare(struct drm_panel *panel)
 	
 	ctx->error = 0;
 	ctx->prepared = false;
-	
-	g_ctx->doze_en = false;
-	g_ctx->hbm_en = false;
 
-	pr_err("%s-\n", __func__);
 	return 0;
 }
 
@@ -397,7 +914,7 @@ static int lcm_prepare(struct drm_panel *panel)
 	struct lcm *ctx = panel_to_lcm(panel);
 	int ret;
 
-	pr_err("%s+\n", __func__);
+	pr_info("%s+\n", __func__);
 	if (ctx->prepared)
 		return 0;
 
@@ -455,7 +972,7 @@ static int lcm_prepare(struct drm_panel *panel)
 	lcm_panel_get_data(ctx);
 #endif
 
-	pr_err("%s-\n", __func__);
+	pr_info("%s-\n", __func__);
 	return ret;
 }
 
@@ -463,7 +980,6 @@ static int lcm_enable(struct drm_panel *panel)
 {
 	struct lcm *ctx = panel_to_lcm(panel);
 
-	// pr_err("%s+\n", __func__);
 	if (ctx->enabled)
 		return 0;
 
@@ -473,7 +989,6 @@ static int lcm_enable(struct drm_panel *panel)
 	}
 
 	ctx->enabled = true;
-	// pr_err("%s-\n", __func__);
 
 	return 0;
 }
@@ -515,16 +1030,13 @@ static const struct drm_display_mode switch_mode_60hz = {
 static struct mtk_panel_params ext_params_120hz = {
 	.data_rate = 550*2,
 	.pll_clk = 550,
-	.cust_esd_check = 1,
-	.esd_check_enable = 1,
+	.cust_esd_check = 0,
+	.esd_check_enable = 0,
 	.lcm_esd_check_table[0] = {
 		.cmd = 0x0a,
 		.count = 1,
 		.para_list[0] = 0x9c,
-		.para_list[1] = 0xdc, //aod
 	},
-	.physical_width_um = 69523,
-	.physical_height_um = 154496,
 	.lp_perline_en = 1,
 	.dsc_params = {
 		.enable = 1,
@@ -566,16 +1078,13 @@ static struct mtk_panel_params ext_params_120hz = {
 static struct mtk_panel_params ext_params_60hz = {
 	.data_rate = 550*2,
 	.pll_clk = 550,
-	.cust_esd_check = 1,
-	.esd_check_enable = 1,
+	.cust_esd_check = 0,
+	.esd_check_enable = 0,
 	.lcm_esd_check_table[0] = {
 		.cmd = 0x0a,
 		.count = 1,
 		.para_list[0] = 0x9c,
-		.para_list[1] = 0xdc, //aod
 	},
-	.physical_width_um = 69523,
-	.physical_height_um = 154496,
 	.lp_perline_en = 1,
 	.dsc_params = {
 		.enable = 1,
@@ -631,7 +1140,6 @@ static int lcm_setbacklight_cmdq(void *dsi, dcs_write_gce cb, void *handle,
 			if (!cb)
 				return -1;
 			pr_err("%s panel into HBM", __func__);
-			g_ctx->hbm_en = true;
 			cb(dsi, handle, hbm_tb, ARRAY_SIZE(hbm_tb));
 		} else if (level == 4097) {
 			if (rawlevel <= 0xDBB) {
@@ -644,7 +1152,6 @@ static int lcm_setbacklight_cmdq(void *dsi, dcs_write_gce cb, void *handle,
 				return -1;
 			pr_err("%s panel out HBM, rawlevel=%d, bl_tb[1]=0x%x, bl_tb[2]=0x%x\n",
 				__func__, rawlevel, bl_tb[1], bl_tb[2]);
-			g_ctx->hbm_en = false;
 			cb(dsi, handle, bl_tb, ARRAY_SIZE(bl_tb));
 		}
 	} else {
@@ -658,8 +1165,7 @@ static int lcm_setbacklight_cmdq(void *dsi, dcs_write_gce cb, void *handle,
 			bl_tb[2] = (rawlevel)&0xff;
 			if (!cb)
 				return -1;
-			if ((g_ctx->hbm_en == false) || (level == 0))
-				cb(dsi, handle, bl_tb, ARRAY_SIZE(bl_tb));
+			cb(dsi, handle, bl_tb, ARRAY_SIZE(bl_tb));
 			pr_err("%s level=%d, rawlevel=%d, bl_tb[1]=0x%x, bl_tb[2]=0x%x\n",
 				__func__, level, rawlevel, bl_tb[1], bl_tb[2]);
 		} else {
@@ -757,20 +1263,11 @@ static int mode_switch(struct drm_panel *panel,
 	return ret;
 }
 
-bool drv_doze_state(void)
-{
-	// pr_err("%s g_ctx->doze_en=%d", __func__, g_ctx->doze_en);
-	return g_ctx->doze_en;
-}
-EXPORT_SYMBOL_GPL(drv_doze_state);
-
 static int panel_doze_enable(struct drm_panel *panel,
 	void *dsi_drv, dcs_write_gce cb, void *handle)
 {
 	struct lcm *ctx = panel_to_lcm(panel);
-
-	pr_err("%s+", __func__);
-
+	pr_err("%s", __func__);
 	/* Enter AOD */
 	lcm_dcs_write_seq_static(ctx,0xFE,0x26);
 	lcm_dcs_write_seq_static(ctx,0x1D,0x29);
@@ -782,9 +1279,6 @@ static int panel_doze_enable(struct drm_panel *panel,
 	lcm_dcs_write_seq_static(ctx,0xFE,0x00);
 	lcm_dcs_write_seq_static(ctx,0x39);
 	lcm_dcs_write_seq_static(ctx,0x51,0x01,0x55);
-	
-	g_ctx->doze_en = true;
-	// pr_err("%s-\n", __func__);
 	return 0;
 }
 
@@ -792,9 +1286,7 @@ static int panel_doze_disable(struct drm_panel *panel,
 	void *dsi_drv, dcs_write_gce cb, void *handle)
 {
 	struct lcm *ctx = panel_to_lcm(panel);
-
-	pr_err("%s+", __func__);
-
+	pr_err("%s", __func__);
 	/* Exit AOD */
 	lcm_dcs_write_seq_static(ctx,0xFE,0x00);
 	lcm_dcs_write_seq_static(ctx,0x38);
@@ -802,9 +1294,6 @@ static int panel_doze_disable(struct drm_panel *panel,
 	lcm_dcs_write_seq_static(ctx,0xB2,0x4E);
 	/* Page00 */
 	lcm_dcs_write_seq_static(ctx,0xFE,0x00);
-
-	g_ctx->doze_en = false;
-	// pr_err("%s-\n", __func__);
 	return 0;
 }
 
@@ -861,7 +1350,7 @@ static int lcm_get_modes(struct drm_panel *panel,
 	}
 
 	drm_mode_set_name(mode);
-	mode->type = DRM_MODE_TYPE_DRIVER;
+	mode->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
 	drm_mode_probed_add(connector, mode);
 
 	mode_1 = drm_mode_duplicate(connector->dev, &switch_mode_60hz);
@@ -873,7 +1362,7 @@ static int lcm_get_modes(struct drm_panel *panel,
 	}
 
 	drm_mode_set_name(mode_1);
-	mode_1->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
+	mode_1->type = DRM_MODE_TYPE_DRIVER;
 	drm_mode_probed_add(connector, mode_1);
 
 	connector->display_info.width_mm = 64;
@@ -972,7 +1461,6 @@ static int lcm_probe(struct mipi_dsi_device *dsi)
 	
 	ctx->prepared = true;
 	ctx->enabled = true;
-
 	drm_panel_init(&ctx->panel, dev, &lcm_drm_funcs, DRM_MODE_CONNECTOR_DSI);
 
 	drm_panel_add(&ctx->panel);
@@ -990,17 +1478,9 @@ static int lcm_probe(struct mipi_dsi_device *dsi)
 #endif
 
 	g_ctx = ctx;
-	g_ctx->doze_en = false;
-	g_ctx->hbm_en = false;
 
-	pr_info("%s- lcm,rm692e0,cmd\n", __func__);
+	pr_info("%s- lcm,rm692e0,cmd,60hz\n", __func__);
 
-#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
-    strcpy(current_lcm_info.chip,"rm692e0,cmd,rljc");
-    strcpy(current_lcm_info.vendor,"Raydium");
-    sprintf(current_lcm_info.id,"0x%02x",0x00);
-    strcpy(current_lcm_info.more,"1080*2400");
-#endif
 	return ret;
 }
 

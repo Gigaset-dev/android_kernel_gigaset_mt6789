@@ -1913,6 +1913,9 @@ out:
  * Called by kernel during drm blanck/unblank phrase
  */
  
+ #if defined(CONFIG_PARADE_REPORT_CONTROL)
+extern bool second_tp_report;
+#endif
 int goodix_ts_disp_notifier_callback(struct notifier_block *self,
 	unsigned long value, void *v)
 {
@@ -1920,11 +1923,17 @@ int goodix_ts_disp_notifier_callback(struct notifier_block *self,
 		container_of(self, struct goodix_ts_core, fb_notifier);
 	int *data = (int *)v;
 
+	ts_info("%s 0x%x", __func__, value);
+
 	if (core_data && v) {
 		if (value == MTK_DISP_EARLY_EVENT_BLANK) {
 			if (*data == MTK_DISP_BLANK_POWERDOWN)
 				goodix_ts_suspend(core_data);
+#if defined(CONFIG_PARADE_REPORT_CONTROL)
+		} else if (value == MTK_DISP_EVENT_BLANK && (second_tp_report == false)) {
+#else
 		} else if (value == MTK_DISP_EVENT_BLANK) {
+#endif
 			if (*data == MTK_DISP_BLANK_UNBLANK)
 				goodix_ts_resume(core_data);
 		}
@@ -1993,6 +2002,7 @@ static int goodix_ts_pm_resume(struct device *dev)
  * goodix_generic_noti_callback - generic notifier callback
  *  for goodix touch notification event.
  */
+/*
 static int goodix_generic_noti_callback(struct notifier_block *self,
 		unsigned long action, void *data)
 {
@@ -2019,7 +2029,7 @@ static int goodix_generic_noti_callback(struct notifier_block *self,
 	}
 	return 0;
 }
-
+*/
 static void goodix_self_check(struct work_struct *work)
 {
 	struct goodix_ts_core *cd =
@@ -2309,8 +2319,8 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	}
 
 	/* generic notifier callback */
-	core_data->ts_notifier.notifier_call = goodix_generic_noti_callback;
-	goodix_ts_register_notifier(&core_data->ts_notifier);
+	//core_data->ts_notifier.notifier_call = goodix_generic_noti_callback;
+	//goodix_ts_register_notifier(&core_data->ts_notifier);
 
 	/* debug node init */
 	goodix_tools_init();
@@ -2341,7 +2351,7 @@ static int goodix_ts_remove(struct platform_device *pdev)
 	struct goodix_ts_hw_ops *hw_ops = core_data->hw_ops;
 	struct goodix_ts_esd *ts_esd = &core_data->ts_esd;
 
-	goodix_ts_unregister_notifier(&core_data->ts_notifier);
+	//goodix_ts_unregister_notifier(&core_data->ts_notifier);
 	goodix_tools_exit();
 
 	if (core_data->init_stage >= CORE_INIT_STAGE2) {

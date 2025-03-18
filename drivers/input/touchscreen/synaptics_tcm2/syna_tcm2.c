@@ -1199,7 +1199,7 @@ static int syna_dev_resume(struct device *dev)
 
 	if (hw_if->ops_hw_reset) {
 		hw_if->ops_hw_reset(hw_if);
-		syna_pal_sleep_ms(100);     // drv modify jira NVKPFAB-43
+		syna_pal_sleep_ms(50);
 		if (hw_if->ops_enable_irq)
 			hw_if->ops_enable_irq(hw_if,true);
 
@@ -1208,7 +1208,7 @@ static int syna_dev_resume(struct device *dev)
 		LOGE(" to complete hw reset retval =%d status=%d\n",retval,status);
 		if ((retval < 0) || (status != REPORT_IDENTIFY)) {
 			LOGE("Fail to complete hw reset retval =%d status=%d\n",retval,status);
-//			goto exit;    // drv modify jira NVKPFAB-43
+			goto exit;
 		}
 		//drv-fix Gesture does not function-pengzhipeng-20230522-end
 	} else {

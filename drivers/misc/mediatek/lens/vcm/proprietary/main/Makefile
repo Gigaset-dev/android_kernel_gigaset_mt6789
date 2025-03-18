@@ -37,6 +37,7 @@ mainaf-y += common/gt9778af/GT9778AF.o
 # Prize add by zhuzhengjiang 20220716 start
 mainaf-y  += common/aw8601csr/AW8601CSR.o
 mainaf-y  += common/gt9764baf/GT9764BAF.o
+mainaf-y += common/gt9772af/GT9772AF.o
 mainaf-y  += common/pd9402aaf/PD9402A.o
 # Prize add by zhuzhengjiang 20220716 end
 mainaf-y  += common/fp5510e2af/FP5510E2AF.o

@@ -122,7 +122,6 @@ extern struct dummy_mapping mt6895_dispsys_dummy_register[MT6983_DUMMY_REG_CNT];
 #define MT6879_DUMMY_REG_CNT 53
 extern struct dummy_mapping mt6879_dispsys_dummy_register[MT6879_DUMMY_REG_CNT];
 
-
 const struct mtk_mmsys_reg_data *
 mtk_ddp_get_mmsys_reg_data(enum mtk_mmsys_id mmsys_id);
 
@@ -165,6 +164,12 @@ void mtk_disp_mutex_put(struct mtk_disp_mutex *mutex);
 void mtk_disp_mutex_acquire(struct mtk_disp_mutex *mutex);
 void mtk_disp_mutex_release(struct mtk_disp_mutex *mutex);
 void mtk_disp_mutex_trigger(struct mtk_disp_mutex *mutex, void *handle);
+
+//Adding for avoiding screen mess in kpoc for secondary screen in dual display
+void mtk_disp_mutex_enable_cmdq_r(struct mtk_disp_mutex *mutex,
+				struct cmdq_pkt *cmdq_handle,
+				struct cmdq_base *cmdq_base);
+//end
 
 void mtk_disp_mutex_enable_cmdq(struct mtk_disp_mutex *mutex,
 				struct cmdq_pkt *cmdq_handle,

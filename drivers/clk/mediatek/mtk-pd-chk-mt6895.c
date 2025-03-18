@@ -21,6 +21,8 @@
 #define PWR_ID_SHIFT			0
 #define PWR_STA_SHIFT			8
 
+static unsigned int suspend_cnt;
+
 static DEFINE_SPINLOCK(trace_lock);
 static unsigned int pwr_event[EVT_LEN];
 static unsigned int evt_cnt;
@@ -786,6 +788,22 @@ static int *get_suspend_allow_id(void)
 	return suspend_allow_id;
 }
 
+static bool pdchk_suspend_retry(bool reset_cnt)
+{
+	if (reset_cnt == true) {
+		suspend_cnt = 0;
+		return true;
+	}
+
+	suspend_cnt++;
+	pr_notice("%s: suspend cnt: %d\n", __func__, suspend_cnt);
+
+	if (suspend_cnt < 2)
+		return false;
+
+	return true;
+}
+
 /*
  * init functions
  */
@@ -802,10 +820,13 @@ static struct pdchk_ops pdchk_mt6895_ops = {
 	.is_mtcmos_chk_bug_on = is_mtcmos_chk_bug_on,
 	.get_suspend_allow_id = get_suspend_allow_id,
 	.trace_power_event = trace_power_event,
+	.pdchk_suspend_retry = pdchk_suspend_retry,
 };
 
 static int pd_chk_mt6895_probe(struct platform_device *pdev)
 {
+	suspend_cnt = 0;
+
 	pdchk_common_init(&pdchk_mt6895_ops);
 
 	return 0;

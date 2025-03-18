@@ -15,6 +15,12 @@
   *
   */
 #include "goodix_ts_core.h"
+/* DRV added by wangwei1, hardware info, start */
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
+#include "../../../misc/mediatek/prize/hardware_info/hardware_info.h"
+extern struct hardware_info current_tp_info;
+#endif
+/* DRV added by wangwei1, hardware info, end */
 
 bool debug_log_flag = false;
 
@@ -194,6 +200,14 @@ void print_ic_info(struct goodix_ic_info *ic_info)
 		misc->stylus_rawdata_addr, misc->stylus_rawdata_len);
 	ts_info("esd_addr:                      0x%04X",
 		misc->esd_addr);
+
+/* DRV added by wangwei1, hardware info, start */
+#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
+	sprintf(current_tp_info.more,"config_version:0x%02X",version->config_version);
+	sprintf(current_tp_info.vendor,"XINGYI");
+#endif
+/* DRV added by wangwei1, hardware info, end */
+
 }
 
 /* matrix transpose */

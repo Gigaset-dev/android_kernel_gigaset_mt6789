@@ -26,7 +26,7 @@
 #include <linux/list.h>
 #include <linux/delay.h>
 #include <linux/pinctrl/consumer.h>
-#include <linux/power_supply.h>
+
 #include "flashlight-core.h"
 #include "flashlight-dt.h"
 
@@ -278,60 +278,8 @@ static enum hrtimer_restart aw3641e_timer_func(struct hrtimer *timer)
 	schedule_work(&aw3641e_work);
 	return HRTIMER_NORESTART;
 }
-//drv huangjiwu for camera limit start
-#if IS_ENABLED(CONFIG_DRV_CAMERA_POWER_LIMIT)
-/* is decrease voltage */
-static int is_decrease_voltage;
-/******************************************************************************
- * Charger power supply class
- *****************************************************************************/
-static int aw3641e_high_voltage_supply(int enable)
-{
-	union power_supply_propval prop;
-	static struct power_supply *chg_psy;
-	int ret;
 
-	if (chg_psy == NULL)
-		chg_psy = power_supply_get_by_name("mtk-master-charger");
-	if (chg_psy == NULL || IS_ERR(chg_psy)) {
-		pr_notice("%s Couldn't get chg_psy\n", __func__);
-		ret = -1;
-	} else {
-		prop.intval = enable;
-		ret = power_supply_set_property(chg_psy,
-			 POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
-		pr_notice("%s enable_hv:%d\n", __func__, prop.intval);
-		power_supply_changed(chg_psy);
-	}
- 
- 	return ret;
- }
 
-static int aw3641e_set_scenario(int scenario)
-{
-  	/* set decouple mode */
-  	//mt6360_decouple_mode = scenario & FLASHLIGHT_SCENARIO_DECOUPLE_MASK;
-  	/* notify charger to increase or decrease voltage */
-  	mutex_lock(&aw3641e_mutex);
-  	if (scenario & FLASHLIGHT_SCENARIO_CAMERA_MASK) {
-  		if (!is_decrease_voltage) {
-  			pr_info("Decrease voltage level.\n");
-  			aw3641e_high_voltage_supply(0);
-  			is_decrease_voltage = 1;
-  		}
-  	} else {
-  		if (is_decrease_voltage) {
-  			pr_info("Increase voltage level.\n");
-  			aw3641e_high_voltage_supply(1);
-  			is_decrease_voltage = 0;
-  		}
-  	}
-  	mutex_unlock(&aw3641e_mutex);
-  
-  	return 0;
-}
-#endif
-//drv huangjiwu for camera limit end
 /******************************************************************************
  * Flashlight operations
  *****************************************************************************/
@@ -387,15 +335,6 @@ static int aw3641e_ioctl(unsigned int cmd, unsigned long arg)
 			hrtimer_cancel(&aw3641e_timer);
 		}
 		break;
-//drv huangjiwu for camera limit start		
-#if IS_ENABLED(CONFIG_DRV_CAMERA_POWER_LIMIT)		
-	case FLASH_IOC_SET_SCENARIO:
-  		pr_debug("FLASH_IOC_SET_SCENARIO(%d): %d\n",
-  				channel, (int)fl_arg->arg);
- 		aw3641e_set_scenario(fl_arg->arg);
-  		break;
-#endif
-//drv huangjiwu for camera limit end		
 	default:
 		pr_info("No such command and arg(%d): (%d, %d)\n",
 				channel, _IOC_NR(cmd), (int)fl_arg->arg);
@@ -445,19 +384,9 @@ static ssize_t aw3641e_strobe_store(struct flashlight_arg arg)
 {
 	aw3641e_set_driver(1);
 	aw3641e_set_level(arg.level);
-	//drv huangjiwu for camera limit start		
-#if 0//IS_ENABLED(CONFIG_DRV_CAMERA_POWER_LIMIT)	
-	aw3641e_set_scenario(FLASHLIGHT_SCENARIO_CAMERA | FLASHLIGHT_SCENARIO_COUPLE );
-#endif
-//drv huangjiwu for camera limit end
 	aw3641e_timeout_ms = 0;
 	aw3641e_enable();
 	msleep(arg.dur);
-//drv huangjiwu for camera limit start		
-#if 0//IS_ENABLED(CONFIG_DRV_CAMERA_POWER_LIMIT)	
-	aw3641e_set_scenario(FLASHLIGHT_SCENARIO_FLASHLIGHT | FLASHLIGHT_SCENARIO_COUPLE);
-#endif
-//drv huangjiwu for camera limit end
 	aw3641e_disable();
 	aw3641e_set_driver(0);
 

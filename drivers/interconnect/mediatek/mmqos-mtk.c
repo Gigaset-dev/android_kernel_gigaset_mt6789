@@ -98,6 +98,8 @@ static u32 chn_srt_r_bw[MMQOS_MAX_COMM_NUM][MMQOS_COMM_CHANNEL_NUM] = {};
 static u32 chn_hrt_w_bw[MMQOS_MAX_COMM_NUM][MMQOS_COMM_CHANNEL_NUM] = {};
 static u32 chn_srt_w_bw[MMQOS_MAX_COMM_NUM][MMQOS_COMM_CHANNEL_NUM] = {};
 
+u8 freq_mode = BY_REGULATOR;
+
 #if !IS_ENABLED(CONFIG_MTK_DRAMC)
 /*
  * TODO dummy implementation, remove this if dram ready
@@ -227,6 +229,11 @@ static void set_comm_icc_bw(struct common_node *comm_node)
 		}
 		mutex_unlock(&comm_port_node->bw_lock);
 	}
+	icc_set_bw(comm_node->icc_path, avg_bw, 0);
+	icc_set_bw(comm_node->icc_hrt_path, peak_bw, 0);
+
+	if (freq_mode != BY_REGULATOR)
+		return;
 
 	comm_id = MASK_8(comm_node->base->icc_node->id);
 	for (i = 0; i < MMQOS_COMM_CHANNEL_NUM; i++) {
@@ -270,8 +277,6 @@ static void set_comm_icc_bw(struct common_node *comm_node)
 		}
 		comm_node->smi_clk = smi_clk;
 	}
-	icc_set_bw(comm_node->icc_path, avg_bw, 0);
-	icc_set_bw(comm_node->icc_hrt_path, peak_bw, 0);
 }
 
 static void update_hrt_bw(struct mtk_mmqos *mmqos)
@@ -562,6 +567,10 @@ int mtk_mmqos_probe(struct platform_device *pdev)
 		ret = -EINVAL;
 		goto err;
 	}
+
+	freq_mode = mmqos_desc->freq_mode ? mmqos_desc->freq_mode : freq_mode;
+	dev_notice(&pdev->dev,"freq_mode:%d", freq_mode);
+
 	data = devm_kzalloc(&pdev->dev,
 		sizeof(*data) + mmqos_desc->num_nodes * sizeof(node),
 		GFP_KERNEL);

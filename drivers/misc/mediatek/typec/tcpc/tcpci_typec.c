@@ -309,6 +309,23 @@ static const char *const typec_attach_name[] = {
 };
 #endif /* TYPEC_INFO_ENABLE || TYPEC_DBG_ENABLE */
 
+//prize add by lipengpeng 20200315 start
+#if IS_ENABLED(CONFIG_PRIZE_TYPEC_POSITIVE_NEGATIVE)
+int otgdetection=-1;
+int typeccharge_det=-1;
+
+int prize_otg_detection(void)
+{
+	return otgdetection;
+}
+EXPORT_SYMBOL(prize_otg_detection);
+int prize_typec_charge_det(void)
+{
+	return typeccharge_det;
+}
+EXPORT_SYMBOL(prize_typec_charge_det);
+#endif
+//prize add by lipengpeng 20200315 end
 static int typec_alert_attach_state_change(struct tcpc_device *tcpc)
 {
 	int ret = 0;
@@ -329,6 +346,52 @@ static int typec_alert_attach_state_change(struct tcpc_device *tcpc)
 	TYPEC_INFO("Attached-> %s\n",
 		   typec_attach_name[tcpc->typec_attach_new]);
 
+//prize add by lipengpeng 20200315 start
+#if IS_ENABLED(CONFIG_PRIZE_TYPEC_POSITIVE_NEGATIVE)
+	printk("lpp---cc1=%d,cc2=%d  tcpc->typec_attach_new=%d\n",typec_get_cc1(),typec_get_cc2(),tcpc->typec_attach_new);
+if(tcpm_inquire_typec_attach_state(tcpc) == TYPEC_ATTACHED_SRC)
+{
+	if(tcpm_inquire_cc_polarity(tcpc)==1)
+		otgdetection=1;
+	else if(tcpm_inquire_cc_polarity(tcpc)==0)
+	    otgdetection=0;
+	else{
+		  otgdetection= -1;
+		  printk("lpp----otg typec not detection\n");
+	  }
+}
+//prize add by lipengpeng 20220223 end 
+#endif
+//prize add by lipengpeng 20200315 end
+
+//prize add by lipengpeng 20200324 start
+#if IS_ENABLED(CONFIG_PRIZE_TYPEC_POSITIVE_NEGATIVE)
+//prize add by lipengpeng 20220223 start 
+if ((tcpm_inquire_typec_attach_state(tcpc) == TYPEC_ATTACHED_SNK) ||
+(tcpm_inquire_typec_attach_state(tcpc) == TYPEC_ATTACHED_DBGACC_SNK) ||
+(tcpm_inquire_typec_attach_state(tcpc) == TYPEC_ATTACHED_CUSTOM_SRC))
+{
+	if(tcpm_inquire_cc_polarity(tcpc)==1)
+		typeccharge_det=1;
+	else if(tcpm_inquire_cc_polarity(tcpc)==0)
+	    typeccharge_det=0;
+	else{
+		  typeccharge_det= -1;
+		  printk("lpp----typeccharge typec not detection\n");
+	  }
+	
+}
+
+if(tcpc->typec_attach_new==0)
+{
+	typeccharge_det= -1;
+	otgdetection= -1;
+
+}
+
+//prize add by lipengpeng 20220223 end 
+#endif
+//prize add by lipengpeng 20200324 end	
 	/*Report function */
 	ret = tcpci_report_usb_port_changed(tcpc);
 

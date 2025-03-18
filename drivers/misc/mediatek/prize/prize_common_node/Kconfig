@@ -1,0 +1,14 @@
+
+config PRIZE_COMMON_NODE
+	tristate "common node"
+	default n
+	help
+	  common_node. If configures to be n, means devices doesn't support
+	  common_node functionality.
+
+config PRIZE_UNDERWATER_TOUCH_CONTROL
+  bool "UNDERWATER_TOUCH"
+  default n
+  help
+    Prize Underwater camera not report touch point
+ 

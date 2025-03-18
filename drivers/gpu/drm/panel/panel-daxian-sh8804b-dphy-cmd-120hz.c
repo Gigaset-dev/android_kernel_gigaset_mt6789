@@ -29,11 +29,6 @@
 #include "../mediatek/mediatek_v2/mtk_drm_graphics_base.h"
 #endif
 
-#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
-#include "../../../misc/mediatek/prize/hardware_info/hardware_info.h"
-extern struct hardware_info current_lcm_info;
-#endif
-
 struct lcm {
 	struct device *dev;
 	struct drm_panel panel;
@@ -470,9 +465,7 @@ static struct mtk_panel_params ext_params_120hz = {
 		.count = 1,
 		.para_list[0] = 0x9c,
 	},
-	.physical_width_um = 69523,
-	.physical_height_um = 154496,
-
+	.lp_perline_en = 1,
 	.dsc_params = {
 		.enable = 0,
 		.ver = 17,
@@ -520,9 +513,7 @@ static struct mtk_panel_params ext_params_60hz = {
 		.count = 1,
 		.para_list[0] = 0x9c,
 	},
-	.physical_width_um = 69523,
-	.physical_height_um = 154496,
-
+	.lp_perline_en = 1,
 	.dsc_params = {
 		.enable = 0,
 		.ver = 17,
@@ -593,11 +584,11 @@ static int lcm_setbacklight_cmdq(void *dsi, dcs_write_gce cb, void *handle,
 		}
 	} else {
 		if (level) {
-			rawlevel = level*1023/255;
+			rawlevel = level*0x1FFF/255;
 		} else {
 			rawlevel = 0;
 		}
-		if (rawlevel <= 1023) {
+		if (rawlevel <= 0x1FFF) {
 			bl_tb[1] = (unsigned char)((rawlevel>>8)&0x1f);
 			bl_tb[2] = (unsigned char)(rawlevel&0xff);
 			if (!cb)
@@ -880,14 +871,8 @@ static int lcm_probe(struct mipi_dsi_device *dsi)
 
 	g_ctx = ctx;
 
-	pr_info("%s- lcm,sh8804b,cmd\n", __func__);
+	pr_info("%s- lcm,sh8804b,cmd,60hz\n", __func__);
 
-#if IS_ENABLED(CONFIG_PRIZE_HARDWARE_INFO)
-    strcpy(current_lcm_info.chip,"sh8804b,cmd,daxian");
-    strcpy(current_lcm_info.vendor,"Shenghe Microelectronics");
-    sprintf(current_lcm_info.id,"0x%02x",0x00);
-    strcpy(current_lcm_info.more,"1080*2400");
-#endif
 	return ret;
 }
 

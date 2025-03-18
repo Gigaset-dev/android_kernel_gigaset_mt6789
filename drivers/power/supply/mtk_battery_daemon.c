@@ -211,6 +211,13 @@ void fg_daemon_send_data(struct mtk_battery *gm,
 				struct fgd_cmd_param_t_custom),
 				prcv->total_size);
 			}
+			if ((prcv->idx + prcv->size) >
+				sizeof(struct fgd_cmd_param_t_custom)) {
+				bm_err("size is different %d size %d idx %d\n",
+					(int)sizeof(struct fgd_cmd_param_t_custom),
+					prcv->size, prcv->idx);
+				return;
+			}
 
 			ptr = (char *)&gm->fg_data;
 			memcpy(&ptr[prcv->idx],
@@ -236,6 +243,13 @@ void fg_daemon_send_data(struct mtk_battery *gm,
 				(int)sizeof(
 				struct VersionControl),
 				prcv->total_size);
+			}
+			if ((prcv->idx + prcv->size) >
+				sizeof(struct VersionControl)) {
+				bm_err("size is different %d size %d idx %d\n",
+					(int)sizeof(struct VersionControl),
+					prcv->size, prcv->idx);
+				return;
 			}
 
 			ptr = (char *)&gm->fg_version;
@@ -313,6 +327,16 @@ void fg_daemon_get_data(int cmd,
 	{
 		char *ptr;
 
+		if (prcv->idx + prcv->size >
+			sizeof(struct fuel_gauge_custom_data)) {
+			bm_err("%s size is different %d %d %d\n",
+			__func__,
+			(int)sizeof(
+			struct fuel_gauge_custom_data),
+			prcv->idx, prcv->size);
+			return;
+		}
+
 		if (sizeof(struct fuel_gauge_custom_data)
 			!= prcv->total_size) {
 			bm_err("%s size is different %d %d\n",
@@ -340,6 +364,16 @@ void fg_daemon_get_data(int cmd,
 	case FG_DAEMON_CMD_GET_CUSTOM_TABLE:
 		{
 			char *ptr;
+
+			if (prcv->idx + prcv->size >
+				sizeof(struct fuel_gauge_table_custom_data)) {
+				bm_err("%s size is different %d %d %d\n",
+				__func__,
+				(int)sizeof(
+				struct fuel_gauge_table_custom_data),
+				prcv->idx, prcv->size);
+				return;
+			}
 
 			if (sizeof(struct fuel_gauge_table_custom_data)
 				!= prcv->total_size) {
@@ -2695,6 +2729,10 @@ static void mtk_battery_daemon_handler(struct mtk_battery *gm, void *nl_data,
 				gm->ptim_lk_v, ptim_bat_vol,
 				gm->ptim_lk_i, ptim_R_curr, val.intval);
 		}
+		/* bat_vol between 1.8V to 5V change unit to 0.1mV */
+		if (ptim_bat_vol > 1800 && ptim_bat_vol < 5000)
+			ptim_bat_vol = ptim_bat_vol * 10;
+
 		ptim_vbat = ptim_bat_vol;
 		ptim_i = ptim_R_curr;
 		ret_msg->fgd_data_len += sizeof(ptim_vbat);
@@ -2883,6 +2921,10 @@ static void mtk_battery_daemon_handler(struct mtk_battery *gm, void *nl_data,
 
 		fg_coulomb = gauge_get_int_property(GAUGE_PROP_COULOMB);
 
+		if (((int)sizeof(msg->fgd_data[0])) == 0) {
+			bm_err("[fr] FG_DAEMON_CMD_SET_FG_BAT_INT1_GAP is not filled\n");
+			break;
+		}
 		memcpy(&gm->coulomb_int_gap,
 			&msg->fgd_data[0], sizeof(gm->coulomb_int_gap));
 
@@ -4363,10 +4405,36 @@ void fg_int_event(struct mtk_battery *gm, enum gauge_event evt)
 /* ============================================================ */
 void sw_check_bat_plugout(struct mtk_battery *gm)
 {
-	int is_bat_exist;
+	int is_bat_exist = 0;
+//prize add by lipengpeng 20220607 start
+#if IS_ENABLED (CONFIG_BATTERY_CW2217)
+    int ret = 0;
+	struct power_supply *gauge;
+	union power_supply_propval guage_val;
+
+
+	gauge = power_supply_get_by_name("cw-bat");
+	
+#endif
+//prize add by lipengpeng 20220607 end
+
+
 
 	if (gm->disable_plug_int && gm->disableGM30 != true) {
-		is_bat_exist = gauge_get_int_property(GAUGE_PROP_BATTERY_EXIST);
+		//prize add by lipengpeng 20220607 start
+#if IS_ENABLED (CONFIG_BATTERY_CW2217)
+  if (gauge) {
+				ret = power_supply_get_property(gauge, POWER_SUPPLY_PROP_PRESENT, &guage_val);
+				printk("lpp--sw_check_bat_plugout--guage_val.intval=%d\n",guage_val.intval);
+				is_bat_exist = guage_val.intval;
+		} else {
+
+			 is_bat_exist = gauge_get_int_property(GAUGE_PROP_BATTERY_EXIST);
+
+		}
+#endif
+		//is_bat_exist = gauge_get_int_property(GAUGE_PROP_BATTERY_EXIST);
+//prize add by lipengpeng 20220607 end
 		/* fg_bat_plugout_int_handler(); */
 		if (is_bat_exist == 0) {
 			bm_err(
@@ -4555,8 +4623,27 @@ static irqreturn_t bat_plugout_irq(int irq, void *data)
 {
 	struct mtk_battery *gm = data;
 	int is_bat_exist;
+//prize add by lipengpeng 20220607 start
+#if IS_ENABLED (CONFIG_BATTERY_CW2217)
+    int ret = 0;
+	struct power_supply *gauge;
+	union power_supply_propval guage_val;
 
-	is_bat_exist = gauge_get_int_property(GAUGE_PROP_BATTERY_EXIST);
+
+	gauge = power_supply_get_by_name("cw-bat");
+
+
+  if (gauge) {
+				ret = power_supply_get_property(gauge, POWER_SUPPLY_PROP_PRESENT, &guage_val);
+				printk("lpp----guage_val.intval=%d\n",guage_val.intval);
+				is_bat_exist = guage_val.intval;
+		} else {
+#endif
+			 is_bat_exist = gauge_get_int_property(GAUGE_PROP_BATTERY_EXIST);
+#if IS_ENABLED (CONFIG_BATTERY_CW2217)
+		}
+#endif
+//prize add by lipengpeng 20220607 end	
 
 	bm_err("[%s]is_bat %d miss:%d\n",
 		__func__,

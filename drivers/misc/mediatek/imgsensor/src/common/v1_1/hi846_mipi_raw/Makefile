@@ -1,1 +1,2 @@
-obj-y += hi846widemipiraw_Sensor.o
+imgsensor_isp6s-objs += \
+	$(subdrv-rpath)/hi846mipiraw_Sensor.o

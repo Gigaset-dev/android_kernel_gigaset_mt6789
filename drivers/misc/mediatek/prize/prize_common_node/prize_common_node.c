@@ -39,12 +39,19 @@
 #include <linux/of_irq.h>
 #include <linux/gpio.h>
 #include <linux/input.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #define COMMON_NODE_DEVNAME    "common_node_dev"
+
+#if defined(CONFIG_PRIZE_UNDERWATER_TOUCH_CONTROL)
+bool underwater_report_status = true;
+EXPORT_SYMBOL(underwater_report_status);
+#endif
+
 enum node_idx{
 	GESTURE,
 	FINGER,
 	HBMSTATE,
-	BLSTATE,
 //	SUPERTORCH,
 /*
   new item ,add here
@@ -55,7 +62,6 @@ static char *func_node_name[] ={
 	[GESTURE]  = "GESTURE" ,
 	[FINGER]  = "FINGER" ,
 	[HBMSTATE] = "HBMSTATE",
-	[BLSTATE] = "BLSTATE",
 //	[SUPERTORCH]  = "Supertorch" ,
 /*
   new item ,add here
@@ -73,6 +79,80 @@ struct common_node{
 };
 
 static struct common_node* local_common_node;
+
+#if defined(CONFIG_PRIZE_UNDERWATER_TOUCH_CONTROL)
+/* drv added by wangwei1, touch data reporting contrl, start */
+#define REPORT_STATUS_CONTROL_FILE "report_control"
+#define TOUCH_PROC_DIR "android_touch"
+struct proc_dir_entry *report_status_control_file;
+struct proc_dir_entry *touch_proc_dir;
+
+static int32_t c_report_status_control_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "underwater_report_status = %d\n", underwater_report_status);
+	return 0;
+}
+
+static void *c_start(struct seq_file *m, loff_t *pos)
+{
+	return *pos < 1 ? (void *)1 : NULL;
+}
+
+static void *c_next(struct seq_file *m, void *v, loff_t *pos)
+{
+	++*pos;
+	return NULL;
+}
+
+static void c_stop(struct seq_file *m, void *v)
+{
+	return;
+}
+
+const struct seq_operations report_status_control_seq_ops = {
+	.start  = c_start,
+	.next   = c_next,
+	.stop   = c_stop,
+	.show   = c_report_status_control_show
+};
+
+static int32_t report_status_control_open(struct inode *inode, struct file *file)
+{
+	printk("%s:%d\n", __func__, __LINE__);
+	return seq_open(file, &report_status_control_seq_ops);
+}
+
+static ssize_t report_status_control_write(struct file *file, const char __user *buffer, size_t len, loff_t *offset)
+{
+	char value;
+
+    // Copy the value from the user space buffer
+    if (copy_from_user(&value, buffer, sizeof(char)) != 0) {
+        return -EFAULT;
+    }
+
+	if (value == '0' && underwater_report_status == true) {
+		underwater_report_status = false;
+	} else if (value == '1') {
+		underwater_report_status = true;
+	} else
+		return -EINVAL;
+
+	printk("%s: underwater_report_status = %d.\n", __func__, underwater_report_status);
+	return sizeof(char);
+}
+
+static const struct proc_ops report_status_control_ops = {
+	.proc_open = report_status_control_open,
+	.proc_read = seq_read,
+ 	.proc_write = report_status_control_write,
+	.proc_lseek = seq_lseek,
+	.proc_release = seq_release,
+};
+
+#endif
+/* drv added by wangwei1, touch data reporting contrl, end */
+
 /*************************************************************************************************************************************************/
 /*
   new item ,add here
@@ -177,40 +257,14 @@ err:
 */
 	return count;
 }
-
-static ssize_t blstate_show(struct device *dev,struct device_attribute*attr, char *buf)
-{
-    int count;
-    count = sprintf(buf, "Node Func: %s, state = %s\n",local_common_node->node_array[BLSTATE].name,local_common_node->node_array[BLSTATE].state?"On":"Off");
-    return count;
-}
- 
-static ssize_t blstate_store(struct device *dev,struct device_attribute *attr, const char *buf, size_t count)
-{
-    int error;
-	unsigned int temp;
-    error = kstrtouint(buf, 10, &temp);
-	if(error < 0)
-		goto err;
-	if(local_common_node->node_array[BLSTATE].set){
-		local_common_node->node_array[BLSTATE].state = temp;
-		local_common_node->node_array[BLSTATE].set(temp);
-	}else
-		printk("node func %s is null!! \r\n",local_common_node->node_array[BLSTATE].name);
-err:
-	return count;
-}
-
 static DEVICE_ATTR(gesture, S_IRUGO|S_IWUSR, gesture_show, gesture_store);
 static DEVICE_ATTR(finger, S_IRUGO|S_IWUSR, finger_show, finger_store);
 static DEVICE_ATTR(hbmstate, S_IRUGO|S_IWUSR, hbmstate_show, hbmstate_store);
-static DEVICE_ATTR(blstate, S_IRUGO|S_IWUSR, blstate_show, blstate_store);
 
 static const struct attribute *common_node_event_attr[] = {
         &dev_attr_gesture.attr,
 		&dev_attr_finger.attr,
 		&dev_attr_hbmstate.attr,
-		&dev_attr_blstate.attr,
 	//	&dev_attr_supertorch.attr,
 /*
   new item ,add here
@@ -263,6 +317,24 @@ static int common_node_probe(struct platform_device *pdev){
 
     int ret = 0;
  	local_common_node = devm_kzalloc(&pdev->dev, sizeof(struct common_node), GFP_KERNEL);
+
+#if defined(CONFIG_PRIZE_UNDERWATER_TOUCH_CONTROL)
+/* drv added by wangwei1, touch data reporting contrl, start */
+	touch_proc_dir = proc_mkdir(TOUCH_PROC_DIR, NULL);
+	if (touch_proc_dir == NULL) {
+		printk("%s: touch_proc_dir file create failed!\n", __func__);
+	}
+
+	report_status_control_file = proc_create(REPORT_STATUS_CONTROL_FILE, 0664, touch_proc_dir, &report_status_control_ops);
+	if (report_status_control_file == NULL) {
+		printk("%s: proc report control file create failed!\n", __func__);
+		remove_proc_entry(TOUCH_PROC_DIR, touch_proc_dir);
+	}
+
+	underwater_report_status = true;
+/* drv added by wangwei1, touch data reporting contrl, end */
+#endif
+
 	common_node_array_init();
 	if (local_common_node) {
 		ret = sysfs_create_group(&pdev->dev.kobj, &common_node_event_attr_group);
@@ -280,7 +352,13 @@ static int common_node_probe(struct platform_device *pdev){
 static int common_node_remove(struct platform_device *pdev){
 	printk("[common_node_dev]:common_node_remove begin!\n");
 	printk("[common_node_dev]:common_node_remove Done!\n");
-    
+
+#if defined(CONFIG_PRIZE_UNDERWATER_TOUCH_CONTROL)
+/* drv added by wangwei1, touch data reporting contrl, start */
+	remove_proc_entry(REPORT_STATUS_CONTROL_FILE, touch_proc_dir);
+/* drv added by wangwei1, touch data reporting contrl, end */
+#endif
+  
 	return 0;
 }
 

@@ -1108,7 +1108,7 @@ int fsm_swap_channel(fsm_dev_t *fsm_dev, int next_angle)
 		i2sctrl = 0x04;
 		ret = fsm_set_bf(fsm_dev, 0x1304, chs12); // 0x04[4..3]
 	}
-	pr_addr(debug, "pos:%02X, CHS12:%d", fsm_dev->pos_mask, chs12);
+	pr_addr(debug, "pos:%02X, CHS12:%d i2sctrl:%d", fsm_dev->pos_mask, chs12, i2sctrl);
 
 	return ret;
 }

@@ -29,6 +29,7 @@
 #define IMAX_MAX_VALUE			5500
 #define DLPT_NOTIFY_FAST_UISOC		30
 #define	DLPT_VOLT_MIN			3100
+static int isThreeLevel;
 
 struct reg_t {
 	unsigned int addr;
@@ -39,7 +40,15 @@ struct reg_t {
 struct dlpt_regs_t {
 	struct reg_t rgs_chrdet;
 	struct reg_t uvlo_reg;
+	struct reg_t vbb_uvlo_reg;
 	const struct linear_range uvlo_range;
+};
+
+struct tag_bootmode {
+	u32 size;
+	u32 tag;
+	u32 bootmode;
+	u32 boottype;
 };
 
 struct dlpt_regs_t mt6357_dlpt_regs = {
@@ -110,6 +119,11 @@ struct dlpt_regs_t mt6363_dlpt_regs = {
 		MT6363_RG_VSYS_UVLO_VTHL_MASK << MT6363_RG_VSYS_UVLO_VTHL_SHIFT,
 		MT6363_RG_VSYS_UVLO_VTHL_SHIFT
 	},
+	// .vbb_uvlo_reg = {
+	// 	MT6363_RG_VBB_UVLO_VTHL_ADDR,
+	// 	MT6363_RG_VBB_UVLO_VTHL_MASK << MT6363_RG_VBB_UVLO_VTHL_SHIFT,
+	// 	MT6363_RG_VBB_UVLO_VTHL_SHIFT
+	// },
 	.uvlo_range = {
 		.min = 2000,
 		.min_sel = 0,
@@ -139,7 +153,7 @@ struct dlpt_priv {
 	struct iio_channel *chan_imix_r;
 	struct iio_channel *chan_zcv;
 	bool suspend_flag;
-
+	struct tag_bootmode *tag;
 };
 
 struct dlpt_callback_table {
@@ -159,8 +173,15 @@ static struct dlpt_callback_table dlptcb_tb[DLPTCB_MAX_NUM] = { {0} };
  */
 static void update_dlpt_imix_r(void)
 {
-	if (!PTR_ERR_OR_ZERO(dlpt.chan_imix_r))
-		iio_read_channel_raw(dlpt.chan_imix_r, &dlpt.imix_r);
+	int ret = 0;
+
+	if (!PTR_ERR_OR_ZERO(dlpt.chan_imix_r)) {
+		ret = iio_read_channel_raw(dlpt.chan_imix_r, &dlpt.imix_r);
+		if (ret < 0) {
+			pr_notice("[%s] iio_read_channel_raw error\n", __func__);
+			return;
+		}
+	}
 	pr_info("[dlpt] imix_r=%d\n", dlpt.imix_r);
 }
 
@@ -253,8 +274,12 @@ static int dlpt_check_power_off(void)
 {
 	int ret = 0;
 	static int dlpt_power_off_cnt;
+	enum LOW_BATTERY_LEVEL_TAG dlpt_power_off_lv = LOW_BATTERY_LEVEL_2;
 
-	if (dlpt.lbat_level == LOW_BATTERY_LEVEL_2) {
+	if (isThreeLevel)
+		dlpt_power_off_lv = LOW_BATTERY_LEVEL_3;
+
+	if (dlpt.lbat_level == dlpt_power_off_lv && dlpt.tag->bootmode != 8) {
 		if (dlpt_power_off_cnt == 0)
 			ret = 0; /* 1st time get VBAT < 3.1V, record it */
 		else
@@ -460,15 +485,18 @@ static int dlpt_notify_handler(void *unused)
 				, cur_ui_soc, IMAX_MAX_VALUE);
 		}
 		pre_ui_soc = cur_ui_soc;
-		dlpt.notify_flag = false;
 
-		/* Check low battery volt < 3.1V */
-		if (dlpt_check_power_off()) {
-			/* notify battery driver to power off by SOC=0 */
-			dlpt_set_shutdown_condition();
-			pr_info("[DLPT] notify battery SOC=0 to power off.\n");
+
+		if (cur_ui_soc == 1) {
+			/* Check low battery volt < level 3 throttle volt */
+			if (dlpt_check_power_off()) {
+				/* notify battery driver to power off by SOC=0 */
+				dlpt_set_shutdown_condition();
+				pr_info("[DLPT] notify battery SOC=0 to power off.\n");
+			}
 		}
 bypass:
+		dlpt.notify_flag = false;
 		mutex_unlock(&dlpt.notify_lock);
 		__pm_relax(dlpt.notify_ws);
 
@@ -487,6 +515,7 @@ static void dlpt_timer_func(struct timer_list *t)
 
 static void dlpt_notify_init(void)
 {
+	int ret = 0;
 	unsigned long dlpt_notify_interval;
 
 	dlpt_notify_interval = HZ * 30;
@@ -504,8 +533,10 @@ static void dlpt_notify_init(void)
 		pr_notice("Failed to create dlpt_notify_thread\n");
 
 #if IS_ENABLED(CONFIG_MTK_LOW_BATTERY_POWER_THROTTLING)
-	register_low_battery_notify(&dlpt_low_battery_cb,
+	ret = register_low_battery_notify(&dlpt_low_battery_cb,
 				    LOW_BATTERY_PRIO_DLPT);
+	if (ret == 3)
+		isThreeLevel = 1;
 #endif
 }
 
@@ -527,7 +558,7 @@ static int linear_range_get_selector(const struct linear_range *r,
 	return 0;
 }
 
-static void pmic_uvlo_init(int uvlo_level)
+static void pmic_uvlo_init(int uvlo_level, int vbb_uvlo_level)
 {
 	int ret, val = 0;
 
@@ -540,25 +571,28 @@ static void pmic_uvlo_init(int uvlo_level)
 			uvlo_level, val);
 	} else
 		pr_notice("[dlpt] Invalid uvlo_level (%d)\n", uvlo_level);
+
+	if (vbb_uvlo_level) {
+		ret = linear_range_get_selector(&dlpt.regs->uvlo_range, vbb_uvlo_level, &val);
+		if (!ret) {
+			regmap_update_bits(dlpt.regmap, dlpt.regs->vbb_uvlo_reg.addr,
+					   dlpt.regs->vbb_uvlo_reg.mask,
+					   val << dlpt.regs->vbb_uvlo_reg.shift);
+			pr_info("[dlpt] VBB_UVLO_VOLT_LEVEL = %d, RG_VBB_UVLO_VTHL = 0x%x\n",
+				vbb_uvlo_level, val);
+		} else
+			pr_notice("[dlpt] Invalid vbb_uvlo_level (%d)\n", vbb_uvlo_level);
+	}
 }
 
 static void dlpt_parse_dt(struct platform_device *pdev)
 {
 	struct device_node *np;
-	int uvlo_level;
+	int uvlo_level = 0, vbb_uvlo_level;
 	int ret;
 
-	/* get power_path_support */
-	np = of_parse_phandle(pdev->dev.of_node, "mediatek,charger", 0);
-	if (!np)
-		dev_notice(&pdev->dev, "get charger node fail\n");
-	else
-		dlpt.is_power_path_supported =
-			of_property_read_bool(np, "power_path_support");
-
 	/* get dlpt device node */
-	np = of_find_node_by_name(pdev->dev.parent->of_node,
-				  "mtk_dynamic_loading_throttling");
+	np = pdev->dev.of_node;
 	if (!np)
 		dev_notice(&pdev->dev, "get dlpt node fail\n");
 	else {
@@ -569,7 +603,30 @@ static void dlpt_parse_dt(struct platform_device *pdev)
 		ret = of_property_read_u32(np, "uvlo-level", &uvlo_level);
 		if (ret)
 			uvlo_level = POWER_UVLO_VOLT_LEVEL;
-		pmic_uvlo_init(uvlo_level);
+		/* get vbb-uvlo-level */
+		ret = of_property_read_u32(np, "vbb-uvlo-level", &vbb_uvlo_level);
+		if (ret)
+			vbb_uvlo_level = 0;
+		pmic_uvlo_init(uvlo_level, vbb_uvlo_level);
+
+		/* get power_path_support */
+		np = of_parse_phandle(pdev->dev.of_node, "mediatek,charger", 0);
+		if (!np)
+			dev_notice(&pdev->dev, "get charger node fail\n");
+		else
+			dlpt.is_power_path_supported =
+				of_property_read_bool(np, "power_path_support");
+
+		np = of_parse_phandle(pdev->dev.of_node, "bootmode", 0);
+		if (!np)
+			dev_notice(&pdev->dev, "get bootmode fail\n");
+		else {
+			dlpt.tag = (struct tag_bootmode *)of_get_property(np, "atag,boot", NULL);
+			if (!dlpt.tag) {
+				dev_notice(&pdev->dev, "failed to get atag,boot\n");
+				dlpt.tag = 0;
+                        }
+		}
 	}
 	dev_notice(&pdev->dev, "power_path_support:%d isense_support:%d\n"
 		   , dlpt.is_power_path_supported, dlpt.is_isense_supported);

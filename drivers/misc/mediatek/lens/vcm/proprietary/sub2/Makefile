@@ -24,3 +24,6 @@ obj-$(CONFIG_MTK_LENS)    += sub2af.o
 
 sub2af-y  += sub2_lens.o
 #sub2af-y  += common/ak7371af/AK7371AF.o
+#drv added ,wangmd, support DW9718SAF,20240705 start
+sub2af-y  += common/dw9718saf/DW9718SAF.o 
+#drv added ,wangmd, support DW9718SAF,20240705 end

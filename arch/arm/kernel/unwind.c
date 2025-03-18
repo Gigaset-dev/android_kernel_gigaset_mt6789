@@ -184,6 +184,23 @@ static const struct unwind_idx *unwind_find_idx(unsigned long addr)
 		idx = search_index(addr, __start_unwind_idx,
 				   __origin_unwind_idx,
 				   __stop_unwind_idx);
+#if IS_ENABLED(CONFIG_MTK_FIX_UNWIND_SPINLOCK_RECURSION)
+	} else if (unwind_lock.owner_cpu == raw_smp_processor_id() && raw_spin_is_locked(&unwind_lock)) {
+		/* module unwind tables */
+		struct unwind_table *table;
+
+		list_for_each_entry(table, &unwind_tables, list) {
+			if (addr >= table->begin_addr &&
+			    addr < table->end_addr) {
+				idx = search_index(addr, table->start,
+						   table->origin,
+						   table->stop);
+				/* Move-to-front to exploit common traces */
+				list_move(&table->list, &unwind_tables);
+				break;
+			}
+		}
+#endif
 	} else {
 		/* module unwind tables */
 		struct unwind_table *table;
@@ -300,6 +317,29 @@ static int unwind_exec_pop_subset_r0_to_r3(struct unwind_ctrl_block *ctrl,
 	return URC_OK;
 }
 
+static unsigned long unwind_decode_uleb128(struct unwind_ctrl_block *ctrl)
+{
+	unsigned long bytes = 0;
+	unsigned long insn;
+	unsigned long result = 0;
+
+	/*
+	 * unwind_get_byte() will advance `ctrl` one instruction at a time, so
+	 * loop until we get an instruction byte where bit 7 is not set.
+	 *
+	 * Note: This decodes a maximum of 4 bytes to output 28 bits data where
+	 * max is 0xfffffff: that will cover a vsp increment of 1073742336, hence
+	 * it is sufficient for unwinding the stack.
+	 */
+	do {
+		insn = unwind_get_byte(ctrl);
+		result |= (insn & 0x7f) << (bytes * 7);
+		bytes++;
+	} while (!!(insn & 0x80) && (bytes != sizeof(result)));
+
+	return result;
+}
+
 /*
  * Execute the current unwind instruction.
  */
@@ -353,7 +393,7 @@ static int unwind_exec_insn(struct unwind_ctrl_block *ctrl)
 		if (ret)
 			goto error;
 	} else if (insn == 0xb2) {
-		unsigned long uleb128 = unwind_get_byte(ctrl);
+		unsigned long uleb128 = unwind_decode_uleb128(ctrl);
 
 		ctrl->vrs[SP] += 0x204 + (uleb128 << 2);
 	} else {

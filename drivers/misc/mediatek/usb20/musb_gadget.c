@@ -1264,9 +1264,11 @@ static int is_db_ok(struct musb *musb, struct musb_ep *musb_ep)
 
 	addr = ((ep->address & 0x80) >> 3)
 			| (ep->address & 0x0f);
-	list_for_each_entry(f, &cdev->config->functions, list) {
-		if (test_bit(addr, f->endpoints))
-			goto find_f;
+	if (cdev->config) {
+		list_for_each_entry(f, &cdev->config->functions, list) {
+			if (test_bit(addr, f->endpoints))
+				goto find_f;
+		}
 	}
 	goto done;
 find_f:

@@ -183,7 +183,7 @@ static uint8_t fm78100b_chip_id(void)
 {
 	uint8_t chip_id =0;
 	chip_id = exergen_i2c_read(0x01);
-	EXERGEN_DMESG("EXERGEN fm78100b_chip_id(0x%x)\n",chip_id);
+	EXERGEN_DMESG("EXERGEN fm78100b_chip_id(0x%x)\n",fm78100b_chip_id);
 	return chip_id;
 }
 

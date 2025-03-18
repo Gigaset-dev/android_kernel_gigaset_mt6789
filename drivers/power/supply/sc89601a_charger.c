@@ -466,6 +466,52 @@ int sc89601a_adc_read_vbus_volt(struct sc89601a *sc, u32 *vol)
     return ret;
 }
 
+int sc89601a_adc_read_battery_voltage(struct sc89601a *sc, u32 *volt)
+{
+	uint8_t val;
+	int ret;
+	ret = sc89601a_read_byte(sc, SC89601A_REG_0E, &val);
+	if (ret < 0) {
+		dev_err(sc->dev, "read battery voltage failed :%d\n", ret);
+	} else{
+		*volt = (int)(SC89601A_VBAT_BASE + ((val & SC89601A_VBAT_MASK) >> SC89601A_VBAT_SHIFT) * SC89601A_VBAT_LSB);
+		*volt = *volt * 1000; 
+	}
+
+    return ret;
+}
+
+int sc89601a_adc_read_system_voltage(struct sc89601a *sc, u32 *volt)
+{
+	uint8_t val;
+	int ret;
+	ret = sc89601a_read_byte(sc, SC89601A_REG_0F, &val);
+	if (ret < 0) {
+		dev_err(sc->dev, "read system voltage failed :%d\n", ret);
+	} else{
+		*volt = (int)(SC89601A_VSYS_BASE + ((val & SC89601A_VSYS_MASK) >> SC89601A_VSYS_SHIFT) * SC89601A_VSYS_LSB);
+		*volt = *volt * 1000; 
+	}
+
+    return ret;
+}
+
+int sc89601a_adc_read_bus_current(struct sc89601a *sc, u32 *cur)
+{
+	uint8_t val;
+	int curr;
+	int ret;
+	ret = sc89601a_read_byte(sc, SC89601A_REG_13, &val);
+	if (ret < 0) {
+		dev_err(sc->dev, "read bus current failed :%d\n", ret);
+	} else{
+		curr = (int)(SC89601A_IDPM_BASE + ((val & SC89601A_IDPM_MASK) >> SC89601A_IDPM_SHIFT) * SC89601A_IDPM_LSB) ;
+		*cur = curr * 1000; 
+	}
+
+    return ret;
+}
+
 int sc89601a_adc_read_charge_current(struct sc89601a *sc, u32 *cur)
 {
 	uint8_t val;
@@ -979,12 +1025,35 @@ static int sc89601a_get_charger_type(struct sc89601a *sc, int *type)
 	return 0;
 }
 
+//drv mod by liuruiqian,20240925 start
+struct sc89601a *sc;
+static struct delayed_work read_vbus_work;
+static void read_vbus_work_func(struct work_struct *delayed_work)
+{
+	int ret = 0;
+	struct charger_device *chg_dev;
+	chg_dev = get_charger_by_name("primary_chg");
+
+	sc = dev_get_drvdata(&chg_dev->dev);
+
+	if (!sc) {
+		pr_err("%s get sc89601a fail\n", __func__);
+		return;
+	}
+
+	ret = sc89601a_get_charger_type(sc, &sc->psy_usb_type);
+
+	if(sc->psy_usb_type == POWER_SUPPLY_TYPE_UNKNOWN) {
+		sc89601a_adc_stop(sc);
+		power_supply_changed(sc->psy);
+	}
+}
+
 static void sc89601a_dump_regs(struct sc89601a *sc);
 static irqreturn_t sc89601a_irq_handler(int irq, void *data)
 {
 	int ret;
 	u8 reg_val;
-	bool prev_pg;
 	bool prev_vbus_pg;
 	struct sc89601a *sc = data;
 
@@ -992,50 +1061,39 @@ static irqreturn_t sc89601a_irq_handler(int irq, void *data)
 	if (ret)
 		return IRQ_HANDLED;
 
-	prev_pg = sc->power_good;
+	//prev_pg = sc->power_good;
 
-	sc->power_good = !!(reg_val & SC89601A_PG_STAT_MASK);
+	//sc->power_good = !!(reg_val & SC89601A_PG_STAT_MASK);
 
 	ret = sc89601a_read_byte(sc, SC89601A_REG_11, &reg_val);
-        if (ret)
-                return IRQ_HANDLED;
+    if (ret)
+		return IRQ_HANDLED;
 
-        prev_vbus_pg = sc->vbus_good;
-
-        sc->vbus_good = !!(reg_val & SC89601A_VBUS_GD_MASK);
+	prev_vbus_pg = sc->vbus_good;
+	sc->vbus_good = !!(reg_val & SC89601A_VBUS_GD_MASK);
 
 	if (!prev_vbus_pg && sc->vbus_good){
 		sc->input_curr_limit = 3000;
 		pr_err("adapter/usb inserted\n");
 		sc89601a_adc_start(sc, false);
 		//sc89601a_enable_charger(sc);
-		//ret = sc89601a_get_charger_type(sc, &sc->psy_usb_type);
+		//drv mod by liuruiqian for kpoc,20241218 start
+		ret = sc89601a_get_charger_type(sc, &sc->psy_usb_type);
+		//drv mod by liuruiqian for kpoc,20241218 end
 	} else if (prev_vbus_pg && !sc->vbus_good) {
 		pr_err("adapter/usb removed\n");
-		sc89601a_adc_stop(sc);
-	//ret = sc89601a_get_charger_type(sc, &sc->psy_usb_type);
-	}
+		schedule_delayed_work(&read_vbus_work, msecs_to_jiffies(500));
+		return IRQ_HANDLED;
+	} else
+		ret = sc89601a_get_charger_type(sc, &sc->psy_usb_type);
 
-	//if (!prev_pg && sc->power_good) {
-	ret = sc89601a_get_charger_type(sc, &sc->psy_usb_type);
-	//}
-	
 	pr_err("%s", __func__);
 	sc89601a_dump_regs(sc);
 
     power_supply_changed(sc->psy);
-/*	
-	if (!sc->chg_psy) {
-		sc->chg_psy = power_supply_get_by_name("mtk-master-charger");
-	}
-	
-	if (sc->chg_psy) {
-		pr_err("--->power_supply changed mtk-master-charger\n");
-		power_supply_changed(sc->chg_psy);
-	}
-*/
 	return IRQ_HANDLED;
 }
+//drv mod by liuruiqian,20240925 end
 
 static int sc89601a_register_interrupt(struct sc89601a *sc)
 {
@@ -1395,6 +1453,39 @@ static int sc89601a_set_ivl(struct charger_device *chg_dev, u32 volt)
 	return sc89601a_set_input_volt_limit(sc, volt / 1000);
 }
 
+static int sc89601a_get_adc(struct charger_device *chgdev, enum adc_channel chan,
+			  int *min, int *max)
+{
+	//int ret;
+	struct sc89601a *sc = dev_get_drvdata(&chgdev->dev);
+
+	switch (chan) {
+	case ADC_CHANNEL_VBUS:
+		sc89601a_adc_read_vbus_volt(sc, min);
+		break;
+	case ADC_CHANNEL_VSYS:
+		sc89601a_adc_read_system_voltage(sc, min);
+		break;
+	case ADC_CHANNEL_VBAT:
+		sc89601a_adc_read_battery_voltage(sc, min);
+		break;
+	case ADC_CHANNEL_IBUS:
+		sc89601a_adc_read_bus_current(sc, min);
+		break;
+	case ADC_CHANNEL_IBAT:
+		sc89601a_adc_read_charge_current(sc, min);
+		break;
+	case ADC_CHANNEL_TEMP_JC:
+		*min = 50;
+		break;
+	default:
+		return -EINVAL;
+	}
+	
+	*max = *min;
+	return 0;
+}
+
 static int sc89601a_get_ivl(struct charger_device *chgdev, u32 *volt)
 {
     struct sc89601a *sc = dev_get_drvdata(&chgdev->dev);
@@ -1413,7 +1504,14 @@ static int sc89601a_get_ibus_adc(struct charger_device *chgdev, u32 *ibus)
 {
 	struct sc89601a *sc = dev_get_drvdata(&chgdev->dev);
 	
-	return sc89601a_adc_read_charge_current(sc, ibus);
+	return sc89601a_adc_read_bus_current(sc, ibus);
+}
+
+static int sc89601a_get_ibat_adc(struct charger_device *chgdev, u32 *ibat)
+{
+	struct sc89601a *sc = dev_get_drvdata(&chgdev->dev);
+	
+	return sc89601a_adc_read_charge_current(sc, ibat);
 }
 
 static int sc89601a_set_icl(struct charger_device *chg_dev, u32 curr)
@@ -1890,10 +1988,10 @@ static struct charger_ops sc89601a_chg_ops = {
 	.get_mivr = sc89601a_get_ivl,
 	.get_mivr_state = NULL,
 	/* ADC */
-	.get_adc = NULL,
+	.get_adc = sc89601a_get_adc,
 	.get_vbus_adc = sc89601a_get_vbus_adc,
 	.get_ibus_adc = sc89601a_get_ibus_adc,
-	.get_ibat_adc = NULL,
+	.get_ibat_adc = sc89601a_get_ibat_adc,
 	.get_tchg_adc = NULL,
 	.get_zcv = NULL,
 	/* charing termination */
@@ -2009,6 +2107,8 @@ static int sc89601a_charger_probe(struct i2c_client *client,
 		dev_err(sc->dev, "failed to register sysfs. err: %d\n", ret);
 
 	determine_initial_status(sc);
+
+	INIT_DELAYED_WORK(&read_vbus_work, read_vbus_work_func);//drv add by liuruiqian,20240927
 
 	pr_err("sc89601a probe successfully, Part Num:%d, Revision:%d\n!",
 	       sc->part_no, sc->revision);

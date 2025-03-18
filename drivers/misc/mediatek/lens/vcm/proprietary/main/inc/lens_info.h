@@ -74,6 +74,7 @@
 /*Prize add by zhuzhengjiang 20220716 start*/
 #define AFDRV_AW8601CSR "AW8601CSR"
 #define AFDRV_GT9764BAF "GT9764BAF"
+#define AFDRV_GT9772AF "GT9772AF"
 #define AFDRV_PD9402A "PD9402A"
 /*Prize add by zhuzhengjiang 20220716 end*/
 

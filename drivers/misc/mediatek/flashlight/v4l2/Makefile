@@ -3,6 +3,7 @@ obj-$(CONFIG_MTK_VIDEO_LM3644)     += lm3644.o
 obj-$(CONFIG_MTK_VIDEO_AW36514)    += aw36514.o
 #prize add by zhuzhengjiang for flash start
 obj-$(CONFIG_MTK_VIDEO_AW36515)    += aw36515.o
+obj-$(CONFIG_MTK_FLASHLIGHT_IR_OCP81375)  += flashlights-ocp81375.o
 #prize add by zhuzhengjiang for flash end
 MTK_CUSTOM_PATH := $(srctree)/drivers/misc/mediatek
 subdir-ccflags-y += \

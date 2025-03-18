@@ -115,7 +115,9 @@ obj-$(CONFIG_CHARGER_MT6360)	+= mt6360_pmu_chg.o
 obj-$(CONFIG_CHARGER_MT6362)	+= mt6362-chg.o
 obj-$(CONFIG_CHARGER_MT6370)	+= mt6370-charger.o
 obj-$(CONFIG_CHARGER_MT6375)	+= mt6375-charger.o
-
+#drv-add rt9467-pengzhipeng-20230219-start
+obj-$(CONFIG_CHARGER_RT9467)	+= rt9467-charger.o
+#drv-add rt9467-pengzhipeng-20230219-end
 #prize add by lipengpeng 20220524 start 
 obj-$(CONFIG_CHARGER_SC8960X)	+= sc89601a_charger.o
 obj-$(CONFIG_CHARGER_SC8551)	+= sc8551.o 
@@ -144,12 +146,34 @@ mtk_pep50-objs := mtk_pe5.o mtk_pe5_hal.o
 #prize add by lipengpeng 20220524 start 
 obj-$(CONFIG_BATTERY_CW2217)	+= cw2217_battery.o
 # obj-$(CONFIG_PRIZE_MT5725_SUPPORT_15W)	+= mt5725_wireless_driver-15w.o
+obj-$(CONFIG_MTK_CW2015_SUPPORT_OF) += cw2015_fuel_gauge_v34.o
+ifeq ($(CONFIG_PRIZE_CHARGE_CTRL_POLICY), m)
+ccflags-$(CONFIG_DRM_MEDIATEK_V2) += -I$(srctree)/drivers/gpu/drm/mediatek/mediatek_v2/
+endif
+ifeq ($(CONFIG_PRI_CHARGE_CTRL_POLICY), m)
+ccflags-$(CONFIG_DRM_MEDIATEK_V2) += -I$(srctree)/drivers/gpu/drm/mediatek/mediatek_v2/
+endif
 
 #prize add by lipengpeng 20220524 end 
 #prize add by zhaopengge 20220610 start 
 obj-$(CONFIG_BATTERY_SM5602)	+= sm5602_fg.o
-
+obj-$(CONFIG_CHARGER_SC854X)	+= sc854x_charger.o
+obj-$(CONFIG_SC8960X_CHARGER)	+= sc8960x_charger.o
 #prize add by zhaopengge 20220610 end 
+#drv Added by zhaopengge, 20230921 start
+
+obj-$(CONFIG_CHARGER_UPM6910D) += upm6910_charger.o
+obj-$(CONFIG_CHARGER_UPM6910D_SLAVE) += upm6910_charger_slave.o
+#drv Added by zhaopengge, 20230921 end
+#drv Added by pzp, 20230921 start
+obj-$(CONFIG_CHARGER_UPM6722) += upm6722_charger.o
+#drv Added by pzp, 20230921 end
 ifneq ($(wildcard $(srctree)/$(src)/k6983v1_64_alpha),)
 obj-$(CONFIG_GAUGE_MT6983_ALPHA_SUPPORT) += k6983v1_64_alpha/
 endif
+
+
+# prize add, start
+obj-$(CONFIG_GAUGE_CW2017)	+= cw2017_gauge.o
+obj-$(CONFIG_CHARGER_RT9471) += rt9471_charger.o
+# prize add, end

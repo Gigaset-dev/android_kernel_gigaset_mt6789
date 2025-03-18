@@ -31,16 +31,54 @@
 #include <linux/power_supply.h>//prize add by dengzhiyuan 20230801
 #include "mt6358-accdet.h"
 #include "mt6358.h"
-//przie-add fsa4480-pengzhipeng-20230207-start
-#if IS_ENABLED(CONFIG_SND_SOC_FSA4480_I2C)
+//drv huangjiwu for  typec  start
+
+
+#if IS_ENABLED(CONFIG_PRIZE_TYPEC_SM_NKJ)
+#include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/kernel.h>
-#include <linux/i2c.h>
-#include <linux/mutex.h>
-#include <linux/gpio.h>
-#include "fsa4480-i2c.h"
-#include "../../../../drivers/misc/mediatek/typec/tcpc/inc/tcpm.h"
+#include <linux/init.h>
+#include <linux/device.h>
+#include <linux/slab.h>
+#include <linux/fs.h>
+#include <linux/mm.h>
+#include <linux/interrupt.h>
+#include <linux/vmalloc.h>
+#include <linux/platform_device.h>
+#include <linux/miscdevice.h>
+#include <linux/wait.h>
+#include <linux/spinlock.h>
+#include <linux/ctype.h>
+#include <linux/semaphore.h>
+#include <asm/uaccess.h>
+#include <asm/io.h>
+#include <linux/workqueue.h>
+#include <linux/delay.h>
+#include <linux/device.h>
+#include <linux/kdev_t.h>
+#include <linux/fs.h>
+#include <linux/cdev.h>
+#include <asm/uaccess.h>
+#include <linux/kthread.h>
+#include <linux/input.h>
+#if defined(CONFIG_PM_WAKELOCKS)
+#include <linux/pm_wakeup.h>
+#else
+#include <linux/wakelock.h>
 #endif
-//przie-add fsa4480-pengzhipeng-20230207-end
+#include <linux/time.h>
+#include <linux/string.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
+#include <linux/of_device.h>
+#include <linux/of_gpio.h>
+#include <linux/of_irq.h>
+#include <linux/gpio.h>
+#include <linux/input.h>
+#include <linux/alarmtimer.h>
+#endif
+//drv huangjiwu for  typec  end
 #include "../../../drivers/misc/mediatek/sensor/2.0/core/hf_manager.h"//prize add by dengzhiyuan 20230801
 /* grobal variable definitions */
 #define REGISTER_VAL(x)	(x - 1)
@@ -74,7 +112,479 @@
 #define EINT_PLUG_OUT			(0)
 #define EINT_PLUG_IN			(1)
 #define EINT_MOISTURE_DETECTED	(2)
+#include "../../../../drivers/misc/mediatek/typec/tcpc/inc/tcpm.h" //drv Solve the problem that the headset is not recognized-pengzhipeng-20231107
 
+#if IS_ENABLED(CONFIG_PRIZE_TYPEC_SM_NKJ)
+
+/*----------------------------------------------------------------------
+static variable defination
+
+eoc ---> endoscope
+----------------------------------------------------------------------*/
+#define ENDOSCOPE_DEVNAME    "endoscope_dev"
+#define EN_DEBUG
+#if defined(EN_DEBUG)
+#define TRACE_FUNC 	printk("[endoscope_dev] function: %s, line: %d \n", __func__, __LINE__);
+#define EOC_DEBUG  printk
+#else
+#define TRACE_FUNC(x,...)
+#define EOC_DEBUG(x,...)
+#endif
+
+#define  DEBUG_KEY_UP 1
+/****************************************************************/
+/*******static function defination                             **/
+/****************************************************************/
+struct endoscope_device{
+	struct alarm eoc_timer;
+	struct alarm ptt_timer;
+	struct platform_device* pla_dev;
+	struct pinctrl *eoc_pinctrl;
+	struct pinctrl_state *eoc_default;
+	struct pinctrl_state *eoc_switch_high;
+	struct pinctrl_state *eoc_switch_low;
+	int  eoc_irq_gpio;
+	bool eoc_irq_sta;
+	int	 eoc_irq_num;
+	int  eoc_sel_gpio;
+	int  eoc_ptt_gpio;
+	int  eoc_irq_ptt;
+	bool eoc_irq_ptt_sta;
+	struct timespec64 endtime;
+	struct work_struct eint_work;
+	struct workqueue_struct *eint_workqueue;
+	struct delayed_work ptt_detcable;
+	struct workqueue_struct *ptt_eint_workqueue;
+};
+/* accdet input device to report cable type and key event */
+static struct endoscope_device* eoc_dev;
+
+static struct input_dev *endoscope_input_dev;
+
+#define EINT_PIN_DOWN 1
+#define EINT_PIN_UP 0
+static int cur_eint_state = 0;
+
+static int sm_state = 0;
+
+static int cur_ptt_eint_state = 0;
+
+int prize_get_endoscope_flag(void)
+{
+	return gpio_get_value(eoc_dev->eoc_irq_gpio);
+}
+EXPORT_SYMBOL(prize_get_endoscope_flag);
+
+int prize_get_endoscope_sel_flag(void)
+{
+	return gpio_get_value(eoc_dev->eoc_sel_gpio);
+}
+EXPORT_SYMBOL(prize_get_endoscope_sel_flag);
+
+//extern void prize_extcon_detect_cable(int en);
+extern void prize_sm_accdet_eint_func_extern(int state);
+
+static enum alarmtimer_restart endoscope_alarm_timer_func(struct alarm *alarm, ktime_t now)
+{
+	struct endoscope_device *dev = container_of(alarm, struct endoscope_device,eoc_timer);
+	dev->eoc_irq_sta = gpio_get_value(dev->eoc_irq_gpio);
+	EOC_DEBUG("[endoscope dev] endoscope device  --- > %s\n", dev->eoc_irq_sta?"disconnect" :"connect" );
+	//pinctrl_select_state(dev->eoc_pinctrl, dev->eoc_switch_low);   //eoc_switch_low eoc_switch_high
+	if (dev->eoc_irq_sta)
+	{
+		if(sm_state == 1)
+		{
+		sm_state = 0;
+		prize_sm_accdet_eint_func_extern(0);
+		}
+		//prize_extcon_detect_cable(0);
+	}else{
+
+		pinctrl_select_state(eoc_dev->eoc_pinctrl, eoc_dev->eoc_switch_low);  //优先尝试 手麦
+		prize_sm_accdet_eint_func_extern(1);
+		sm_state = 1;
+		//prize_extcon_detect_cable(1);
+	}
+
+	//enable_irq(eoc_dev->eoc_irq_num);
+	EOC_DEBUG("[endoscope dev] endoscope device  --- >end\n" );
+ 	return ALARMTIMER_NORESTART;
+}
+
+static void endoscope_delay_detect_timer(struct endoscope_device* dev)
+{
+ 	struct timespec64 time, time_now;
+ 	ktime_t ktime;
+ 	int ret = 0;
+
+	ret = alarm_try_to_cancel(&dev->eoc_timer);
+	if (ret < 0) {
+		EOC_DEBUG("[endoscope dev]    callback was running, skip timer\n");
+		return;
+	}
+
+	if(ret == 0)
+		EOC_DEBUG("[endoscope dev]    the timer was not active\n");
+	if(ret == 1)
+		EOC_DEBUG("[endoscope dev]    the timer was active,cancel succ, restart new one\n");
+	
+ 	ktime_get_boottime_ts64(&time_now);
+ 	time.tv_sec =  3;
+ 	time.tv_nsec = 0;
+ 	dev->endtime = timespec64_add(time_now, time);
+ 	ktime = ktime_set(dev->endtime.tv_sec, dev->endtime.tv_nsec);
+
+ 	EOC_DEBUG("[endoscope dev]    %s: alarm timer start:%d, %lld %ld\n", __func__, ret,dev->endtime.tv_sec, dev->endtime.tv_nsec);
+ 	alarm_start(&dev->eoc_timer, ktime);
+}
+
+static irqreturn_t endoscope_int_handler(int irq, void *dev_id)
+{
+	TRACE_FUNC;
+	endoscope_delay_detect_timer(eoc_dev);
+	if(cur_ptt_eint_state == 1 )//抖动过程中 ptt 按键上报键值
+	{
+		irq_set_irq_type(eoc_dev->eoc_irq_ptt, IRQF_TRIGGER_NONE);
+		cur_ptt_eint_state = 0;
+		disable_irq_nosync(eoc_dev->eoc_irq_ptt);   //关闭按键中断
+		if(cur_eint_state == EINT_PIN_DOWN)
+		{
+			cur_eint_state = EINT_PIN_UP;
+			input_report_key(endoscope_input_dev, 381, cur_eint_state);
+	        input_sync(endoscope_input_dev);
+			EOC_DEBUG("[endoscope dev] up accdet PTT %d,irq=%d\n", cur_eint_state,gpio_get_value(eoc_dev->eoc_ptt_gpio));
+		}
+	}
+	// disable_irq_nosync(eoc_dev->eoc_irq_num);
+	return IRQ_HANDLED;
+}
+
+
+
+static void ptt_key_handler(struct work_struct *work)
+{
+	int ret = 0;
+	if ((cur_eint_state == EINT_PIN_UP)&&(gpio_get_value(eoc_dev->eoc_ptt_gpio) == 1)) {
+			ret=irq_set_irq_type(eoc_dev->eoc_irq_ptt, IRQ_TYPE_LEVEL_LOW);
+			if (ret) {
+			pr_err("%s : set_irq_type failed\n", __func__);
+			}
+		    cur_eint_state = EINT_PIN_DOWN;
+	} else if((cur_eint_state == EINT_PIN_DOWN)&&(gpio_get_value(eoc_dev->eoc_ptt_gpio) == 0)){
+			ret=irq_set_irq_type(eoc_dev->eoc_irq_ptt, IRQ_TYPE_LEVEL_HIGH);
+			if (ret) {
+			pr_err("%s : set_irq_type failed\n", __func__);
+			}
+		    cur_eint_state = EINT_PIN_UP;
+	}else
+	{
+		EOC_DEBUG("[endoscope dev] cur_eint_state %d,eoc_ptt_gpio=%d\n", cur_eint_state,gpio_get_value(eoc_dev->eoc_ptt_gpio));
+		return;
+	}
+	gpio_set_debounce(eoc_dev->eoc_ptt_gpio, 256*1000);
+	if(cur_eint_state == gpio_get_value(eoc_dev->eoc_ptt_gpio))
+	{
+		input_report_key(endoscope_input_dev, 381, cur_eint_state);
+		input_sync(endoscope_input_dev);
+	}
+	EOC_DEBUG("[endoscope dev] accdet PTT %d,irq=%d\n", cur_eint_state,gpio_get_value(eoc_dev->eoc_ptt_gpio));
+}
+
+
+static irqreturn_t endoscope_ptt_int_handler(int irq, void *dev_id)
+{
+	/* issue detection work */
+	queue_delayed_work(eoc_dev->ptt_eint_workqueue, &eoc_dev->ptt_detcable, 100);
+	return IRQ_HANDLED;
+}
+
+
+static int endoscope_get_dts_fun(struct endoscope_device* dev)
+{
+	int ret = 0;
+	struct platform_device* pdev = dev->pla_dev;
+	
+	dev->eoc_pinctrl = devm_pinctrl_get(&pdev->dev);
+	if (IS_ERR(dev->eoc_pinctrl)) {
+		EOC_DEBUG("[endoscope dev]    Cannot find endoscope pinctrl!");
+		ret = PTR_ERR(dev->eoc_pinctrl);
+	}
+
+	dev->eoc_default= pinctrl_lookup_state(dev->eoc_pinctrl, "default");
+	if (IS_ERR(dev->eoc_default)) {
+		ret = PTR_ERR(dev->eoc_default);
+		EOC_DEBUG("[endoscope dev]    %s : init err, endoscope_default\n", __func__);
+	}
+
+	dev->eoc_switch_high = pinctrl_lookup_state(dev->eoc_pinctrl, "endoscope_switch_high");
+	if (IS_ERR(dev->eoc_switch_high)) {
+		ret = PTR_ERR(dev->eoc_switch_high);
+		EOC_DEBUG("[endoscope dev]    %s : init err, endoscope_switch_high\n", __func__);
+	}
+
+	dev->eoc_switch_low = pinctrl_lookup_state(dev->eoc_pinctrl, "endoscope_switch_low");
+	if (IS_ERR(dev->eoc_switch_low)) {
+		ret = PTR_ERR(dev->eoc_switch_low);
+		EOC_DEBUG("[endoscope dev]    %s : init err, endoscope_switch_low\n", __func__);
+	}
+
+	pinctrl_select_state(dev->eoc_pinctrl, dev->eoc_switch_low);
+
+	return 0;
+}
+
+static int endoscope_irq_init(struct endoscope_device* dev)
+{
+	int irq_flags = 0;
+	int ret = 0;
+	struct platform_device* pdev = dev->pla_dev;
+
+	dev->eoc_sel_gpio = of_get_named_gpio(pdev->dev.of_node, "sel-gpio", 0);
+	if (dev->eoc_sel_gpio < 0) {
+		EOC_DEBUG("[endoscope dev]    %s: no sel gpio provided.\n", __func__);
+		return -1;
+	} else {
+		EOC_DEBUG("[endoscope dev]    %s: sel gpio provided ok.sy8801_dev->eoc_sel_gpio = %d\n", __func__, dev->eoc_sel_gpio);
+	}
+	
+	dev->eoc_ptt_gpio = of_get_named_gpio(pdev->dev.of_node, "ptt-gpio", 0);
+	if (dev->eoc_ptt_gpio < 0) {
+		EOC_DEBUG("[endoscope dev]    %s: no ptt gpio provided.\n", __func__);
+		return -1;
+	} else {
+		EOC_DEBUG("[endoscope dev]    %s: ptt gpio provided ok.sy8801_dev->eoc_ptt_gpio = %d\n", __func__, dev->eoc_ptt_gpio);
+	}
+
+	
+	dev->eoc_irq_gpio = of_get_named_gpio(pdev->dev.of_node, "irq-gpio", 0);
+	if (dev->eoc_irq_gpio < 0) {
+		EOC_DEBUG("[endoscope dev]    %s: no irq gpio provided.\n", __func__);
+		return -1;
+	} else {
+		EOC_DEBUG("[endoscope dev]    %s: irq gpio provided ok.sy8801_dev->irq_gpio = %d\n", __func__, dev->eoc_irq_gpio);
+	}
+	dev->eoc_irq_num =	gpio_to_irq(dev->eoc_irq_gpio);
+
+	if (gpio_is_valid(dev->eoc_irq_gpio)) {
+		ret = devm_gpio_request_one(&pdev->dev,dev->eoc_irq_gpio,GPIOF_DIR_IN, "endoscope_int");
+		if (ret) {
+			EOC_DEBUG("[endoscope dev]    %s: irq_gpio request failed\n", __func__);
+			return -1;
+		}
+		irq_flags = IRQF_TRIGGER_FALLING  | IRQF_ONESHOT | IRQF_TRIGGER_RISING;
+		ret = devm_request_threaded_irq(&pdev->dev,dev->eoc_irq_num,NULL,endoscope_int_handler, irq_flags, "endoscope", dev);
+
+		if (ret != 0) {
+				EOC_DEBUG("[endoscope dev]    failed to request IRQ %d: %d\n", dev->eoc_irq_num, ret);
+				return -1;
+		}
+		EOC_DEBUG("[endoscope dev]    sucess to request IRQ %d: %d\n", dev->eoc_irq_num, ret);
+
+	}else{
+		EOC_DEBUG("[endoscope dev]    %s skipping IRQ registration\n", __func__);
+	}
+	return 0;
+}
+
+#if DEBUG_KEY_UP
+static ssize_t endoscope_sel_show(struct device *dev,
+								   struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "sel = %x\n", gpio_get_value(eoc_dev->eoc_sel_gpio));
+}
+
+static ssize_t endoscope_sel_store(struct device *dev,
+									struct device_attribute *attr, const char *buf, size_t size)
+{
+	int data;
+	if(sscanf(buf, "%u", &data) != 1)
+	{
+		EOC_DEBUG("[endoscope dev]: Invalid values\n");
+		return -EINVAL;
+	}
+	if(data)
+	{
+		pinctrl_select_state(eoc_dev->eoc_pinctrl, eoc_dev->eoc_switch_high);
+		//prize_extcon_detect_cable(1);
+	}
+	else
+	{
+		pinctrl_select_state(eoc_dev->eoc_pinctrl, eoc_dev->eoc_switch_low);
+		if( prize_get_endoscope_sel_flag() == 0 )
+		{
+			prize_sm_accdet_eint_func_extern(1);
+		}
+		//prize_extcon_detect_cable(1);
+	}
+	return size;
+}
+static DEVICE_ATTR(endoscope_sel, S_IRUGO | S_IWUSR, endoscope_sel_show, endoscope_sel_store);
+#endif
+
+extern unsigned int accdet_val;
+
+static void endoscope_eint_work_callback(struct work_struct *work)
+{
+	int ret = 0;
+	if((accdet_val  < 1200)&& (accdet_val !=0))   //accdet_val  == 800mv  1200
+	{
+		//识别为手麦 无需更改
+		EOC_DEBUG("[endoscope dev]: shoumai\n");
+		if(cur_ptt_eint_state == 0)
+		{
+		    ret = irq_set_irq_type(eoc_dev->eoc_irq_ptt, IRQ_TYPE_LEVEL_HIGH);
+		  if (ret) {
+			EOC_DEBUG("[endoscope dev]: irq_set_irq_type failed\n");
+			}
+			cur_ptt_eint_state = 1;
+			enable_irq(eoc_dev->eoc_irq_ptt);   //打开按键中断
+		}
+	}
+	else
+	{
+		EOC_DEBUG("[endoscope dev]: neikuijing\n");
+		pinctrl_select_state(eoc_dev->eoc_pinctrl, eoc_dev->eoc_switch_high);
+		//prize_extcon_detect_cable(1);
+	}
+}
+
+void  endoscope_work_wakeup(void)
+{
+	int ret = 0;
+	ret = queue_work(eoc_dev->eint_workqueue, &eoc_dev->eint_work);
+	EOC_DEBUG("[endoscope dev]: endoscope_work_wakeup\n");
+}
+EXPORT_SYMBOL_GPL(endoscope_work_wakeup);
+
+
+static int endoscope_probe(struct platform_device *pdev)
+{
+	#if DEBUG_KEY_UP
+	struct class *endoscope_class;
+	struct device *endoscope_dev;
+	#endif
+	int ret;
+	TRACE_FUNC;
+
+	eoc_dev = devm_kzalloc(&pdev->dev, sizeof(struct endoscope_device), GFP_KERNEL);
+	if(IS_ERR_OR_NULL(eoc_dev)) 
+    { 
+       ret = PTR_ERR(eoc_dev);
+       EOC_DEBUG("[endoscope dev]    failed to devm_kzalloc endoscope_dev %d\n", ret);
+	   return -1;
+    }
+	eoc_dev->pla_dev = pdev;
+	
+	ret = endoscope_irq_init(eoc_dev);
+	if(ret < 0){
+		EOC_DEBUG("[endoscope dev]    failed to endoscope_irq_init %d\n", ret);
+		return ret;
+	}
+
+    ret = endoscope_get_dts_fun(eoc_dev);
+	if(ret < 0){
+		EOC_DEBUG("[endoscope dev]    failed to endoscope_get_dts_fun %d\n", ret);
+		return ret;
+	}
+
+	alarm_init(&eoc_dev->eoc_timer, ALARM_BOOTTIME,endoscope_alarm_timer_func);
+	
+	//alarm_init(&eoc_dev->ptt_timer, ALARM_BOOTTIME,endoscope_ptt_alarm_timer_func);
+	eoc_dev->eint_workqueue = create_singlethread_workqueue("endoscope_acc_eint");
+	INIT_WORK(&eoc_dev->eint_work, endoscope_eint_work_callback);
+	if (!eoc_dev->eint_workqueue) {
+		EOC_DEBUG("Error: Create eint workqueue failed\n");
+		ret = -1;
+	}
+		//drv  huangjiwu for  start
+	#if DEBUG_KEY_UP
+	endoscope_class = class_create(THIS_MODULE, "endoscope");
+	if (IS_ERR(endoscope_class)) {
+		EOC_DEBUG("Failed to create class(endoscope_class)!");
+		return PTR_ERR(endoscope_class);
+	}
+	endoscope_dev = device_create(endoscope_class, NULL, 0, NULL, "endoscope_data");
+	if (IS_ERR(endoscope_dev))
+	{
+		EOC_DEBUG("Failed to create endoscope_dev device");
+	}
+	if (device_create_file(endoscope_dev, &dev_attr_endoscope_sel) < 0)
+	{
+		EOC_DEBUG("Failed to create device file(%s)!",dev_attr_endoscope_sel.attr.name);	
+	}
+	/* Create input device*/
+	endoscope_input_dev = input_allocate_device();
+	if (!endoscope_input_dev) {
+		ret = -ENOMEM;
+		EOC_DEBUG("%s input_allocate_device fail.\n", __func__);
+	}
+	__set_bit(EV_KEY, endoscope_input_dev->evbit);
+	__set_bit(381, endoscope_input_dev->keybit);
+	//__set_bit(385, endoscope_input_dev->keybit);
+	endoscope_input_dev->id.bustype = BUS_HOST;
+	endoscope_input_dev->name = "endoscope";
+	ret = input_register_device(endoscope_input_dev);
+	if (ret) {
+		EOC_DEBUG("%s input_register_device fail.ret:%d\n", __func__,ret);
+	}
+	//drv  huangjiwu for  end
+	#endif
+	eoc_dev->eoc_irq_ptt =	gpio_to_irq(eoc_dev->eoc_ptt_gpio);
+	gpio_set_debounce(eoc_dev->eoc_ptt_gpio, 256*1000);
+	
+	eoc_dev->ptt_eint_workqueue = create_singlethread_workqueue("ppt_workqueue");
+	INIT_DELAYED_WORK(&eoc_dev->ptt_detcable, ptt_key_handler);
+	
+	ret = request_irq(eoc_dev->eoc_irq_ptt, endoscope_ptt_int_handler, IRQF_TRIGGER_HIGH,
+		"endoscope_ptt", NULL);	   //IRQF_TRIGGER_NONE
+	disable_irq(eoc_dev->eoc_irq_ptt);   //关闭按键中断
+	if (ret) {
+		EOC_DEBUG("%s endoscope_ptt irq fail.ret:%d\n", __func__,ret);
+	}
+	//
+	if(!gpio_get_value(eoc_dev->eoc_irq_gpio))
+	{
+		endoscope_delay_detect_timer(eoc_dev);
+	}
+	return 0;
+}
+
+static int endoscope_remove(struct platform_device *dev)	
+{
+	EOC_DEBUG("[endoscope dev]    [endoscope_dev]:endoscope_remove begin!\n");
+	EOC_DEBUG("[endoscope dev]    [endoscope_dev]:endoscope_remove Done!\n");
+	return 0;
+}
+static const struct of_device_id endoscope_dt_match[] = {
+	{.compatible = "prize,endoscope"},
+	{},
+};
+
+static struct platform_driver endoscope_driver = {
+	.probe	= endoscope_probe,
+	.remove  = endoscope_remove,
+	.driver    = {
+		.name       = "endoscope_Driver",
+		.of_match_table = of_match_ptr(endoscope_dt_match),
+	},
+};
+
+
+int  endoscope_init(void)
+{
+    int retval = 0;
+    TRACE_FUNC;
+
+    EOC_DEBUG("[endoscope dev]    [%s]: endoscope_driver, retval=%d \n!", __func__, retval);
+	if (retval != 0) {
+		  return retval;
+	}
+    platform_driver_register(&endoscope_driver);
+    return 0;
+}
+EXPORT_SYMBOL_GPL(endoscope_init);
+#endif
+//prize add by hjw 20220524 end 
 struct mt63xx_accdet_data {
 	u32 base;
 	struct snd_soc_card card;
@@ -131,6 +641,10 @@ struct mt63xx_accdet_data {
 	u32 moisture_vdd_offset;
 	u32 moisture_offset;
 	u32 moisture_eint_offset;
+	//drv Solve the problem that the headset is not recognized-pengzhipeng-20231107-start
+	struct tcpc_device *tcpc_dev;
+    struct notifier_block audio_nb;
+//drv Solve the problem that the headset is not recognized-pengzhipeng-20231107-end
 };
 static struct mt63xx_accdet_data *accdet;
 
@@ -193,8 +707,6 @@ static void config_eint_init_by_mode(void);
 static u32 get_triggered_eint(void);
 static void send_status_event(u32 cable_type, u32 status);
 static inline void accdet_eint_high_level_support(void);
-
-
 /* global function declaration */
 inline u32 accdet_read(u32 addr)
 {
@@ -635,17 +1147,6 @@ static u32 accdet_get_auxadc(void)
 
 	return vol;
 }
-
-//przie-add fsa4480-pengzhipeng-20230207-start
-#if IS_ENABLED(CONFIG_SND_SOC_FSA4480_I2C)
-#define FSA4480_SWITCH_BY_ACCDET_ADC
-u32 accdet_auxadc_get_val(void)
-{
-    return accdet_get_auxadc();                                                                                                                                                                                                                                               
-}
-EXPORT_SYMBOL_GPL(accdet_auxadc_get_val);
-//przie-add fsa4480-pengzhipeng-20230207-end
-#endif
 
 static void accdet_get_efuse(void)
 {
@@ -1143,6 +1644,24 @@ static void dis_micbias_work_callback(struct work_struct *work)
 		disable_accdet();
 	}
 }
+
+
+//prize added by huangjiwu, headset support, 20230302-start
+#if IS_ENABLED(CONFIG_PRIZE_TYPEC_SM_NKJ)
+extern  void  endoscope_work_wakeup(void);
+unsigned int accdet_val = 0;
+EXPORT_SYMBOL_GPL(accdet_val);
+
+int sm_typec_accdet_mic_detect(void){
+
+	mdelay(2);
+	accdet_val = accdet_get_auxadc();
+	printk(KERN_INFO"typec_accdet AccdetVolt(%d)\n",accdet_val);
+	endoscope_work_wakeup();
+	return 0;
+}
+#endif
+//prize added by huangjiwu, headset support, 20230302-end
 //prize add by dengzhiyuan 20230801 start
 static void do_sar_cali(void)
 {
@@ -1202,12 +1721,14 @@ static void eint_work_callback(struct work_struct *work)
 				ACCDET_CMP_PWM_EN_SFT, 0x7, 0x7);
 
 		enable_accdet(0);
-		
-		/* prize added by hanjiuping for hl5280 usb analog switch support start */
-#ifdef FSA4480_SWITCH_BY_ACCDET_ADC
-		fsa4480_mic_gnd_swap_by_adc();
-#endif /*FSA4480_SWITCH_BY_ACCDET_ADC*/
-/* prize added by hanjiuping for hl5280 usb analog switch support end */
+		//prize added by huarui, headset support, 20190111-start
+		#if IS_ENABLED(CONFIG_PRIZE_TYPEC_ACCDET)
+		typec_accdet_mic_detect();
+		#endif
+		#if IS_ENABLED(CONFIG_PRIZE_TYPEC_SM_NKJ)
+		sm_typec_accdet_mic_detect();
+		#endif
+		//prize added by huarui, headset support, 20190111-end
 	} else {
 		mutex_lock(&accdet->res_lock);
 		accdet->eint_sync_flag = false;
@@ -2138,6 +2659,75 @@ int mt6358_accdet_init(struct snd_soc_component *component,
 }
 EXPORT_SYMBOL_GPL(mt6358_accdet_init);
 
+//drv Solve the problem that the headset is not recognized-pengzhipeng-20231107-start
+void accdet_eint_func_extern(int state)
+{
+	int ret = 0;
+
+	if (state == EINT_PLUG_OUT){	//OUT=0 IN=1
+		accdet->cur_eint_state = EINT_PLUG_OUT;
+		//accdet_update_bit(ACCDET_EINT0_SEQ_INIT_ADDR, ACCDET_EINT0_SW_EN_SFT);
+		accdet_write(0x250a, (accdet_read(0x250a)|0x4));
+		 mdelay(5);
+		//mod_timer(&micbias_timer, jiffies + MICBIAS_DISABLE_TIMER);
+	}else{
+		//accdet_clear_bit(ACCDET_EINT0_SEQ_INIT_ADDR, ACCDET_EINT0_SW_EN_SFT);
+		accdet->cur_eint_state = EINT_PLUG_IN;
+		accdet_write(0x250a, (accdet_read(0x250a)&0xFB));
+   mdelay(10);
+	}
+
+	pr_info("accdet %s(), cur_eint_state=%d\n", __func__, accdet->cur_eint_state);
+
+	ret = queue_work(accdet->eint_workqueue, &accdet->eint_work);
+	return;
+}
+
+static int audio_tcp_notifier_call(struct notifier_block *nb,
+					unsigned long event, void *data)
+{
+	struct tcp_notify *noti = data;
+
+	switch (event) {
+
+	case TCP_NOTIFY_TYPEC_STATE:
+		if (noti->typec_state.old_state == TYPEC_UNATTACHED && noti->typec_state.new_state == TYPEC_ATTACHED_AUDIO){
+			pr_info("%s audio accessory Plug in, pol = %d\n", __func__,	noti->typec_state.polarity);
+			accdet_eint_func_extern(EINT_PLUG_IN);
+
+		}else if(noti->typec_state.old_state == TYPEC_ATTACHED_AUDIO && noti->typec_state.new_state == TYPEC_UNATTACHED){
+			pr_info("%s audio accessory Plug out\n", __func__);
+			accdet_eint_func_extern(EINT_PLUG_OUT);
+		}
+		break;
+	default:
+		break;
+	};
+	return NOTIFY_OK;
+}
+//drv Solve the problem that the headset is not recognized-pengzhipeng-20231107-end
+//prize added by huangjiwu, headset support, 20230302-start
+#if IS_ENABLED(CONFIG_PRIZE_TYPEC_SM_NKJ)
+void prize_sm_accdet_eint_func_extern(int state)
+{
+	int ret = 0;
+	printk("prize_accdet_eint_func_extern %d\n",state);
+	if (state == EINT_PLUG_OUT){	//OUT=0 IN=1
+		accdet->cur_eint_state = EINT_PLUG_OUT;
+		accdet_write(0x250a, (accdet_read(0x250a)|0x4));
+		mdelay(5);
+	}else{
+		accdet->cur_eint_state = EINT_PLUG_IN;
+		accdet_write(0x250a, (accdet_read(0x250a)&0xFB));
+		mdelay(5);
+	}
+	accdet_write(MT6358_AUDENC_ANA_CON10, (((accdet_read(MT6358_AUDENC_ANA_CON10)&0xFF8F))| 0x10));   //v  1.8V
+	ret = queue_work(accdet->eint_workqueue, &accdet->eint_work);
+	pr_info("accdet %s(), cur_eint_state=%d,micbais1=0x%x\n", __func__, accdet->cur_eint_state,accdet_read(MT6358_AUDENC_ANA_CON10));
+	return;
+}
+EXPORT_SYMBOL_GPL(prize_sm_accdet_eint_func_extern);
+#endif
 static int mt6358_accdet_probe(struct platform_device *pdev)
 {
 
@@ -2321,7 +2911,6 @@ static int mt6358_accdet_probe(struct platform_device *pdev)
 	micbias_timer.expires = jiffies + MICBIAS_DISABLE_TIMER;
 	timer_setup(&accdet_init_timer, delay_init_timerhandler, 0);
 	accdet_init_timer.expires = jiffies + ACCDET_INIT_WAIT_TIMER;
-
 	/* Create workqueue */
 	accdet->delay_init_workqueue =
 		create_singlethread_workqueue("delay_init");
@@ -2370,6 +2959,27 @@ static int mt6358_accdet_probe(struct platform_device *pdev)
 	atomic_set(&accdet_first, 1);
 	mod_timer(&accdet_init_timer, (jiffies + ACCDET_INIT_WAIT_TIMER));
 	pr_info("%s done!\n", __func__);
+//drv Solve the problem that the headset is not recognized-pengzhipeng-20231107-start
+       accdet->tcpc_dev = tcpc_dev_get_by_name("type_c_port0");
+       if (!accdet->tcpc_dev) {
+               pr_notice("%s get tcpc device type_c_port0 fail\n", __func__);
+               //return -ENODEV;
+       }else{
+		    accdet->audio_nb.notifier_call = audio_tcp_notifier_call;
+			accdet->audio_nb.priority = 0;
+			ret = register_tcp_dev_notifier(accdet->tcpc_dev, &accdet->audio_nb, TCP_NOTIFY_TYPEC_STATE);
+			if (ret < 0) {
+				pr_notice("%s: register tcpc notifer fail\n", __func__);
+				//return -EINVAL;
+			}  
+		   
+	   }
+//drv Solve the problem that the headset is not recognized-pengzhipeng-20231107-end
+	//prize add by huangjiwu 20220614 start   
+	#if IS_ENABLED(CONFIG_PRIZE_TYPEC_SM_NKJ)
+	endoscope_init();
+	#endif
+	//prize add by huangjiwu 20220614 end  
 
 	return 0;
 
@@ -2408,638 +3018,6 @@ static long mt_accdet_unlocked_ioctl(struct file *file, unsigned int cmd,
 	}
 	return 0;
 }
-//przie-add fsa4480-pengzhipeng-20230207-start
-//prize added by huarui, headset support, 20190111-start
-/* prize added for tcpc analog switch hl5280 support */
-#if IS_ENABLED(CONFIG_SND_SOC_FSA4480_I2C)
-void accdet_eint_func_extern(int state)
-{
- int ret = 0;
-
- if (state == EINT_PLUG_OUT){ //OUT=0 IN=1
-  accdet->cur_eint_state = EINT_PLUG_OUT;
-  //mod_timer(&micbias_timer, jiffies + MICBIAS_DISABLE_TIMER);
-  //accdet_write(0x250a, 0x4);
-  accdet_write(0x250a, (accdet_read(0x250a)|0x4));
-  
-  //accdet_write(RG_AUDACCDETMICBIAS0PULLLOW_ADDR,
-  // reg | RG_ACCDET_MODE_ANA11_MODE1);
-  mdelay(5);
-
- }else{
-  accdet->cur_eint_state = EINT_PLUG_IN;
-  //pwrap_write(ACCDET_CTRL, pmic_read(ACCDET_CTRL) & (~ACCDET_EINT0_EN_B2));
-  accdet_write(0x250a, (accdet_read(0x250a)&0xFB));
-  mdelay(5);
-
- }
-
- pr_info("accdet %s(), cur_eint_state=%d\n", __func__, accdet->cur_eint_state);
- //ret = queue_work(eint_workqueue, &eint_work);
- ret = queue_work(accdet->eint_workqueue, &accdet->eint_work);
- return;
-}
-EXPORT_SYMBOL(accdet_eint_func_extern);
-//prize added by huarui, headset support, 20190111-end
-// SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
- */
-
-
-/* prize added by hanjiuping for hl5280 usb analog switch support end */
-/* prize added by hanjiuping for call codec do accdet start */
-#define EINT_PIN_PLUG_OUT       (0)
-#define EINT_PIN_PLUG_IN        (1)
-
-//extern void accdet_eint_func_extern(int state);
-//extern int  accdet_auxadc_get_val(void);
-/* prize added by hanjiuping for call codec do accdet end */
-
-#define FSA4480_I2C_NAME	"fsa4480-driver"
-
-#define HL5280_DEVICE_REG_VALUE           0x49
-#define ASW5480_DEVICE_ID                 0x59
-
-/* Registers Map */
-#define FSA4480_DEVICE_ID                 0x00
-#define FSA4480_SWITCH_SETTINGS           0x04
-#define FSA4480_SWITCH_CONTROL            0x05
-#define FSA4480_SWITCH_STATUS0            0x06
-#define FSA4480_SWITCH_STATUS1            0x07
-#define FSA4480_SLOW_L                    0x08
-#define FSA4480_SLOW_R                    0x09
-#define FSA4480_SLOW_MIC                  0x0A
-#define FSA4480_SLOW_SENSE                0x0B
-#define FSA4480_SLOW_GND                  0x0C
-#define FSA4480_DELAY_L_R                 0x0D
-#define FSA4480_DELAY_L_MIC               0x0E
-#define FSA4480_DELAY_L_SENSE             0x0F
-#define FSA4480_DELAY_L_AGND              0x10
-#define FSA4480_FUN_EN                    0x12
-#define FSA4480_JACK_STATUS               0x17
-#define FSA4480_RESET                     0x1E
-#define FSA4480_CURRENT_SOURCE_SETTING    0x1F
-
-#undef dev_dbg
-#define dev_dbg dev_info
-
-enum switch_vendor {
-	FSA4480 = 0,
-	HL5280,
-	ASW5480,
-};
-
-struct fsa4480_priv {
-	struct regmap *regmap;
-	struct device *dev;
-	struct tcpc_device *tcpc_dev;
-	struct notifier_block pd_nb;
-	atomic_t usbc_mode;
-	struct work_struct usbc_analog_work;
-	struct blocking_notifier_head fsa4480_notifier;
-	struct mutex notification_lock;
-	unsigned int hs_det_pin;
-	enum switch_vendor vendor;
-	bool plug_state;
-#ifdef FSA4480_SWITCH_BY_ACCDET_ADC
-	int mic_swap_thr;
-#endif
-};
-
-struct fsa4480_reg_val {
-	uint8_t reg;
-	uint8_t val;
-};
-
-struct fsa4480_priv *g_fsa_priv = NULL;
-
-static const struct regmap_config fsa4480_regmap_config = {
-	.reg_bits = 8,
-	.val_bits = 8,
-	.max_register = FSA4480_CURRENT_SOURCE_SETTING,
-};
-
-static const struct fsa4480_reg_val fsa_reg_i2c_defaults[] = {
-	{FSA4480_SLOW_L, 0x00},
-	{FSA4480_SLOW_R, 0x00},
-	{FSA4480_SLOW_MIC, 0x00},
-	{FSA4480_SLOW_SENSE, 0x00},
-	{FSA4480_SLOW_GND, 0x00},
-	{FSA4480_DELAY_L_R, 0x00},
-	{FSA4480_DELAY_L_MIC, 0x00},
-	{FSA4480_DELAY_L_SENSE, 0x00},
-	{FSA4480_DELAY_L_AGND, 0x09},
-	/* prize modified for codec sense to AGND when disconnected */
-	{FSA4480_SWITCH_SETTINGS, 0x9D},
-};
-
-static void fsa4480_usbc_update_settings(struct fsa4480_priv *fsa_priv,
-		u32 switch_control, u32 switch_enable)
-{
-	if (!fsa_priv->regmap) {
-		dev_err(fsa_priv->dev, "%s: regmap invalid\n", __func__);
-		return;
-	}
-
-	regmap_write(fsa_priv->regmap, FSA4480_SWITCH_SETTINGS, 0x80);
-	regmap_write(fsa_priv->regmap, FSA4480_SWITCH_CONTROL, switch_control);
-	/* FSA4480 chip hardware requirement */
-	usleep_range(50, 55);
-	regmap_write(fsa_priv->regmap, FSA4480_SWITCH_SETTINGS, switch_enable);
-}
-
-static int fsa4480_usbc_event_changed(struct notifier_block *nb,
-					  unsigned long evt, void *ptr)
-{
-	struct fsa4480_priv *fsa_priv =
-			container_of(nb, struct fsa4480_priv, pd_nb);
-	struct device *dev;
-	struct tcp_notify *noti = ptr;
-
-	if (!fsa_priv)
-		return -EINVAL;
-
-	dev = fsa_priv->dev;
-	if (!dev)
-		return -EINVAL;
-
-	if (fsa_priv->vendor == HL5280) {
-		dev_info(dev, "%s: switch chip is HL5280\n", __func__);
-	}
-	else if (fsa_priv->vendor == ASW5480) {
-		dev_info(dev, "%s: switch chip is ASW5480\n", __func__);
-	}
-
-	dev_info(dev, "%s: typeC event: %d\n", __func__, evt);
-
-	switch (evt) {
-	case TCP_NOTIFY_TYPEC_STATE:
-		dev_info(dev, "%s: old_state: %d, new_state: %d\n",
-			__func__, noti->typec_state.old_state, noti->typec_state.new_state);
-		if (noti->typec_state.old_state == TYPEC_UNATTACHED &&
-			noti->typec_state.new_state == TYPEC_ATTACHED_AUDIO) {
-			/* AUDIO plug in */
-			dev_info(dev, "%s: audio plug in\n", __func__);
-			fsa_priv->plug_state = true;
-			dev_info(dev, "%s: tcpc polarity = %d\n", __func__, noti->typec_state.polarity);
-			pm_stay_awake(fsa_priv->dev);
-			schedule_work(&fsa_priv->usbc_analog_work);
-		} else if (noti->typec_state.old_state == TYPEC_ATTACHED_AUDIO
-			&& noti->typec_state.new_state == TYPEC_UNATTACHED) {
-			/* AUDIO plug out */
-			dev_err(dev, "%s: audio plug out\n", __func__);
-			fsa_priv->plug_state = false;
-			pm_stay_awake(fsa_priv->dev);
-			schedule_work(&fsa_priv->usbc_analog_work);
-		}
-		else {
-			dev_dbg(dev, "%s: ignore tcpc non-audio notification\n", __func__);
-		}
-		break;
-	default:
-		break;
-	};
-
-	return NOTIFY_OK;
-}
-
-static int fsa4480_usbc_analog_setup_switches(struct fsa4480_priv *fsa_priv)
-{
-	struct device *dev;
-	unsigned int switch_status = 0;
-#ifdef FSA4480_SWITCH_AUTONOMOUSLY
-	unsigned int jack_status = 0;
-#endif
-
-	if (!fsa_priv)
-		return -EINVAL;
-	dev = fsa_priv->dev;
-	if (!dev)
-		return -EINVAL;
-
-	mutex_lock(&fsa_priv->notification_lock);
-
-	dev_info(dev, "%s: plug_state %d\n", __func__, fsa_priv->plug_state);
-	if (fsa_priv->plug_state) {
-
-#ifdef FSA4480_SWITCH_AUTONOMOUSLY
-		/* activate switches */
-		fsa4480_usbc_update_settings(fsa_priv, 0x00, 0x9F);
-
-		regmap_write(fsa_priv->regmap, FSA4480_CURRENT_SOURCE_SETTING, 0x07);
-		usleep_range(1000, 1005);
-		regmap_write(fsa_priv->regmap, FSA4480_FUN_EN, 0x45);
-		usleep_range(10000, 10005);
-		dev_info(dev, "%s: set reg[0x%x] done.\n", __func__, FSA4480_FUN_EN);
-
-		regmap_read(fsa_priv->regmap, FSA4480_JACK_STATUS, &jack_status);
-		dev_info(dev, "%s: jack status with 700uA: 0x%x.\n", __func__, jack_status);
-
-		/* if detect fail under 700uA, use 100uA detect again */
-		if (unlikely(1 == jack_status)) {
-			dev_info(dev, "%s: use 100uA detect again\n", __func__);
-			fsa4480_usbc_update_settings(fsa_priv, 0x00, 0x9F);
-
-			regmap_write(fsa_priv->regmap, FSA4480_CURRENT_SOURCE_SETTING, 0x01);
-			usleep_range(1000, 1005);
-			regmap_write(fsa_priv->regmap, FSA4480_FUN_EN, 0x45);
-			usleep_range(10000, 10005);
-			regmap_read(fsa_priv->regmap, FSA4480_JACK_STATUS, &jack_status);
-			dev_info(dev, "%s: jack status with 100uA: 0x%x.\n", __func__, jack_status);
-		}
-
-		if (jack_status & 0x2) {
-			/* for 3 pole, mic switch to SBU2 */
-			dev_info(dev, "%s: set mic to sbu2 for 3 pole.\n", __func__);
-			fsa4480_usbc_update_settings(fsa_priv, 0x00, 0x9F);
-			usleep_range(4000, 4005);
-		}
-#elif defined(FSA4480_SWITCH_BY_ACCDET_ADC)
-		/* first activate switches: SENSE(AGND) <-> (G)SBU1, MIC <-> SBU2,
-		 and then transit switch status per accdet ADC value */
-		fsa4480_usbc_update_settings(fsa_priv, 0x00, 0x9F);
-#else
-#error ERROR!!! YOU SHOULD CHOOSE AT LEAST ONE SWITCH METHOD!!!
-#endif
-
-		/* call external accdet_eint_func to handle accdet function */
-		accdet_eint_func_extern(EINT_PIN_PLUG_IN);
-
-		regmap_read(fsa_priv->regmap, FSA4480_SWITCH_STATUS0, &switch_status);
-		dev_info(dev, "%s: switch status0: 0x%x.\n", __func__, switch_status);
-		regmap_read(fsa_priv->regmap, FSA4480_SWITCH_STATUS1, &switch_status);
-		dev_info(dev, "%s: switch status1: 0x%x.\n", __func__, switch_status);
-	} else {
-		/* deactivate switches */
-		/* prize modified for codec sense to AGND when disconnected */
-		fsa4480_usbc_update_settings(fsa_priv, 0x18, 0x9D);
-
-		/* call external accdet_eint_func to handle accdet function */
-		accdet_eint_func_extern(EINT_PIN_PLUG_OUT);
-	}
-
-	mutex_unlock(&fsa_priv->notification_lock);
-	return 0;
-}
-
-/*
- * fsa4480_reg_notifier - register notifier block with fsa driver
- *
- * @nb - notifier block of fsa4480
- * @node - phandle node to fsa4480 device
- *
- * Returns 0 on success, or error code
- */
-int fsa4480_reg_notifier(struct notifier_block *nb,
-			 struct device_node *node)
-{
-	int rc = 0;
-	struct i2c_client *client = of_find_i2c_device_by_node(node);
-	struct fsa4480_priv *fsa_priv;
-
-	if (!client)
-		return -EINVAL;
-
-	fsa_priv = (struct fsa4480_priv *)i2c_get_clientdata(client);
-	if (!fsa_priv)
-		return -EINVAL;
-
-	rc = blocking_notifier_chain_register
-				(&fsa_priv->fsa4480_notifier, nb);
-	if (rc)
-		return rc;
-
-	/*
-	 * as part of the init sequence check if there is a connected
-	 * USB C analog adapter
-	 */
-	dev_dbg(fsa_priv->dev, "%s: verify if USB adapter is already inserted\n",
-		__func__);
-	rc = fsa4480_usbc_analog_setup_switches(fsa_priv);
-
-	return rc;
-}
-EXPORT_SYMBOL(fsa4480_reg_notifier);
-
-/*
- * fsa4480_unreg_notifier - unregister notifier block with fsa driver
- *
- * @nb - notifier block of fsa4480
- * @node - phandle node to fsa4480 device
- *
- * Returns 0 on pass, or error code
- */
-int fsa4480_unreg_notifier(struct notifier_block *nb,
-				 struct device_node *node)
-{
-	struct i2c_client *client = of_find_i2c_device_by_node(node);
-	struct fsa4480_priv *fsa_priv;
-
-	if (!client)
-		return -EINVAL;
-
-	fsa_priv = (struct fsa4480_priv *)i2c_get_clientdata(client);
-	if (!fsa_priv)
-		return -EINVAL;
-
-	fsa4480_usbc_update_settings(fsa_priv, 0x18, 0x98);
-	return blocking_notifier_chain_unregister
-					(&fsa_priv->fsa4480_notifier, nb);
-}
-EXPORT_SYMBOL(fsa4480_unreg_notifier);
-
-static int fsa4480_validate_display_port_settings(struct fsa4480_priv *fsa_priv)
-{
-	u32 switch_status = 0;
-
-	regmap_read(fsa_priv->regmap, FSA4480_SWITCH_STATUS1, &switch_status);
-
-	if ((switch_status != 0x23) && (switch_status != 0x1C)) {
-		dev_err(fsa_priv->dev, "%s: AUX SBU1/2 switch status is invalid = %u\n",
-				__func__, switch_status);
-		return -EIO;
-	}
-
-	return 0;
-}
-/*
- * fsa4480_switch_event - configure FSA switch position based on event
- *
- * @node - phandle node to fsa4480 device
- * @event - fsa_function enum
- *
- * Returns int on whether the switch happened or not
- */
-int fsa4480_switch_event(struct device_node *node,
-			 enum fsa_function event)
-{
-	int switch_control = 0;
-	struct i2c_client *client = of_find_i2c_device_by_node(node);
-	struct fsa4480_priv *fsa_priv;
-
-	if (!client)
-		return -EINVAL;
-
-	fsa_priv = (struct fsa4480_priv *)i2c_get_clientdata(client);
-	if (!fsa_priv)
-		return -EINVAL;
-	if (!fsa_priv->regmap)
-		return -EINVAL;
-
-	pr_info("%s - switch event: %d\n", __func__, event);
-	switch (event) {
-	case FSA_MIC_GND_SWAP:
-		regmap_read(fsa_priv->regmap, FSA4480_SWITCH_CONTROL,
-				&switch_control);
-		if ((switch_control & 0x07) == 0x07)
-			switch_control = 0x0;
-		else
-			switch_control = 0x7;
-		fsa4480_usbc_update_settings(fsa_priv, switch_control, 0x9F);
-		break;
-	case FSA_USBC_ORIENTATION_CC1:
-		fsa4480_usbc_update_settings(fsa_priv, 0x18, 0xF8);
-		return fsa4480_validate_display_port_settings(fsa_priv);
-	case FSA_USBC_ORIENTATION_CC2:
-		fsa4480_usbc_update_settings(fsa_priv, 0x78, 0xF8);
-		return fsa4480_validate_display_port_settings(fsa_priv);
-	case FSA_USBC_DISPLAYPORT_DISCONNECTED:
-		fsa4480_usbc_update_settings(fsa_priv, 0x18, 0x98);
-		break;
-	default:
-		break;
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL(fsa4480_switch_event);
-
-/*
- * fsa4480_mic_gnd_swap_by_adc - swap GND and Mic according to accdet ADC
- *
- * @none
- *
- * Returns 0 for success, or error code
- */
-#ifdef FSA4480_SWITCH_BY_ACCDET_ADC
-int fsa4480_mic_gnd_swap_by_adc(void)
-{
-	struct fsa4480_priv *fsa_priv = g_fsa_priv;
-	int accdet_adc_val = 0;
-	unsigned int switch_control = 0;
-
-	if (unlikely(fsa_priv == NULL)) {
-		pr_err("%s: fsa_priv is NULL\n", __func__);
-		return -1;
-	}
-
-	if (unlikely(!fsa_priv->plug_state)) {
-		dev_warn(fsa_priv->dev, "%s while audio accessory is absent\n", __func__);
-		return 0;
-	}
-
-	/* delay before read the ADC value */
-	mdelay(2);
-	accdet_adc_val = accdet_auxadc_get_val();
-	dev_dbg(fsa_priv->dev, "%s: accdet adc val: %dmV\n", __func__, accdet_adc_val);
-
-	if (accdet_adc_val <= fsa_priv->mic_swap_thr) {
-		dev_dbg(fsa_priv->dev, "%s: swap gnd and mic now\n", __func__);
-		regmap_read(fsa_priv->regmap, FSA4480_SWITCH_CONTROL,
-				&switch_control);
-		if ((switch_control & 0x07) == 0x07)
-			switch_control = 0x0;
-		else
-			switch_control = 0x7;
-		fsa4480_usbc_update_settings(fsa_priv, switch_control, 0x9F);
-	}
-	else {
-		dev_dbg(fsa_priv->dev, "%s: correct switch, no need swap\n", __func__);
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(fsa4480_mic_gnd_swap_by_adc);
-#endif
-
-static int fsa4480_parse_dt(struct fsa4480_priv *fsa_priv,
-	struct device *dev)
-{
-	struct device_node *dNode = dev->of_node;
-	int ret = 0;
-
-	if (dNode == NULL) {
-		pr_err("%s: device node is NULL\n", __func__);
-		return -ENODEV;
-	}
-
-#ifdef FSA4480_SWITCH_BY_ACCDET_ADC
-	ret = of_property_read_u32(dNode, "mic_swap_thr", (unsigned int *)&fsa_priv->mic_swap_thr);
-	if (ret) {
-		fsa_priv->mic_swap_thr = 300;
-		dev_warn(dev, "%s: of read mic_swap_thr fail %d, user default val 300\n",
-		__func__, ret);
-	}
-
-	dev_dbg(dev, "%s: of read mic_swap_thr is %dmv\n",
-		__func__, fsa_priv->mic_swap_thr);
-#endif
-	return ret;
-}
-
-static void fsa4480_usbc_analog_work_fn(struct work_struct *work)
-{
-	struct fsa4480_priv *fsa_priv =
-		container_of(work, struct fsa4480_priv, usbc_analog_work);
-
-	if (!fsa_priv) {
-		pr_err("%s: fsa container invalid\n", __func__);
-		return;
-	}
-	fsa4480_usbc_analog_setup_switches(fsa_priv);
-	pm_relax(fsa_priv->dev);
-}
-
-static void fsa4480_update_reg_defaults(struct regmap *regmap)
-{
-	u8 i;
-
-	for (i = 0; i < ARRAY_SIZE(fsa_reg_i2c_defaults); i++)
-		regmap_write(regmap, fsa_reg_i2c_defaults[i].reg,
-				   fsa_reg_i2c_defaults[i].val);
-}
-
-static int fsa4480_probe(struct i2c_client *i2c,
-			 const struct i2c_device_id *id)
-{
-	struct fsa4480_priv *fsa_priv;
-	int rc = 0;
-	unsigned int reg_value = 0;
-
-	fsa_priv = devm_kzalloc(&i2c->dev, sizeof(*fsa_priv),
-				GFP_KERNEL);
-	if (!fsa_priv)
-		return -ENOMEM;
-
-	fsa_priv->dev = &i2c->dev;
-
-	fsa4480_parse_dt(fsa_priv, &i2c->dev);
-
-	fsa_priv->regmap = devm_regmap_init_i2c(i2c, &fsa4480_regmap_config);
-	if (IS_ERR_OR_NULL(fsa_priv->regmap)) {
-		dev_err(fsa_priv->dev, "%s: Failed to initialize regmap: %d\n",
-			__func__, rc);
-		if (!fsa_priv->regmap) {
-			rc = -EINVAL;
-			goto err_data;
-		}
-		rc = PTR_ERR(fsa_priv->regmap);
-		goto err_data;
-	}
-
-	fsa4480_update_reg_defaults(fsa_priv->regmap);
-
-	regmap_read(fsa_priv->regmap, FSA4480_DEVICE_ID, &reg_value);
-	dev_dbg(fsa_priv->dev, "%s: device id reg value: 0x%x\n", __func__, reg_value);
-	if (HL5280_DEVICE_REG_VALUE == reg_value) {
-		fsa_priv->vendor = HL5280;
-		dev_info(fsa_priv->dev, "%s: switch chip is HL5280\n", __func__);
-	}
-	else if (ASW5480_DEVICE_ID == reg_value) {
-		fsa_priv->vendor = ASW5480;
-		dev_info(fsa_priv->dev, "%s: switch chip is ASW5480\n", __func__);
-	}
-	else {
-		fsa_priv->vendor = FSA4480;
-		dev_info(fsa_priv->dev, "%s: switch chip is FSA4480[0x%x]\n", __func__, reg_value);
-	}
-
-	fsa_priv->plug_state = false;
-	fsa_priv->tcpc_dev = tcpc_dev_get_by_name("type_c_port0");
-	if (!fsa_priv->tcpc_dev) {
-		pr_err("%s get tcpc device type_c_port0 fail\n", __func__);
-		goto err_data;
-	}
-
-	fsa_priv->pd_nb.notifier_call = fsa4480_usbc_event_changed;
-	fsa_priv->pd_nb.priority = 0;
-	rc = register_tcp_dev_notifier(fsa_priv->tcpc_dev, &fsa_priv->pd_nb, TCP_NOTIFY_TYPE_ALL);
-	if (rc < 0) {
-		pr_err("%s: register tcpc notifer fail\n", __func__);
-		goto err_data;
-	}
-
-	mutex_init(&fsa_priv->notification_lock);
-	i2c_set_clientdata(i2c, fsa_priv);
-
-	INIT_WORK(&fsa_priv->usbc_analog_work,
-		  fsa4480_usbc_analog_work_fn);
-
-	fsa_priv->fsa4480_notifier.rwsem =
-		(struct rw_semaphore)__RWSEM_INITIALIZER
-		((fsa_priv->fsa4480_notifier).rwsem);
-	fsa_priv->fsa4480_notifier.head = NULL;
-
-	g_fsa_priv = fsa_priv;
-	return 0;
-
-err_data:
-	devm_kfree(&i2c->dev, fsa_priv);
-	return rc;
-}
-
-static int fsa4480_remove(struct i2c_client *i2c)
-{
-	struct fsa4480_priv *fsa_priv =
-			(struct fsa4480_priv *)i2c_get_clientdata(i2c);
-
-	if (!fsa_priv)
-		return -EINVAL;
-
-	fsa4480_usbc_update_settings(fsa_priv, 0x18, 0x98);
-	cancel_work_sync(&fsa_priv->usbc_analog_work);
-	pm_relax(fsa_priv->dev);
-	mutex_destroy(&fsa_priv->notification_lock);
-	dev_set_drvdata(&i2c->dev, NULL);
-
-	return 0;
-}
-
-static const struct of_device_id fsa4480_i2c_dt_match[] = {
-	{ .compatible = "mediatek,fsa4480-i2c", },
-	{ .compatible = "mediatek,hl5280-i2c",  },
-	{}
-};
-
-static struct i2c_driver fsa4480_i2c_driver = {
-	.driver = {
-		.name = FSA4480_I2C_NAME,
-		.of_match_table = fsa4480_i2c_dt_match,
-	},
-	.probe = fsa4480_probe,
-	.remove = fsa4480_remove,
-};
-
-int  fsa4480_init(void)
-{
-	int rc;
-
-	rc = i2c_add_driver(&fsa4480_i2c_driver);
-	if (rc)
-		pr_err("fsa4480: Failed to register I2C driver: %d\n", rc);
-
-	return rc;
-}
-
-void  fsa4480_exit(void)
-{
-	i2c_del_driver(&fsa4480_i2c_driver);
-}
-EXPORT_SYMBOL_GPL(fsa4480_init);
-EXPORT_SYMBOL_GPL(fsa4480_exit);
-#endif
-//przie-add fsa4480-pengzhipeng-20230207-end
-
 
 static const struct file_operations accdet_fops = {
 	.owner = THIS_MODULE,
@@ -3051,6 +3029,38 @@ const struct file_operations *accdet_get_fops(void)
 	return &accdet_fops;
 }
 
+//prize added by huangjiwu, headset support, 20190111-start
+#if IS_ENABLED(CONFIG_PRIZE_TYPEC_ACCDET)
+void accdet_eint_func_extern(int state)
+{
+	int ret = 0;
+
+	if (state == EINT_PLUG_OUT){	//OUT=0 IN=1
+		accdet->cur_eint_state = EINT_PLUG_OUT;
+		//mod_timer(&micbias_timer, jiffies + MICBIAS_DISABLE_TIMER);
+		//accdet_write(0x250a, 0x4);
+		accdet_write(0x250a, (accdet_read(0x250a)|0x4));
+		
+		//accdet_write(RG_AUDACCDETMICBIAS0PULLLOW_ADDR,
+		//	reg | RG_ACCDET_MODE_ANA11_MODE1);
+		mdelay(5);
+
+	}else{
+		accdet->cur_eint_state = EINT_PLUG_IN;
+		//pwrap_write(ACCDET_CTRL, pmic_read(ACCDET_CTRL) & (~ACCDET_EINT0_EN_B2));
+		accdet_write(0x250a, (accdet_read(0x250a)&0xFB));
+		mdelay(5);
+
+	}
+
+	pr_info("accdet %s(), cur_eint_state=%d\n", __func__, accdet->cur_eint_state);
+	//ret = queue_work(eint_workqueue, &eint_work);
+	ret = queue_work(accdet->eint_workqueue, &accdet->eint_work);
+	return;
+}
+EXPORT_SYMBOL(accdet_eint_func_extern);
+#endif
+//prize added by huangjiwu, headset support, 20190111-end
 static struct platform_driver accdet_driver = {
 	.probe = mt6358_accdet_probe,
 	.remove = mt6358_accdet_remove,
@@ -3067,21 +3077,11 @@ static int __init accdet_soc_init(void)
 	ret = platform_driver_register(&accdet_driver);
 	if (ret)
 		return -ENODEV;
-//przie-add fsa4480-pengzhipeng-20230207-start
-#if IS_ENABLED(CONFIG_SND_SOC_FSA4480_I2C)		
-	fsa4480_init();
-#endif 
-//przie-add fsa4480-pengzhipeng-20230207-end
 	return 0;
 }
 static void __exit accdet_soc_exit(void)
 {
 	platform_driver_unregister(&accdet_driver);
-//przie-add fsa4480-pengzhipeng-20230207-start
-#if IS_ENABLED(CONFIG_SND_SOC_FSA4480_I2C)
-	fsa4480_exit();
-#endif 
-//przie-add fsa4480-pengzhipeng-20230207-end
 }
 module_init(accdet_soc_init);
 module_exit(accdet_soc_exit);

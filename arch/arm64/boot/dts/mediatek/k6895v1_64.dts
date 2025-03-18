@@ -416,7 +416,8 @@ androidboot.hardware=mt6895";
 			<&qm42195 &qm45197>,		/* [9]QM: Wifi Open, BT bypass */
 			<&qm42195 &qm45197>,		/* [10]QM: Wifi Open, BT ePA/eLNA */
 			<&qm42195 &qm45197>,		/* [11]QM: Wifi Closed, BT bypass */
-			<&qm42195 &qm45197>;		/* [12]QM: Wifi Closed, BT ePA/eLNA */
+			<&qm42195 &qm45197>,		/* [12]QM: Wifi Closed, BT ePA/eLNA */
+			<&qm42195 &nofem>;		/* [13]QM/A bnad no FEM: Wifi Closed, BT ePA/eLNA */
 
 		wifi {
 			flags-1 {
@@ -475,6 +476,9 @@ androidboot.hardware=mt6895";
 				bypass;
 			};
 			flags-12 {
+				epa_elna;
+			};
+			flags-13 {
 				epa_elna;
 			};
 		};
@@ -677,7 +681,7 @@ androidboot.hardware=mt6895";
 /* usb typec mux end */
 
 &pdc {
-	pd_vbus_upper_bound = <12000000>;
+	pd_vbus_upper_bound = <9000000>;
 };
 
 &mmlsys_config {

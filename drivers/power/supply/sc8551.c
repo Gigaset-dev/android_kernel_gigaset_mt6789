@@ -26,10 +26,11 @@
 #include <linux/bitops.h>
 #include <linux/math64.h>
 
+#include "charger_class.h"
+
 #include "sc8551_reg.h"
 
-
-typedef enum {
+enum SC8551_ADC_CH{
     ADC_IBUS,
     ADC_VBUS,
     ADC_VAC,
@@ -40,7 +41,7 @@ typedef enum {
     ADC_RSV1,
     ADC_TDIE,
     ADC_MAX_NUM,
-}ADC_CH;
+};
 
 #define SC8551_ROLE_STANDALONE  0
 #define SC8551_ROLE_SLAVE       1
@@ -56,6 +57,16 @@ static int sc8551_mode_data[] = {
     [SC8551_STDALONE] = SC8551_STDALONE,
     [SC8551_MASTER] = SC8551_ROLE_MASTER,
     [SC8551_SLAVE] = SC8551_ROLE_SLAVE,
+};
+
+static const u32 sc8551_adc_accuracy_tbl[ADC_MAX_NUM] = {
+	150000,	/* IBUS */
+	35000,	/* VBUS */
+	35000,	/* VAC */
+	20000,	/* VOUT */
+	20000,	/* VBAT */
+	200000,	/* IBAT */
+	4,	/* TDIE */
 };
 
 #define sc_err(fmt, ...)								\
@@ -93,6 +104,8 @@ do {											\
 /*end*/
 
 struct sc8551_cfg {
+    const char *chg_name;
+
     bool bat_ovp_disable;
     bool bat_ocp_disable;
 
@@ -164,9 +177,12 @@ struct sc8551 {
 
     struct dentry *debug_root;
 
+    struct charger_properties chg_prop;
+    struct charger_device *chg_dev;
     struct power_supply_desc psy_desc;
     struct power_supply_config psy_cfg;
     struct power_supply *fc2_psy;
+	struct power_supply *cw_bat;
 };
 
 /************************************************************************/
@@ -779,6 +795,11 @@ static int sc8551_parse_dt(struct sc8551 *sc, struct device *dev)
     if (!sc->cfg)
         return -ENOMEM;
 
+    if (of_property_read_string(np, "chg_name", &sc->cfg->chg_name) < 0) {
+        sc_err("%s no chg name, use default\n", __func__);
+        sc->cfg->chg_name = "primary_dvchg";
+    }
+
     sc->cfg->bat_ovp_disable = of_property_read_bool(np,
             "sc,sc8551,bat-ovp-disable");
     sc->cfg->bat_ocp_disable = of_property_read_bool(np,
@@ -877,7 +898,9 @@ static int sc8551_init_protection(struct sc8551 *sc)
 
 static int sc8551_init_adc(struct sc8551 *sc)
 {
-
+	
+	pr_err("gezi %s----%d\n",__func__,__LINE__);
+	
     sc8551_set_adc_scanrate(sc, false);
     sc8551_set_adc_scan(sc, ADC_IBUS, true);
     sc8551_set_adc_scan(sc, ADC_VBUS, true);
@@ -927,6 +950,184 @@ static int sc8551_init_device(struct sc8551 *sc)
     return 0;
 }
 
+/***********************MTK CHARGER OPS API************************/
+
+static int sc8551_enable_chg(struct charger_device *chg_dev, bool en)
+{
+    struct sc8551 *sc = charger_get_data(chg_dev);
+
+    sc_info("%s: %s\n", __func__, en ? "enable" : "disable");
+
+    return sc8551_enable_charge(sc, !!en);
+}
+
+static int sc8551_is_chg_enabled(struct charger_device *chg_dev, bool *en)
+{
+    struct sc8551 *sc = charger_get_data(chg_dev);
+
+    return sc8551_check_charge_enabled(sc, en);
+}
+
+static inline enum SC8551_ADC_CH to_sc8551_adc(enum adc_channel chan)
+{
+	switch (chan) {
+	case ADC_CHANNEL_VBUS:
+		return ADC_VBUS;
+	case ADC_CHANNEL_VBAT:
+		return ADC_VBAT;
+	case ADC_CHANNEL_IBUS:
+		return ADC_IBUS;
+	case ADC_CHANNEL_IBAT:
+		return ADC_IBAT;
+	case ADC_CHANNEL_TEMP_JC:
+		return ADC_TDIE;
+	case ADC_CHANNEL_VOUT:
+		return ADC_VOUT;
+	default:
+		break;
+	}
+	return ADC_MAX_NUM;
+}
+
+static int sc8551_get_adc(struct charger_device *chg_dev, enum adc_channel chan,
+			  int *min, int *max)
+{
+    int ret;
+    struct sc8551 *sc = charger_get_data(chg_dev);
+    enum SC8551_ADC_CH _chan = to_sc8551_adc(chan);
+
+    if (_chan == ADC_MAX_NUM)
+        return -EINVAL;
+    
+    ret = sc8551_get_adc_data(sc, _chan, max);
+    if (ret < 0)
+        return ret;
+    
+    if (min != max)
+        *min = *max;
+
+    return ret;
+}
+
+static int sc8551_set_vbusovp(struct charger_device *chg_dev, u32 uV)
+{
+	struct sc8551 *sc = charger_get_data(chg_dev);
+
+    sc_info("%s: %d uV\n", __func__, uV)
+
+    return sc8551_set_busovp_th(sc, uV / 1000);
+}
+
+static int sc8551_set_ibusocp(struct charger_device *chg_dev, u32 uA)
+{
+	struct sc8551 *sc = charger_get_data(chg_dev);
+
+    sc_info("%s: %d uA\n", __func__, uA)
+
+    return sc8551_set_busocp_th(sc, uA / 1000);
+}
+
+static int sc8551_set_vbatovp(struct charger_device *chg_dev, u32 uV)
+{
+	struct sc8551 *sc = charger_get_data(chg_dev);
+
+    sc_info("%s: %d uV\n", __func__, uV)
+
+    return sc8551_set_batovp_th(sc, uV / 1000);
+}
+
+static int sc8551_set_ibatocp(struct charger_device *chg_dev, u32 uA)
+{
+	struct sc8551 *sc = charger_get_data(chg_dev);
+
+    sc_info("%s: %d uA\n", __func__, uA)
+
+    return sc8551_set_batocp_th(sc, uA / 1000);
+}
+
+static int sc8551_set_vbatovp_alarm(struct charger_device *chg_dev, u32 uV)
+{
+    return 0;
+}
+
+static int sc8551_reset_vbatovp_alarm(struct charger_device *chg_dev)
+{
+    return 0;
+}
+
+static int sc8551_set_vbusovp_alarm(struct charger_device *chg_dev, u32 uV)
+{
+    return 0;
+}
+
+static int sc8551_reset_vbusovp_alarm(struct charger_device *chg_dev)
+{
+    return 0;
+}
+
+static int sc8551_init_chip(struct charger_device *chg_dev)
+{
+    struct sc8551 *sc = charger_get_data(chg_dev);
+	
+	pr_err("gezi %s----%d\n",__func__,__LINE__);
+
+    return sc8551_init_device(sc);
+}
+
+static int sc8551_is_vbuslowerr(struct charger_device *chg_dev, bool *err)
+{
+    int ret;
+    struct sc8551 *sc = charger_get_data(chg_dev);
+
+    ret = sc8551_check_vbus_error_status(sc);
+    if (ret < 0)
+        return ret;
+    
+    return ret;
+}
+
+static int sc8551_get_adc_accuracy(struct charger_device *chg_dev,
+				   enum adc_channel chan, int *min, int *max)
+{
+    enum SC8551_ADC_CH _chan = to_sc8551_adc(chan);
+
+    if (_chan == ADC_MAX_NUM)
+        return -EINVAL;
+    
+    *min = *max = sc8551_adc_accuracy_tbl[_chan];
+    return 0;
+}
+
+static const struct charger_ops sc8551_chg_ops = {
+	.enable = sc8551_enable_chg,
+	.is_enabled = sc8551_is_chg_enabled,
+	.get_adc = sc8551_get_adc,
+	.set_vbusovp = sc8551_set_vbusovp,
+	.set_ibusocp = sc8551_set_ibusocp,
+	.set_vbatovp = sc8551_set_vbatovp,
+	.set_ibatocp = sc8551_set_ibatocp,
+	.set_vbatovp_alarm = sc8551_set_vbatovp_alarm,
+	.reset_vbatovp_alarm = sc8551_reset_vbatovp_alarm,
+	.set_vbusovp_alarm = sc8551_set_vbusovp_alarm,
+	.reset_vbusovp_alarm = sc8551_reset_vbusovp_alarm,
+	.init_chip = sc8551_init_chip,
+	.is_vbuslowerr = sc8551_is_vbuslowerr,
+	.get_adc_accuracy = sc8551_get_adc_accuracy,
+};
+
+static int sc8551_register_chgdev(struct sc8551 *sc)
+{
+    sc_info("%s: chg name : %s\n", __func__, sc->cfg->chg_name);
+
+	sc->chg_prop.alias_name = sc->cfg->chg_name;
+	sc->chg_dev = charger_device_register(sc->cfg->chg_name, sc->dev,
+						sc, &sc8551_chg_ops,
+						&sc->chg_prop);
+	if (!sc->chg_dev)
+		return -EINVAL;
+	return 0;
+}
+//EXPORT_SYMBOL(sc8551_register_chgdev);
 
 static int sc8551_set_present(struct sc8551 *sc, bool present)
 {
@@ -1114,6 +1315,11 @@ static int sc8551_psy_register(struct sc8551 *sc)
         sc_err("failed to register fc2_psy\n");
         return PTR_ERR(sc->fc2_psy);
     }
+	
+	sc->cw_bat = power_supply_get_by_name("bms");
+	if(!sc->cw_bat){
+		sc_err("gezi failed to get cw_bat\n");
+	}
 
     sc_info("%s power supply register successfully\n", sc->psy_desc.name);
 
@@ -1359,8 +1565,11 @@ static int sc8551_charger_probe(struct i2c_client *client,
     }
 
     ret = sc8551_psy_register(sc);
-    if (ret)
+    if (ret){
         goto err_2;
+	}
+	
+	sc8551_register_chgdev(sc);
 
     ret = sc8551_irq_register(sc);
     if (ret)

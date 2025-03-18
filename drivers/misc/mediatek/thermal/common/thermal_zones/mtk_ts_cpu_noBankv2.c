@@ -24,6 +24,8 @@
 #include "mach/mtk_thermal.h"
 #include "mtk_thermal_timer.h"
 #include <mtk_ts_setting.h>
+#include "gpu_misc.h"
+#include <gpufreq_v2.h>
 
 #if IS_ENABLED(CONFIG_MTK_CLKMGR)
 #include <mach/mtk_clkmgr.h>
@@ -229,6 +231,7 @@ struct regulator *vcore_reg_id;
 static int tscpu_thermal_probe(struct platform_device *dev);
 static int tscpu_register_thermal(void);
 static void tscpu_unregister_thermal(void);
+static int get_gpu_power_info(void);
 
 
 #if THERMAL_DRV_UPDATE_TEMP_DIRECT_TO_MET
@@ -374,39 +377,6 @@ void set_taklking_flag(bool flag)
 	talking_flag = flag;
 	tscpu_printk("talking_flag=%d\n", talking_flag);
 }
-
-int mtk_gpufreq_register(struct mt_gpufreq_power_table_info *freqs, int num)
-{
-	int i = 0;
-
-	tscpu_dprintk("%s\n", __func__);
-
-	mtk_gpu_power =
-		kzalloc((num) *
-			sizeof(struct mt_gpufreq_power_table_info), GFP_KERNEL);
-
-	if (mtk_gpu_power == NULL)
-		return -ENOMEM;
-
-	for (i = 0; i < num; i++) {
-		mtk_gpu_power[i].gpufreq_khz = freqs[i].gpufreq_khz;
-		mtk_gpu_power[i].gpufreq_power = freqs[i].gpufreq_power;
-
-		tscpu_dprintk("[%d].gpufreq_khz=%u, .gpufreq_power=%u\n",
-			i, freqs[i].gpufreq_khz, freqs[i].gpufreq_power);
-	}
-
-	gpu_max_opp = mt_gpufreq_get_seg_max_opp_index();
-	Num_of_GPU_OPP = gpu_max_opp + mt_gpufreq_get_dvfs_table_num();
-	/* error check */
-	if (gpu_max_opp >= num || Num_of_GPU_OPP > num || !Num_of_GPU_OPP) {
-		gpu_max_opp = 0;
-		Num_of_GPU_OPP = num;
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL(mtk_gpufreq_register);
 
 static int tscpu_bind
 (struct thermal_zone_device *thermal, struct thermal_cooling_device *cdev)
@@ -1236,7 +1206,10 @@ static ssize_t tscpu_write
 		/* avoid thermal reboot after unbinding coolers
 		 * during HT stress
 		 */
-
+#if IS_ENABLED(CONFIG_MTK_PLAT_POWER_6893)
+		if (tscpu_g_curr_temp > 85000)
+			apthermolmt_set_general_cpu_power_limit(500);
+#endif
 		down(&sem_mutex);
 		tscpu_dprintk("%s tscpu_unregister_thermal\n", __func__);
 		tscpu_unregister_thermal();
@@ -1420,7 +1393,9 @@ static ssize_t tscpu_write
 		tscpu_dprintk("%s tscpu_register_thermal\n", __func__);
 		tscpu_register_thermal();
 		up(&sem_mutex);
-
+#if IS_ENABLED(CONFIG_MTK_PLAT_POWER_6893)
+		apthermolmt_set_general_cpu_power_limit(0);
+#endif
 		proc_write_flag = 1;
 		kfree(ptr_mtktscpu_data);
 		return count;
@@ -2089,6 +2064,7 @@ static int tscpu_read_ttpct(struct seq_file *m, void *v)
 	max_cpu_pwr = 3000;
 #endif
 	max_gpu_pwr = gpufreq_get_max_power(TARGET_DEFAULT) + 1;
+
 	cpu_power = apthermolmt_get_cpu_power_limit();
 	gpu_power = apthermolmt_get_gpu_power_limit();
 
@@ -2215,7 +2191,7 @@ int tscpu_is_temp_valid(void)
 
 	return is_valid;
 }
-
+EXPORT_SYMBOL(tscpu_is_temp_valid);
 
 
 void tscpu_update_tempinfo(void)
@@ -2580,6 +2556,12 @@ static int tscpu_thermal_probe(struct platform_device *dev)
 #endif
 
 	tscpu_thermal_clock_on();
+
+	/* get gpufreq info*/
+	err = get_gpu_power_info();
+	if (err)
+		tscpu_printk("cannot get gpu power table\n");
+
 	init_thermal(dev);
 #ifdef ATM_USES_PPM
 	mt_ppm_thermal_get_cpu_cluster_temp_cb(
@@ -2683,6 +2665,45 @@ static int tscpu_thermal_probe(struct platform_device *dev)
 	tscpu_create_fs();
 
 	set_tscpu_init_done(1);
+
+	return 0;
+}
+static int get_gpu_power_info(void)
+{
+	int num, i = 0;
+	struct mt_gpufreq_power_table_info *freqs;
+
+	tscpu_dprintk("%s\n", __func__);
+
+	num = mt_gpufreq_get_power_table_num();
+	freqs = mt_gpufreq_get_power_table();
+
+	if (freqs == NULL)
+		return -EPROBE_DEFER;
+
+	mtk_gpu_power =
+		kzalloc((num) *
+			sizeof(struct mt_gpufreq_power_table_info), GFP_KERNEL);
+
+	if (mtk_gpu_power == NULL)
+		return -ENOMEM;
+
+	for (i = 0; i < num; i++) {
+		mtk_gpu_power[i].gpufreq_khz = freqs[i].gpufreq_khz;
+		mtk_gpu_power[i].gpufreq_power = freqs[i].gpufreq_power;
+
+		tscpu_dprintk("[%d].gpufreq_khz=%u, .gpufreq_power=%u\n",
+			i, freqs[i].gpufreq_khz, freqs[i].gpufreq_power);
+	}
+
+	gpu_max_opp = mt_gpufreq_get_seg_max_opp_index();
+	Num_of_GPU_OPP = gpu_max_opp + mt_gpufreq_get_dvfs_table_num();
+
+	/* error check */
+	if (gpu_max_opp >= num || Num_of_GPU_OPP > num || !Num_of_GPU_OPP) {
+		gpu_max_opp = 0;
+		Num_of_GPU_OPP = num;
+	}
 
 	return 0;
 }

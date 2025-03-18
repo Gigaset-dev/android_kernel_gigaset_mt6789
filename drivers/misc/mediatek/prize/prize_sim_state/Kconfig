@@ -1,0 +1,8 @@
+config PRIZE_SIM_STATE
+        tristate "pri sim state config"
+        default n
+        help
+          Say Y here if you have a pri sim state config and want to enable
+          support for the built-in pri sim state.
+          If unsure, say N.
+

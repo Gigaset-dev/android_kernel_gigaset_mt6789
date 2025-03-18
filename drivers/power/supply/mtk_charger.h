@@ -176,6 +176,7 @@ struct charger_custom_data {
 	int max_charger_voltage;
 	int max_charger_voltage_setting;
 	int min_charger_voltage;
+	int vbus_sw_ovp_voltage;
 
 	int usb_charger_current;
 	int ac_charger_current;
@@ -400,6 +401,7 @@ struct mtk_charger {
 #endif
 	//enum sw_chg_state wireless_chg_state;
 	//prize end
+	int pre_battery_ntc;// drv add by liuruiqian
 };
 
 static inline int mtk_chg_alg_notify_call(struct mtk_charger *info,

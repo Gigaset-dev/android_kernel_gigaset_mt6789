@@ -1,0 +1,158 @@
+/*
+ * Copyright (c) 2019 MediaTek Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+/* TTM GPIO standardization */
+&pio {
+//53
+	uhf_pins_ttm_gpio1_funen0: ttm@0 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO53__FUNC_GPIO53>;
+			slew-rate = <1>;
+			output-low;
+		};
+	};
+	uhf_pins_ttm_gpio1_funen1: ttm@1 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO53__FUNC_GPIO53>;
+			slew-rate = <1>;
+			output-high;
+		};
+	};
+//66
+	uhf_pins_ttm_gpio2_funen0: ttm@2 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO54__FUNC_GPIO54>;
+			slew-rate = <1>;
+			output-low;
+		};
+	};
+	uhf_pins_ttm_gpio2_funen1: ttm@3 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO54__FUNC_GPIO54>;
+			slew-rate = <1>;
+			output-high;
+		};
+	};
+//67
+	uhf_pins_ttm_gpio3_funen0: ttm@4 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO55__FUNC_GPIO55>;
+			slew-rate = <1>;
+			output-low;
+		};
+	};
+	uhf_pins_ttm_gpio3_funen1: ttm@5 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO55__FUNC_GPIO55>;
+			slew-rate = <1>;
+			output-high;
+		};
+	};
+//107
+	uhf_pins_ttm_gpio4_funen0: ttm@6 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO64__FUNC_GPIO64>;
+			slew-rate = <1>;
+			output-low;
+		};
+	};
+	uhf_pins_ttm_gpio4_funen1: ttm@7 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO64__FUNC_GPIO64>;
+			slew-rate = <1>;
+			output-high;
+		};
+	};
+//106
+	uhf_pins_ttm_gpio5_funen0: ttm@8 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO65__FUNC_GPIO65>;
+			slew-rate = <1>;
+			output-low;
+		};
+	};
+	uhf_pins_ttm_gpio5_funen1: ttm@9 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO65__FUNC_GPIO65>;
+			slew-rate = <1>;
+			output-high;
+		};
+	};
+//52
+	uhf_pins_ttm_rst_funen0: ttm@10 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO16__FUNC_GPIO16>;
+			slew-rate = <1>;
+			output-low;
+		};
+	};
+	uhf_pins_ttm_rst_funen1: ttm@11 {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO16__FUNC_GPIO16>;
+			slew-rate = <1>;
+			output-high;
+		};
+	};
+//79
+//	uhf_pins_ttm_vdd3_flash_funen0: ttm@12 {
+//		pins_cmd_dat {
+//			pinmux = <PINMUX_GPIO79__FUNC_GPIO79>;
+//			slew-rate = <1>;
+//			output-low;
+//		};
+//	};
+//	uhf_pins_ttm_vdd3_flash_funen1: ttm@13 {
+//		pins_cmd_dat {
+//			pinmux = <PINMUX_GPIO79__FUNC_GPIO79>;
+//			slew-rate = <1>;
+//			output-high;
+//		};
+//	};
+	
+	uhf_pins_ttm_gpio_default: ttmdefault {
+	};
+};
+&ttm {
+	pinctrl-names = "ttm_gpio_default",
+			"ttm_enable1_gpio0", "ttm_enable1_gpio1",
+			"ttm_enable2_gpio0", "ttm_enable2_gpio1",
+			"ttm_enable3_gpio0", "ttm_enable3_gpio1",
+			"ttm_enable4_gpio0", "ttm_enable4_gpio1",
+			"ttm_enable5_gpio0", "ttm_enable5_gpio1",
+			"ttm_rst_gpio0", "ttm_rst_gpio1";
+		//	"ttm_vdd3_flash_gpio0", "ttm_vdd3_flash_gpio1";
+	pinctrl-0 = <&uhf_pins_ttm_gpio_default>;
+	pinctrl-1 = <&uhf_pins_ttm_gpio1_funen0>;
+	pinctrl-2 = <&uhf_pins_ttm_gpio1_funen1>;
+	pinctrl-3 = <&uhf_pins_ttm_gpio2_funen0>;
+	pinctrl-4 = <&uhf_pins_ttm_gpio2_funen1>;
+	pinctrl-5 = <&uhf_pins_ttm_gpio3_funen0>;
+	pinctrl-6 = <&uhf_pins_ttm_gpio3_funen1>;
+	pinctrl-7 = <&uhf_pins_ttm_gpio4_funen0>;
+	pinctrl-8 = <&uhf_pins_ttm_gpio4_funen1>;
+	pinctrl-9 = <&uhf_pins_ttm_gpio5_funen0>;
+	pinctrl-10 = <&uhf_pins_ttm_gpio5_funen1>;
+	pinctrl-11 = <&uhf_pins_ttm_rst_funen0>;
+	pinctrl-12 = <&uhf_pins_ttm_rst_funen1>;
+	//pinctrl-13 = <&uhf_pins_ttm_vdd3_flash_funen0>;
+	//pinctrl-14 = <&uhf_pins_ttm_vdd3_flash_funen1>;
+	gpio_enable1_status = <&pio 53 0>;
+	gpio_enable2_status = <&pio 54 0>;
+	gpio_enable3_status = <&pio 55 0>;
+	gpio_enable4_status = <&pio 64 0>;
+	gpio_enable5_status = <&pio 65 0>;
+	gpio_rst_status = <&pio 16 0>;
+	//gpio_vdd3_flash_status = <&pio 182 0>;
+	
+	status = "okay";
+};
+/* TTM GPIO end */

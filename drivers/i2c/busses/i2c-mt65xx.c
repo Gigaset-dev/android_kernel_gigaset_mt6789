@@ -89,10 +89,12 @@
 #define I2C_CONTROL_DIR_CHANGE          (0x1 << 4)
 #define I2C_CONTROL_ACKERR_DET_EN       (0x1 << 5)
 #define I2C_CONTROL_TRANSFER_LEN_CHANGE (0x1 << 6)
+#define I2C_CONTROL_IRQ_SEL		(0x1 << 7)
 #define I2C_CONTROL_DMAACK_EN           (0x1 << 8)
 #define I2C_CONTROL_ASYNC_MODE          (0x1 << 9)
 #define I2C_CONTROL_WRAPPER             (0x1 << 0)
-
+#define I2C_HS_HOLD_TIME                (0x1 << 2)
+#define I2C_HS_HOLD_SEL                 (0x1 << 15)
 #define I2C_OFFSET_SCP			0x200
 #define I2C_CCU_INTR_EN         0x2
 #define I2C_MCU_INTR_EN         0x1
@@ -300,6 +302,8 @@ struct mtk_i2c {
 	unsigned char auto_restart;
 	bool ignore_restart_irq;
 	bool clk_div_ctrl;
+	bool ctrl_irq_sel;
+	bool ctrl_data_hold;
 	struct mtk_i2c_ac_timing ac_timing;
 	const struct mtk_i2c_compatible *dev_comp;
 	struct pm_qos_request i2c_qos_request;//prize add by dengzhiyuan 20230801
@@ -738,6 +742,10 @@ static void mtk_i2c_init_hw(struct mtk_i2c *i2c)
 		if (i2c->dev_comp->ltiming_adjust) {
 			mtk_i2c_writew(i2c, i2c->ac_timing.htiming,
 				       OFFSET_TIMING);
+			if ((i2c->speed_hz > I2C_MAX_FAST_MODE_PLUS_FREQ) && (i2c->ctrl_data_hold == true)){
+				i2c->ac_timing.hs |= I2C_HS_HOLD_TIME;
+				i2c->ac_timing.ltiming |= I2C_HS_HOLD_SEL;
+			}
 			mtk_i2c_writew(i2c, i2c->ac_timing.hs, OFFSET_HS);
 			mtk_i2c_writew(i2c, i2c->ac_timing.ltiming,
 				       OFFSET_LTIMING);
@@ -762,6 +770,9 @@ static void mtk_i2c_init_hw(struct mtk_i2c *i2c)
 		      I2C_CONTROL_CLK_EXT_EN | I2C_CONTROL_DMA_EN;
 	if (i2c->dev_comp->dma_sync)
 		control_reg |= I2C_CONTROL_DMAACK_EN | I2C_CONTROL_ASYNC_MODE;
+
+	if (i2c->ctrl_irq_sel == true)
+		control_reg |= I2C_CONTROL_IRQ_SEL;
 
 	mtk_i2c_writew(i2c, control_reg, OFFSET_CONTROL);
 	mtk_i2c_writew(i2c, I2C_DELAY_LEN, OFFSET_DELAY_LEN);
@@ -1411,7 +1422,7 @@ static int mtk_i2c_do_transfer(struct mtk_i2c *i2c, struct i2c_msg *msgs,
 
 	if (ret == 0) {
 		u16 start_reg = mtk_i2c_readw(i2c, OFFSET_START);
-		dev_dbg(i2c->dev, "addr: %x, transfer timeout\n", msgs->addr);
+		dev_info(i2c->dev, "addr: %x, transfer timeout\n", msgs->addr);
 		mtk_i2c_dump_reg(i2c);
 		if (i2c->ch_offset_i2c) {
 			mtk_i2c_writew(i2c, I2C_FIFO_ADDR_CLR_MCH | I2C_FIFO_ADDR_CLR,
@@ -1422,18 +1433,18 @@ static int mtk_i2c_do_transfer(struct mtk_i2c *i2c, struct i2c_msg *msgs,
 		mtk_i2c_init_hw(i2c);
 		if ((i2c->ch_offset_i2c) && (start_reg & I2C_RESUME_ARBIT)) {
 			mtk_i2c_writew_shadow(i2c, I2C_RESUME_ARBIT, OFFSET_START);
-			dev_dbg(i2c->dev, "bus channel transferred\n");
+			dev_info(i2c->dev, "bus channel transferred\n");
 		}
 
 		return -ETIMEDOUT;
 	}
 
 	if (i2c->irq_stat & (I2C_HS_NACKERR | I2C_ACKERR)) {
-		dev_dbg(i2c->dev, "addr: %x, transfer ACK error\n", msgs->addr);
+		dev_info(i2c->dev, "addr: %x, transfer ACK error\n", msgs->addr);
 		mtk_i2c_init_hw(i2c);
 		if (i2c->ch_offset_i2c) {
 			mtk_i2c_writew_shadow(i2c, I2C_RESUME_ARBIT, OFFSET_START);
-			dev_dbg(i2c->dev, "bus channel transferred\n");
+			dev_info(i2c->dev, "bus channel transferred\n");
 		}
 		return -ENXIO;
 	}
@@ -1629,12 +1640,16 @@ static int mtk_i2c_parse_dt(struct device_node *np, struct mtk_i2c *i2c)
 	of_property_read_u32(np, "ch_offset_dma", &i2c->ch_offset_dma);
 	of_property_read_u32(np, "aed", &i2c->aed);
 	i2c->clk_div_ctrl = of_property_read_bool(np, "mediatek,clk_div_ctrl");
-	dev_dbg(i2c->dev, "clk_src=%d,ch_offset_i2c=0x%x, ch_offset_dma=0x%x, aed=0x%x, clk_div_ctrl=%d\n",
-			i2c->clk_src_in_hz, i2c->ch_offset_i2c, i2c->ch_offset_dma, i2c->aed, i2c->clk_div_ctrl);
+	i2c->ctrl_irq_sel = of_property_read_bool(np, "mediatek,control_irq_sel");
+	dev_info(i2c->dev, "i2c dts parameter parse:\n"
+		"clk_src=%d,ch_offset_i2c=0x%x, ch_offset_dma=0x%x,\n"
+		"aed=0x%x, clk_div_ctrl=%d, control_irq_sel=%d\n",
+		i2c->clk_src_in_hz, i2c->ch_offset_i2c, i2c->ch_offset_dma,
+		i2c->aed, i2c->clk_div_ctrl, i2c->ctrl_irq_sel);
 	i2c->have_pmic = of_property_read_bool(np, "mediatek,have-pmic");
 	i2c->use_push_pull =
 		of_property_read_bool(np, "mediatek,use-push-pull");
-
+	i2c->ctrl_data_hold = of_property_read_bool(np, "mediatek,data_hold_time");
 	return 0;
 }
 

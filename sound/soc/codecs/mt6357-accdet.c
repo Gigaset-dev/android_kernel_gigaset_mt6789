@@ -167,6 +167,8 @@ static bool dis_micbias_done;
 static char accdet_log_buf[1280];
 static bool debug_thread_en;
 static bool dump_reg;
+static atomic_t accdet_init_done = ATOMIC_INIT(0);
+static struct wait_queue_head waitq;
 static struct task_struct *thread;
 
 static u32 button_press_debounce = 0x400;
@@ -178,6 +180,7 @@ static void accdet_init_debounce(void);
 static void config_eint_init_by_mode(void);
 static u32 get_triggered_eint(void);
 static void send_status_event(u32 cable_type, u32 status);
+static void accdet_queue_work(void);
 /* global function declaration */
 inline u32 accdet_read(u32 addr)
 {
@@ -1308,6 +1311,9 @@ static inline void check_cable_type(void)
 static void accdet_work_callback(struct work_struct *work)
 {
 	u32 pre_cable_type = accdet->cable_type;
+	if (!atomic_read(&accdet_init_done)) {
+		wait_event(waitq, atomic_read(&accdet_init_done));
+	}
 
 	__pm_stay_awake(accdet->wake_lock);
 	check_cable_type();
@@ -1985,6 +1991,9 @@ int mt6357_accdet_init(struct snd_soc_component *component,
 	snd_jack_set_key(accdet->jack.jack, SND_JACK_BTN_3, KEY_VOICECOMMAND);
 
 	snd_soc_component_set_jack(component, &accdet->jack, NULL);
+	atomic_set(&accdet_init_done, 1);
+	wake_up(&waitq);
+
 
 	return ret;
 }
@@ -2192,6 +2201,7 @@ static int accdet_probe(struct platform_device *pdev)
 	micbias_timer.expires = jiffies + MICBIAS_DISABLE_TIMER;
 	timer_setup(&accdet_init_timer, delay_init_timerhandler, 0);
 	accdet_init_timer.expires = jiffies + ACCDET_INIT_WAIT_TIMER;
+	init_waitqueue_head(&waitq);
 
 	/* Create workqueue */
 	accdet->delay_init_workqueue =

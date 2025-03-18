@@ -79,6 +79,9 @@ static struct stAF_OisPosInfo OisPosInfo;
 /* ------------------------- */
 
 static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
+//drv added ,wangmd, support DW9718SAF,20240705,start
+    {1, AFDRV_DW9718SAF, DW9718SAF_SetI2Cclient_Sub2, DW9718SAF_Ioctl_Sub2, DW9718SAF_Release_Sub2, DW9718SAF_GetFileName_Sub2,NULL},
+//drv added ,wangmd, support DW9718SAF,20240705,end
 };
 
 static struct stAF_DrvList *g_pstAF_CurDrv;

@@ -406,9 +406,9 @@
 	pinctrl-48 = <&camera_pins_cam2_mclk_6ma>;
 	pinctrl-49 = <&camera_pins_cam2_mclk_8ma>;
 	
-	cam0_enable_sensor = "s5kgm1st_mipi_raw";
+	cam0_enable_sensor = "s5kgm1st_mipi_raw ov50c40_mipi_raw";
 	cam1_enable_sensor = "ov16a1q_mipi_raw";
-	cam2_enable_sensor = "gc08a3wide_mipi_raw";
+	cam2_enable_sensor = "gc08a3wide_mipi_raw gc08a8wide_mipi_raw";
 	
 	cam0_pin_mclk = "mclk";
 	cam0_pin_rst = "gpio";

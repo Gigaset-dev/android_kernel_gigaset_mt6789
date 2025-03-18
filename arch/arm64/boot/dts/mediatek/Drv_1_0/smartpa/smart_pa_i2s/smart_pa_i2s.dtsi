@@ -3,3 +3,7 @@
 #if PRI_AW88394_SINGLE
 #include "./aw88394_single/aw88394_single.dtsi"
 #endif
+
+#if PRI_AW88394_DUAL
+#include "./aw88394_dual/aw88394_dual.dtsi"
+#endif

@@ -76,7 +76,7 @@ static enum IMGSENSOR_RETURN gpio_init(
 					pinctrl_lookup_state(
 						pgpio->ppinctrl,
 						str_pinctrl_name);
-			}	
+			}
 
 			if (pgpio->ppinctrl_state_cam[j][i] == NULL ||
 				IS_ERR(pgpio->ppinctrl_state_cam[j][i])) {

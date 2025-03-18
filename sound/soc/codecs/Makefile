@@ -8,6 +8,11 @@ ifneq ($(CONFIG_SND_SOC_MEDIATEK),)
 ccflags-y += -I$(srctree)/sound/soc/mediatek/common
 endif
 
+#prize added by huarui, headset support, 20190111-start
+ifeq ($(or $(CONFIG_PRIZE_TYPEC_ACCDET),$(CONFIG_PRIZE_TYPEC_SM_NKJ)), m)
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/tcpc/inc
+endif
+#prize added by huarui, headset support, 20190111-end
 snd-soc-88pm860x-objs := 88pm860x-codec.o
 snd-soc-ab8500-codec-objs := ab8500-codec.o
 snd-soc-ac97-objs := ac97.o
@@ -649,6 +654,9 @@ obj-$(CONFIG_SND_SOC_CS35L45)    += cs35l45/
 obj-$(CONFIG_SND_SOC_FS1599)	+= fs1599/
 #prize added by pengzhipeng, fs1599, 20221103-end
 
+#drv added by pengzhipeng, fsa4480, 20221103-start
+obj-$(CONFIG_SND_SOC_FSA4480_SWITCH)	+= fsa4480-i2c/
+#drv added by pengzhipeng, fsa4480, 20221103-end
 # Amp
 obj-$(CONFIG_SND_SOC_MAX9877)	+= snd-soc-max9877.o
 obj-$(CONFIG_SND_SOC_MAX98504)	+= snd-soc-max98504.o

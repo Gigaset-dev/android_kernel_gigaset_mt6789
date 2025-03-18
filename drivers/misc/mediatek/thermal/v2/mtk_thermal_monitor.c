@@ -32,7 +32,7 @@
 #include <mt-plat/mtk_thermal_platform.h>
 #include <linux/uidgid.h>
 #include <mtk_thermal_platform_init.h>
-
+#include <thermal_core.h>
 /* ************************************ */
 /* Definition */
 /* ************************************ */
@@ -1719,8 +1719,11 @@ static int mtk_cooling_wrapper_set_cur_state
 	struct thermal_cooling_device_ops *ops;
 	struct thermal_cooling_device_ops_extra *ops_ext;
 	struct mtk_thermal_cooler_data *mcdata;
-	int ret = 0;
+	struct thermal_instance *instance;
 	unsigned long cur_state = 0;
+	unsigned long max_state = 0;
+	int ret = 0;
+
 
 	mutex_lock(&MTM_COOLER_LOCK);
 
@@ -1733,7 +1736,8 @@ static int mtk_cooling_wrapper_set_cur_state
 		mutex_unlock(&MTM_COOLER_LOCK);
 		return -1;
 	}
-
+	if (ops->get_max_state)
+		ret = ops->get_max_state(cdev, &max_state);
 	if (ops->get_cur_state)
 		ret = ops->get_cur_state(cdev, &cur_state);
 
@@ -1753,7 +1757,14 @@ static int mtk_cooling_wrapper_set_cur_state
 			state = 0;
 		}
 	}
+	list_for_each_entry(instance, &cdev->thermal_instances, cdev_node) {
+		if (!strcmp(instance->cdev->type, cdev->type)) {
+			instance->initialized = false;
 
+			if (instance->target == THERMAL_NO_TARGET)
+				state = 0;
+		}
+	}
 
 	if (state == 0) {
 		int last_temp = 0;
@@ -1829,8 +1840,15 @@ static int mtk_cooling_wrapper_set_cur_state
 	THRML_STORAGE_LOG(THRML_LOGGER_MSG_COOL_STAE, set_cur_state,
 			mcdata->tz->type, mcdata->trip, cdev->type, state);
 
-	if (ops->set_cur_state)
-		ret = ops->set_cur_state(cdev, state);
+	if (ops->set_cur_state) {
+		if (state > max_state) {
+			THRML_ERROR_LOG("[.set_cur_state]E state is bigger than max_state.\n");
+			ops->set_cur_state(cdev, cur_state);
+			ret = -EINVAL;
+		} else {
+			ret = ops->set_cur_state(cdev, state);
+		}
+	}
 
 	if (ops_ext && ops_ext->set_cur_temp && mcdata->tz)
 		ops_ext->set_cur_temp(cdev, mcdata->tz->temperature);
@@ -2078,8 +2096,11 @@ static int  thermal_monitor_init(void)
 		mtk_cooler_atm_init();
 		mtk_cooler_dtm_init();
 		mtk_cooler_bcct_init();
+		mtk_cooler_bcct_2nd_init();
 		mtk_cooler_cam_init();
+#if IS_ENABLED(CONFIG_MTK_THERMAL_PA_VIA_ATCMD)
 		mtk_cooler_mutt_init();
+#endif
 		mtk_cooler_sysrst_init();
 		mtk_cooler_VR_FPS_init();
 		ta_init();
@@ -2112,8 +2133,11 @@ static void thermal_monitor_exit(void)
 	mtk_cooler_atm_exit();
 	mtk_cooler_dtm_exit();
 	mtk_cooler_bcct_exit();
+	mtk_cooler_bcct_2nd_exit();
 	mtk_cooler_cam_exit();
+#if IS_ENABLED(CONFIG_MTK_THERMAL_PA_VIA_ATCMD)
 	mtk_cooler_mutt_exit();
+#endif
 	mtk_cooler_sysrst_exit();
 	mtk_cooler_VR_FPS_exit();
 #if defined(LVTS_CPU_PM_NTFY_CALLBACK)

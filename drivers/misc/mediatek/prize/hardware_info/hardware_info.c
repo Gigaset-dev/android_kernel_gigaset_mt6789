@@ -30,6 +30,7 @@
 #include <drm/drm_panel.h>
 #include <linux/notifier.h>
 
+#include <linux/firmware.h>     // drv added by zhangxia for audio params verision,20240530
 //prize add by lipengpeng 20220708 start 
 
 #include "../../../../gpu/drm/mediatek/mediatek_v2/mtk_disp_notify.h"
@@ -66,6 +67,12 @@ struct tag_video_lfb {
 #endif
 
 struct class *hardware_info_class;
+/* drv added by zhangxia for audio params verision 20240530 start */
+static char *firmware_data = NULL;
+static struct delayed_work audio_firmware_delayed_work;
+static struct device *local_dev;
+static void firmware_loaded_callback(const struct firmware *fw, void *context);
+/* drv added by zhangxia for audio params verision 20240530 end */
 // prize add for tof info by zhuzhengjiang  20200521 start
 struct hardware_info current_tof_info =
 {
@@ -803,19 +810,60 @@ static void dev_get_current_flash_info(char *buf)
 	 len += (p - buf);  
 	 HW_PRINT("%s",buf);
 }*/
-//prize add by dengzhiyuan 20230727 start
+
+/* drv added by zhangxia for audio params verision 20240530 start */
+static void request_firmware_delayed(struct work_struct *work) {
+    int req_status = -1;
+
+    req_status = request_firmware_nowait(THIS_MODULE, true,
+							"AudioParamVersionInfo.txt", local_dev,
+							GFP_KERNEL, local_dev, firmware_loaded_callback);
+    if (req_status < 0) {
+		HW_PRINT("Failed to request firmware: %d\n", req_status);
+    }
+}
+static void firmware_loaded_callback(const struct firmware *fw, void *context) {
+	struct device *dev = context;
+
+    if (!fw) {
+        printk("Failed to load firmware\n");
+        return;
+    }
+
+    if (firmware_data) {
+        kfree(firmware_data);
+    }
+
+    firmware_data = devm_kzalloc(dev, fw->size + 1, GFP_KERNEL);
+    if (!firmware_data) {
+        printk("Failed to allocate memory for firmware data\n");
+        release_firmware(fw);
+        return;
+    }
+
+    strncpy(firmware_data, fw->data, fw->size);
+    release_firmware(fw);
+}
+/* drv added by zhangxia for audio params verision 20240530 end */
+
+/* drv modified by zhangxia for audio params verision 20240530 start */
 static void dev_get_AudioParam_version_info(char *buf)
 {
 
 	   char *p = buf;
-	   char databuf[100]={0};
-	   
-	   sprintf(databuf, "%s\n","chip:AW88394+MT6789\nproduct:GX4\nversion:GX4-T-V7-20230802\n");
-/*	   struct file *fp = NULL;
-	   mm_segment_t fs;
-	   loff_t pos;
-	   int ret = -1;
-	   
+	   char *databuf = firmware_data;
+	   if (!databuf) {
+			printk("Firmware data is not loaded\n");
+			return;
+	   }
+//	   struct file *fp = NULL;
+//	   mm_segment_t fs;
+//	   loff_t pos;
+//	   char databuf[100]={0};
+//	   int ret = -1;
+
+//	   sprintf(databuf, "%s\n","chip:MT6789+MT6366+FS1599N\nproduct:K70Pro\nversion:V1.0-U-K70Pro-20240515\n");
+/*
 	   HW_PRINT("hardware_info_store hello enter\n");
 	   fp = filp_open("/vendor/etc/audio_param/AudioParamVersionInfo.txt", O_RDONLY, 0664);
 	   if (IS_ERR(fp)){
@@ -836,7 +884,8 @@ static void dev_get_AudioParam_version_info(char *buf)
 	   len += (p - buf);
 	   HW_PRINT("%s",buf);
 }
-//prize add by dengzhiyuan 20230727 end
+/* drv modified by zhangxia for audio params verision 20240530 end */
+
 static ssize_t hardware_info_show(struct device *dev, struct device_attribute *attr,char *buf)
 {
 	len = 0;
@@ -1017,6 +1066,11 @@ static int __init hardware_info_dev_init(void) {
 	//}
 	
 //prize add by lipengpeng 20220708 end
+/* drv added by zhangxia for audio params verision 20240530 start */
+	local_dev = hardware_info_dev;
+	INIT_DELAYED_WORK(&audio_firmware_delayed_work, request_firmware_delayed);
+	schedule_delayed_work(&audio_firmware_delayed_work, msecs_to_jiffies(5000));
+/* drv added by zhangxia for audio params verision 20240530 end */
 
 	HW_PRINT("hardware_info initialized ok ");
 	return 0;
@@ -1025,6 +1079,7 @@ static int __init hardware_info_dev_init(void) {
 static void __exit hardware_info_dev_exit(void) 
 {
 	class_destroy(hardware_info_class);
+	cancel_delayed_work_sync(&audio_firmware_delayed_work);   // drv added by zhangxia for audio params verision 20240530
 }
 
 subsys_initcall_sync(hardware_info_dev_init);

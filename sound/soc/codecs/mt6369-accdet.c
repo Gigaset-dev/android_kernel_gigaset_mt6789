@@ -22,7 +22,9 @@
 
 #include "mt6369-accdet.h"
 #include "mt6369.h"
-
+#if IS_ENABLED(CONFIG_SND_SOC_FSA4480_SWITCH)
+#include "../../../../drivers/misc/mediatek/typec/tcpc/inc/tcpm.h"//drv Solve the problem that the headset is not recognized-pengzhipeng-20231107
+#endif
 /* global variables definition */
 #define REGISTER_VAL(x)	(x - 1)
 #define HAS_CAP(_c, _x)	(((_c) & (_x)) == (_x))
@@ -101,6 +103,12 @@ struct mt6369_accdet_data {
 	struct work_struct accdet_work;
 	struct workqueue_struct *accdet_workqueue;
 	/* when eint issued, queue work: eint_work */
+//drv Solve the problem that the headset is not recognized-pengzhipeng-20231107-start
+#if IS_ENABLED(CONFIG_SND_SOC_FSA4480_SWITCH)
+	struct tcpc_device *tcpc_dev;
+	struct notifier_block audio_nb;
+#endif
+//drv Solve the problem that the headset is not recognized-pengzhipeng-20231107-end
 	struct work_struct eint_work;
 	struct workqueue_struct *eint_workqueue;
 	u32 water_r;
@@ -1076,6 +1084,9 @@ static u32 adjust_eint_analog_setting(void)
 			/* enable RG_EINT0CONFIGACCDET */
 			accdet_update_bit(RG_EINT0CONFIGACCDET_ADDR,
 				RG_EINT0CONFIGACCDET_SFT);
+			/*select 500k, use internal resistor */
+			accdet_update_bit(RG_EINT0HIRENB_ADDR,
+				RG_EINT0HIRENB_SFT);
 		} else if (HAS_CAP(accdet->data->caps,
 				ACCDET_PMIC_EINT1)) {
 			/* enable RG_EINT1CONFIGACCDET */
@@ -2186,6 +2197,7 @@ static inline int ext_eint_setup(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct device_node *node = pdev->dev.of_node;
+	struct irq_data *irq_data;
 
 	if (!node)
 		return -ENODEV;
@@ -2202,7 +2214,9 @@ static inline int ext_eint_setup(struct platform_device *pdev)
 		ret = PTR_ERR(accdet->pins_eint);
 		return ret;
 	}
-	pinctrl_select_state(accdet->pinctrl, accdet->pins_eint);
+	ret = pinctrl_select_state(accdet->pinctrl, accdet->pins_eint);
+	if (ret < 0)
+		return ret;
 
 	accdet->gpiopin = of_get_named_gpio(node, "deb-gpios", 0);
 	if (!gpio_is_valid(accdet->gpiopin))
@@ -2221,7 +2235,11 @@ static inline int ext_eint_setup(struct platform_device *pdev)
 		return accdet->gpioirq;
 	}
 
-	accdet->accdet_eint_type = irqd_get_trigger_type(irq_get_irq_data(accdet->gpioirq));
+	irq_data = irq_get_irq_data(accdet->gpioirq);
+	if (!irq_data)
+		dev_info(&pdev->dev, "irq_data is null\n");
+	else
+		accdet->accdet_eint_type = irqd_get_trigger_type(irq_data);
 
 	/* Enable interrupt when acccet init done */
 	irq_set_status_flags(accdet->gpioirq, IRQ_NOAUTOEN);
@@ -2909,6 +2927,57 @@ int mt6369_accdet_init(struct snd_soc_component *component,
 }
 EXPORT_SYMBOL_GPL(mt6369_accdet_init);
 
+
+
+
+
+
+//drv Solve the problem that the headset is not recognized-pengzhipeng-20231107-start
+#if IS_ENABLED(CONFIG_SND_SOC_FSA4480_SWITCH)
+void accdet_eint_func_extern(int state)
+{
+	int ret = 0;
+
+	if (state == EINT_PLUG_OUT){	//OUT=0 IN=1
+		accdet->cur_eint_state = EINT_PLUG_OUT;
+		clear_accdet_eint(PMIC_EINT0);
+		clear_accdet_eint_check(PMIC_EINT0);
+		
+	}else{
+		accdet->cur_eint_state = EINT_PLUG_IN;
+		mod_timer(&micbias_timer, jiffies + MICBIAS_DISABLE_TIMER);
+	}
+
+	printk("pzp accdet %s(), cur_eint_state=%d\n", __func__, accdet->cur_eint_state);
+
+	ret = queue_work(accdet->eint_workqueue, &accdet->eint_work);
+	return;
+}
+
+static int audio_tcp_notifier_call(struct notifier_block *nb,
+					unsigned long event, void *data)
+{
+	struct tcp_notify *noti = data;
+
+	switch (event) {
+
+	case TCP_NOTIFY_TYPEC_STATE:
+		if (noti->typec_state.old_state == TYPEC_UNATTACHED && noti->typec_state.new_state == TYPEC_ATTACHED_AUDIO){
+			pr_info("%s audio accessory Plug in, pol = %d\n", __func__,	noti->typec_state.polarity);
+			accdet_eint_func_extern(EINT_PLUG_IN);
+
+		}else if(noti->typec_state.old_state == TYPEC_ATTACHED_AUDIO && noti->typec_state.new_state == TYPEC_UNATTACHED){
+			pr_info("%s audio accessory Plug out\n", __func__);
+			accdet_eint_func_extern(EINT_PLUG_OUT);
+		}
+		break;
+	default:
+		break;
+	};
+	return NOTIFY_OK;
+}
+#endif
+//drv Solve the problem that the headset is not recognized-pengzhipeng-20231107-end
 static int mt6369_accdet_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -3139,7 +3208,23 @@ static int mt6369_accdet_probe(struct platform_device *pdev)
 	}
 	atomic_set(&accdet_first, 1);
 	mod_timer(&accdet_init_timer, (jiffies + ACCDET_INIT_WAIT_TIMER));
+//drv Solve the problem that the headset is not recognized-pengzhipeng-20231107-start
+#if IS_ENABLED(CONFIG_SND_SOC_FSA4480_SWITCH)
+	accdet->tcpc_dev = tcpc_dev_get_by_name("type_c_port0");
+	if (!accdet->tcpc_dev) {
+		pr_notice("%s get tcpc device type_c_port0 fail\n", __func__);
+		//return -ENODEV;
+	}
 
+	accdet->audio_nb.notifier_call = audio_tcp_notifier_call;
+	accdet->audio_nb.priority = 0;
+	ret = register_tcp_dev_notifier(accdet->tcpc_dev, &accdet->audio_nb, TCP_NOTIFY_TYPEC_STATE);
+	if (ret < 0) {
+		pr_notice("%s: register tcpc notifer fail\n", __func__);
+		//return -EINVAL;
+	}
+#endif
+//drv Solve the problem that the headset is not recognized-pengzhipeng-20231107-end
 	return 0;
 
 err_create_attr:

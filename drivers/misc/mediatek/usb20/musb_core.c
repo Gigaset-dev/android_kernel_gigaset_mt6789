@@ -3104,7 +3104,7 @@ static void usb_spm_dpidle_request(int mode)
 static int usb_rdy;
 bool is_usb_rdy(void)
 {
-	if (mtk_musb->is_ready) {
+	if (mtk_musb->is_gadget_ready) {
 		usb_rdy = 1;
 		DBG(0, "set usb_rdy, wake up bat\n");
 	}
@@ -3185,6 +3185,7 @@ enum musb_uwk_vers {
 	MUSB_UWK_V2,      /* MT6789 */
 	MUSB_UWK_V3,      /* MT6768, MT6761*/
 	MUSB_UWK_V4,      /* MT6765 */
+	MUSB_UWK_V5,      /* MT6833 */
 };
 
 /* MT6855 */
@@ -3281,6 +3282,25 @@ static void mt_usb_wakeup(struct musb *musb, bool enable)
 			tmp |= USB2_CDDEBOUNCE(0x8) | USB2_CDEN;
 			regmap_write(pericfg, USB_WAKEUP_DEC_CON1_MT6765, tmp);
 			break;
+		case MUSB_UWK_V5:
+			if (pericfg == NULL || infracg == NULL)
+				return;
+			regmap_read(infracg, MISC_CONFIG, &tmp);
+			tmp |= USB_CD_CLR;
+			regmap_write(infracg, MISC_CONFIG, tmp);
+
+			mdelay(5);
+
+			regmap_read(pericfg, USB_WK_CTRL, &tmp);
+			tmp |= USB_CDDEBOUNCE(0x8) | USB_CDEN;
+			regmap_write(pericfg, USB_WK_CTRL, tmp);
+
+			mdelay(5);
+
+			regmap_read(infracg, MISC_CONFIG, &tmp);
+			tmp &= ~USB_CD_CLR;
+			regmap_write(infracg, MISC_CONFIG, tmp);
+			break;
 		default:
 			return;
 		}
@@ -3324,6 +3344,13 @@ static void mt_usb_wakeup(struct musb *musb, bool enable)
 				musb->is_active = 1;
 			}
 			break;
+		case MUSB_UWK_V5:
+			if (pericfg == NULL)
+				return;
+			regmap_read(pericfg, USB_WK_CTRL, &tmp);
+			tmp &= ~(USB_CDEN | USB_CDDEBOUNCE(0x8));
+			regmap_write(pericfg, USB_WK_CTRL, tmp);
+			break;
 		default:
 			return;
 		}
@@ -3357,6 +3384,8 @@ static int mt_usb_wakeup_init(struct musb *musb)
 			uwk_vers = 3;
 		else if (of_device_is_compatible(node, "mediatek,mt6765-usb20"))
 			uwk_vers = 4;
+		else if (of_device_is_compatible(node, "mediatek,mt6833-usb20"))
+			uwk_vers = 5;
 		else
 			return -EINVAL;
 		/* Add another platform with specific uwk_vers here  */
@@ -4635,8 +4664,14 @@ static int musb_probe(struct platform_device *pdev)
 
 #if IS_ENABLED(CONFIG_MTK_MUSB_QMU_SUPPORT)
 	isoc_ep_end_idx = 1;
-	isoc_ep_gpd_count = 248; /* 30 ms for HS, at most (30*8 + 1) */
-
+	//isoc_ep_gpd_count = 248; /* 30 ms for HS, at most (30*8 + 1) */
+	//add by huangjiwu for endoscope driver,20220720
+#if IS_ENABLED(CONFIG_PRIZE_TYPEC_SM_NKJ)
+		   isoc_ep_gpd_count = 950; /* 30 ms for HS, at most (30*8 + 1) */
+#else
+		   isoc_ep_gpd_count = 512; /* 30 ms for HS, at most (30*8 + 1) */
+#endif
+	//add by huangjiwu for endoscope driver,20220720
 	mtk_host_qmu_force_isoc_restart = 0;
 #endif
 #ifndef FPGA_PLATFORM

@@ -86,7 +86,7 @@
 
 #ifdef ENABLE_IOCV_ADJ
 #define IOCV_MAX_ADJ_LEVEL 		0x1F33
-#define IOCV_MIN_ADJ_LEVEL 		0x1D70
+#define IOCV_MIN_ADJ_LEVEL 		0x1B30
 #define IOCI_MAX_ADJ_LEVEL 		0x1000
 #define IOCI_MIN_ADJ_LEVEL 		0xCC
 #define IOCV_I_SLOPE 	   		100
@@ -2604,7 +2604,7 @@ static int fg_calculate_iocv(struct sm_fg_chip *sm)
 	int lb_i_p_v_min=0, lb_i_n_v_max=0, cb_i_p_v_min=0, cb_i_n_v_max=0;
 
 	u16 v_ret, i_ret = 0;
-	int ret=0;
+	int ret=0, i_ret_sign = 0;
 
 	u16 data = 0;
 
@@ -2668,20 +2668,24 @@ static int fg_calculate_iocv(struct sm_fg_chip *sm)
 
 		if((i_ret&0x4000) == 0x4000)
 		{
-			i_ret = -(i_ret&0x3FFF);
+			i_ret_sign = -(i_ret&0x3FFF);
+		}
+		else
+		{
+			i_ret_sign = i_ret;
 		}
 
 		lb_v_buffer[i-roop_start] = v_ret;
-		lb_i_buffer[i-roop_start] = i_ret;
+		lb_i_buffer[i-roop_start] = i_ret_sign;
 
 		if (i == roop_start)
 		{
 			v_max = v_ret;
 			v_min = v_ret;
 			v_sum = v_ret;
-			i_max = i_ret;
-			i_min = i_ret;
-			i_sum = i_ret;
+			i_max = i_ret_sign;
+			i_min = i_ret_sign;
+			i_sum = i_ret_sign;
 		}
 		else
 		{
@@ -2691,16 +2695,16 @@ static int fg_calculate_iocv(struct sm_fg_chip *sm)
 				v_min = v_ret;
 			v_sum = v_sum + v_ret;
 
-			if(i_ret > i_max)
-				i_max = i_ret;
-			else if(i_ret < i_min)
-				i_min = i_ret;
-			i_sum = i_sum + i_ret;
+			if(i_ret_sign > i_max)
+				i_max = i_ret_sign;
+			else if(i_ret_sign < i_min)
+				i_min = i_ret_sign;
+			i_sum = i_sum + i_ret_sign;
 		}
 
-		if(abs(i_ret) > i_vset_margin)
+		if(abs(i_ret_sign) > i_vset_margin)
 		{
-			if(i_ret > 0)
+			if(i_ret_sign > 0)
 			{
 				if(lb_i_p_v_min == 0)
 				{
@@ -2847,20 +2851,24 @@ static int fg_calculate_iocv(struct sm_fg_chip *sm)
 
 			if((i_ret&0x4000) == 0x4000)
 			{
-				i_ret = -(i_ret&0x3FFF);
+				i_ret_sign = -(i_ret&0x3FFF);
+			}
+			else
+			{
+				i_ret_sign = i_ret;
 			}
 
 			cb_v_buffer[i-roop_start] = v_ret;
-			cb_i_buffer[i-roop_start] = i_ret;
+			cb_i_buffer[i-roop_start] = i_ret_sign;
 
 			if (i == roop_start)
 			{
 				v_max = v_ret;
 				v_min = v_ret;
 				v_sum = v_ret;
-				i_max = i_ret;
-				i_min = i_ret;
-				i_sum = i_ret;
+				i_max = i_ret_sign;
+				i_min = i_ret_sign;
+				i_sum = i_ret_sign;
 			}
 			else
 			{
@@ -2870,16 +2878,16 @@ static int fg_calculate_iocv(struct sm_fg_chip *sm)
 					v_min = v_ret;
 				v_sum = v_sum + v_ret;
 
-				if(i_ret > i_max)
-					i_max = i_ret;
-				else if(i_ret < i_min)
-					i_min = i_ret;
-				i_sum = i_sum + i_ret;
+				if(i_ret_sign > i_max)
+					i_max = i_ret_sign;
+				else if(i_ret_sign < i_min)
+					i_min = i_ret_sign;
+				i_sum = i_sum + i_ret_sign;
 			}
 
-			if(abs(i_ret) > i_vset_margin)
+			if(abs(i_ret_sign) > i_vset_margin)
 			{
-				if(i_ret > 0)
+				if(i_ret_sign > 0)
 				{
 					if(cb_i_p_v_min == 0)
 					{
