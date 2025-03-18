@@ -108,28 +108,30 @@ void start_mcupm_ipi_recv_thread()
 	if (mtk_ipi_register_symbol) {
 		ret = mtk_ipi_register_symbol(mcupm_ipidev_symbol, CH_IPIR_C_MET, _met_ipi_cb,
 				NULL, (void *) &recv_buf);
+		if (ret) {
+			PR_BOOTMSG("mtk_ipi_register:%d failed:%d\n", CH_IPIR_C_MET, ret);
+			return;
+		} else {
+			PR_BOOTMSG("mtk_ipi_register CH_IPIR_C_MET success \n");
+		}
 	} else {
 		PR_BOOTMSG("[MET] [%s,%d] mtk_ipi_register is not linked!\n", __FILE__, __LINE__);
 		return;
-	}
-	if (ret) {
-		PR_BOOTMSG("mtk_ipi_register:%d failed:%d\n", CH_IPIR_C_MET, ret);
-	} else {
-		PR_BOOTMSG("mtk_ipi_register CH_IPIR_C_MET success \n");
 	}
 
 	// APSYS send ipi to Tinysys
 	if (mtk_ipi_register_symbol) {
 		ret = mtk_ipi_register_symbol(mcupm_ipidev_symbol, CH_IPIS_C_MET, NULL,
 				NULL, (void *) &ackdata);
+		if (ret) {
+			PR_BOOTMSG("mtk_ipi_register:%d failed:%d\n", CH_IPIS_C_MET, ret);
+			return;
+		} else {
+			PR_BOOTMSG("mtk_ipi_register CH_IPIS_C_MET success \n");
+		}
 	} else {
 		PR_BOOTMSG("[MET] [%s,%d] mtk_ipi_register is not linked!\n", __FILE__, __LINE__);
 		return;
-	}
-	if (ret) {
-		PR_BOOTMSG("mtk_ipi_register:%d failed:%d\n", CH_IPIS_C_MET, ret);
-	} else {
-		PR_BOOTMSG("mtk_ipi_register CH_IPIS_C_MET success \n");
 	}
 
 	if (mcupm_ipi_thread_started != 1) {
