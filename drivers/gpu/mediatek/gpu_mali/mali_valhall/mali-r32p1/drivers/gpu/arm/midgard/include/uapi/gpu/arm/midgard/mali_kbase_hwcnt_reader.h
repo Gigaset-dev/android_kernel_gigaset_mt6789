@@ -22,7 +22,7 @@
 #ifndef _UAPI_KBASE_HWCNT_READER_H_
 #define _UAPI_KBASE_HWCNT_READER_H_
 
-#include <stddef.h>
+#include <linux/stddef.h>
 #include <linux/types.h>
 
 /* The ids of ioctl commands. */

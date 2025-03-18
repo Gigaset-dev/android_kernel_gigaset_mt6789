@@ -222,7 +222,7 @@ static void kbase_csf_reset_end_hw_access(struct kbase_device *kbdev,
 #if IS_ENABLED(CONFIG_MALI_MTK_DEBUG)
 		ged_log_buf_print2(
 			kbdev->ged_log_buf_hnd_kbase, GED_LOG_ATTR_TIME,
-			"Reset failed to complete\n",
+			"Reset failed to complete,(allowing up to %d ms) \n",
 			RESET_TIMEOUT);
 #endif
 		atomic_set(&kbdev->csf.reset.state, KBASE_CSF_RESET_GPU_FAILED);

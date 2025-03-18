@@ -1701,7 +1701,7 @@ int kbase_gpu_munmap(struct kbase_context *kctx, struct kbase_va_region *reg)
 				}
 			}
 		}
-		/* Fall-through */
+		fallthrough;
 	default:
 		kbase_mem_phy_alloc_gpu_unmapped(reg->gpu_alloc);
 		break;
@@ -4699,9 +4699,12 @@ KERNEL_VERSION(4, 5, 0) > LINUX_VERSION_CODE
 #elif KERNEL_VERSION(5, 9, 0) > LINUX_VERSION_CODE
 	pinned_pages = get_user_pages_remote(NULL, mm, address, alloc->imported.user_buf.nr_pages,
 					     write ? FOLL_WRITE : 0, pages, NULL, NULL);
-#else
+#elif KERNEL_VERSION(6, 4, 0) > LINUX_VERSION_CODE
 	pinned_pages = pin_user_pages_remote(mm, address, alloc->imported.user_buf.nr_pages,
 					     write ? FOLL_WRITE : 0, pages, NULL, NULL);
+#else
+	pinned_pages = pin_user_pages_remote(mm, address, alloc->imported.user_buf.nr_pages,
+					     write ? FOLL_WRITE : 0, pages, NULL);
 #endif
 
 	if (pinned_pages <= 0)
@@ -5231,3 +5234,5 @@ void kbase_sticky_resource_term(struct kbase_context *kctx)
 		kbase_sticky_resource_release_force(kctx, walker, 0);
 	}
 }
+
+MODULE_IMPORT_NS(DMA_BUF);

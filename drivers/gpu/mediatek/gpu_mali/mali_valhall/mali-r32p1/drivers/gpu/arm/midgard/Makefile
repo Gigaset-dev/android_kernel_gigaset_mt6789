@@ -17,6 +17,13 @@
 # http://www.gnu.org/licenses/gpl-2.0.html.
 #
 #
+# Support GKI mixed build
+ifeq ($(DEVICE_MODULES_PATH),)
+DEVICE_MODULES_PATH = $(srctree)
+else
+LINUXINCLUDE := $(DEVCIE_MODULES_INCLUDE) $(LINUXINCLUDE)
+endif
+
 
 ifeq ($(BUILD_RULE),OOT)
 
@@ -25,6 +32,9 @@ ifeq ($(BUILD_RULE),OOT)
     MTK_PLATFORM := $(MTK_PLATFORM_VERSION)
     CONFIG_MALI_REAL_HW := y
     CONFIG_MALI_DEBUG := y
+    CONFIG_MALI_FENCE_DEBUG := y
+    CONFIG_MALI_MTK_FENCE_DEBUG := y
+    CONFIG_MALI_FENCE_DEBUG_EXTEND := y
     CONFIG_MALI_MIDGARD_DVFS := y
     CONFIG_MALI_DEVFREQ := y
     CONFIG_MALI_MTK_DEBUG := y
@@ -186,6 +196,12 @@ ifeq ($(CONFIG_MALI_FENCE_DEBUG), y)
     endif
 endif
 
+ifeq ($(CONFIG_MALI_FENCE_DEBUG_EXTEND), y)
+    ifneq ($(CONFIG_MALI_FENCE_DEBUG), y)
+        $(error CONFIG_MALI_FENCE_DEBUG_EXTEND depends on CONFIG_MALI_FENCE_DEBUG)
+    endif
+endif
+
 #
 # Configurations
 #
@@ -252,7 +268,7 @@ ccflags-y += \
     -DMALI_JIT_PRESSURE_LIMIT_BASE=$(MALI_JIT_PRESSURE_LIMIT_BASE) \
     -DMALI_INCREMENTAL_RENDERING=$(MALI_INCREMENTAL_RENDERING) \
     -DMALI_KBASE_BUILD \
-#    -DMALI_PLATFORM_DIR=$(MALI_PLATFORM_DIR)
+    -DMALI_PLATFORM_DIR=$(MALI_PLATFORM_DIR)
 
 
 ifeq ($(KBUILD_EXTMOD),)
@@ -264,8 +280,8 @@ else
 endif
 
 ccflags-y += \
-    -I$(srctree)/include/linux \
-    -I$(srctree)/drivers/staging/android \
+    -I$(DEVICE_MODULES_PATH)/include/linux \
+    -I$(DEVICE_MODULES_PATH)/drivers/staging/android \
     -I$(KO_CODE_PATH) \
     -I$(KO_CODE_PATH)/platform/$(MALI_PLATFORM_DIR) \
     -I$(KO_CODE_PATH)/../../../base \
@@ -279,18 +295,19 @@ subdir-ccflags-y += $(ccflags-y)
 #obj-$(CONFIG_MALI_MIDGARD) += mali_kbase.o
 
 # MTK: Tell the Linux build system from which .o file to create the kernel module
+UNQUOTE_CONFIG_MTK_GPU_VERSION = $(subst ",,$(CONFIG_MTK_GPU_VERSION))
 # LD1.0
-ifneq ($(CONFIG_MTK_GPU_VERSION),"")
-obj-$(CONFIG_MALI_MIDGARD) += mali_kbase.o
+ifneq ($(UNQUOTE_CONFIG_MTK_GPU_VERSION),)
+    obj-$(CONFIG_MALI_MIDGARD) += mali_kbase.o
 # LD2.0
 else ifneq ($(wildcard $(KO_CODE_PATH)/platform/$(MTK_PLATFORM)),)
-obj-$(CONFIG_MALI_MIDGARD) += mali_kbase_$(MTK_PLATFORM).o
-mali_kbase_$(MTK_PLATFORM)-y := mali_kbase.o
+    obj-$(CONFIG_MALI_MIDGARD) += mali_kbase_$(MTK_PLATFORM).o
+    mali_kbase_$(MTK_PLATFORM)-y += $(mali_kbase-y) $(mali_kbase-m)
 endif
 
 ifeq ($(CONFIG_MTK_TRUSTED_MEMORY_SUBSYSTEM), y)
-    include $(srctree)/drivers/misc/mediatek/trusted_mem/Makefile.include
-    ccflags-y += -I$(srctree)/drivers/staging/android/ion
+    include $(DEVICE_MODULES_PATH)/drivers/misc/mediatek/trusted_mem/Makefile.include
+    ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/staging/android/ion
 endif
 
 obj-$(CONFIG_MALI_ARBITRATION) += arbitration/

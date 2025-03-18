@@ -10,6 +10,7 @@
  */
 
 #include "linux/mman.h"
+#include <linux/version_compat_defs.h>
 #include <mali_kbase.h>
 
 /* mali_kbase_mmap.c
@@ -132,6 +133,7 @@ static bool align_and_check(unsigned long *gap_end, unsigned long gap_start,
 static unsigned long kbase_unmapped_area_topdown(struct vm_unmapped_area_info
 		*info, bool is_shader_code, bool is_same_4gb_page)
 {
+#if (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 	unsigned long length, low_limit, high_limit, gap_start, gap_end;
@@ -225,7 +227,37 @@ check_current:
 			}
 		}
 	}
+#else
+	unsigned long length, high_limit, gap_start, gap_end;
 
+	MA_STATE(mas, &current->mm->mm_mt, 0, 0);
+	/* Adjust search length to account for worst case alignment overhead */
+	length = info->length + info->align_mask;
+	if (length < info->length)
+		return -ENOMEM;
+
+	/*
+	 * Adjust search limits by the desired length.
+	 * See implementation comment at top of unmapped_area().
+	 */
+	gap_end = info->high_limit;
+	if (gap_end < length)
+		return -ENOMEM;
+	high_limit = gap_end - length;
+
+	if (info->low_limit > high_limit)
+		return -ENOMEM;
+
+	while (true) {
+		if (mas_empty_area_rev(&mas, info->low_limit, info->high_limit - 1, length))
+			return -ENOMEM;
+		gap_end = mas.last + 1;
+		gap_start = mas.min;
+
+		if (align_and_check(&gap_end, gap_start, info, is_shader_code, is_same_4gb_page))
+			return gap_end;
+	}
+#endif
 	return -ENOMEM;
 }
 
@@ -242,8 +274,13 @@ unsigned long kbase_context_get_unmapped_area(struct kbase_context *const kctx,
 	struct vm_unmapped_area_info info;
 	unsigned long align_offset = 0;
 	unsigned long align_mask = 0;
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	unsigned long high_limit = arch_get_mmap_base(addr, mm->mmap_base);
+	unsigned long low_limit = max_t(unsigned long, PAGE_SIZE, kbase_mmap_min_addr);
+#else
 	unsigned long high_limit = mm->mmap_base;
 	unsigned long low_limit = PAGE_SIZE;
+#endif
 	int cpu_va_bits = BITS_PER_LONG;
 	int gpu_pc_bits =
 	      kctx->kbdev->gpu_props.props.core_props.log2_program_counter_size;
@@ -267,9 +304,15 @@ unsigned long kbase_context_get_unmapped_area(struct kbase_context *const kctx,
 	 * is no free region at the address found originally by too large a
 	 * same_va_end_addr here, and will fail the allocation gracefully.
 	 */
-	struct kbase_reg_zone *zone =
-		kbase_ctx_reg_zone_get_nolock(kctx, KBASE_REG_ZONE_SAME_VA);
+	struct kbase_reg_zone *zone = kbase_ctx_reg_zone_get_nolock(kctx, SAME_VA_ZONE);
 	u64 same_va_end_addr = kbase_reg_zone_end_pfn(zone) << PAGE_SHIFT;
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	const unsigned long mmap_end = arch_get_mmap_end(addr, len, flags);
+
+	/* requested length too big for entire address space */
+	if (len > mmap_end - kbase_mmap_min_addr)
+		return -ENOMEM;
+#endif
 
 	/* err on fixed address */
 	if ((flags & MAP_FIXED) || addr)
@@ -282,7 +325,7 @@ unsigned long kbase_context_get_unmapped_area(struct kbase_context *const kctx,
 
 	if (!kbase_ctx_flag(kctx, KCTX_COMPAT)) {
 		high_limit =
-			min_t(unsigned long, mm->mmap_base, same_va_end_addr);
+			min_t(unsigned long, high_limit, same_va_end_addr);
 
 		/* If there's enough (> 33 bits) of GPU VA space, align
 		 * to 2MB boundaries.
@@ -301,45 +344,45 @@ unsigned long kbase_context_get_unmapped_area(struct kbase_context *const kctx,
 #endif /* CONFIG_64BIT */
 	if ((PFN_DOWN(BASE_MEM_COOKIE_BASE) <= pgoff) &&
 		(PFN_DOWN(BASE_MEM_FIRST_FREE_ADDRESS) > pgoff)) {
-			int cookie = pgoff - PFN_DOWN(BASE_MEM_COOKIE_BASE);
-			struct kbase_va_region *reg;
+		int cookie = pgoff - PFN_DOWN(BASE_MEM_COOKIE_BASE);
+		struct kbase_va_region *reg;
 
-			/* Need to hold gpu vm lock when using reg */
-			kbase_gpu_vm_lock(kctx);
-			reg = kctx->pending_regions[cookie];
-			if (!reg) {
-				kbase_gpu_vm_unlock(kctx);
-				return -EINVAL;
-			}
-			if (!(reg->flags & KBASE_REG_GPU_NX)) {
-				if (cpu_va_bits > gpu_pc_bits) {
-					align_offset = 1ULL << gpu_pc_bits;
-					align_mask = align_offset - 1;
-					is_shader_code = true;
-				}
-#if !MALI_USE_CSF
-			} else if (reg->flags & KBASE_REG_TILER_ALIGN_TOP) {
-				unsigned long extension_bytes =
-					(unsigned long)(reg->extension
-							<< PAGE_SHIFT);
-				/* kbase_check_alloc_sizes() already satisfies
-				 * these checks, but they're here to avoid
-				 * maintenance hazards due to the assumptions
-				 * involved
-				 */
-				WARN_ON(reg->extension >
-					(ULONG_MAX >> PAGE_SHIFT));
-				WARN_ON(reg->initial_commit > (ULONG_MAX >> PAGE_SHIFT));
-				WARN_ON(!is_power_of_2(extension_bytes));
-				align_mask = extension_bytes - 1;
-				align_offset =
-					extension_bytes -
-					(reg->initial_commit << PAGE_SHIFT);
-#endif /* !MALI_USE_CSF */
-			} else if (reg->flags & KBASE_REG_GPU_VA_SAME_4GB_PAGE) {
-				is_same_4gb_page = true;
-			}
+		/* Need to hold gpu vm lock when using reg */
+		kbase_gpu_vm_lock(kctx);
+		reg = kctx->pending_regions[cookie];
+		if (!reg) {
 			kbase_gpu_vm_unlock(kctx);
+			return -EINVAL;
+		}
+		if (!(reg->flags & KBASE_REG_GPU_NX)) {
+			if (cpu_va_bits > gpu_pc_bits) {
+				align_offset = 1ULL << gpu_pc_bits;
+				align_mask = align_offset - 1;
+				is_shader_code = true;
+			}
+#if !MALI_USE_CSF
+		} else if (reg->flags & KBASE_REG_TILER_ALIGN_TOP) {
+			unsigned long extension_bytes =
+				(unsigned long)(reg->extension
+						<< PAGE_SHIFT);
+			/* kbase_check_alloc_sizes() already satisfies
+			 * these checks, but they're here to avoid
+			 * maintenance hazards due to the assumptions
+			 * involved
+			 */
+			WARN_ON(reg->extension >
+				(ULONG_MAX >> PAGE_SHIFT));
+			WARN_ON(reg->initial_commit > (ULONG_MAX >> PAGE_SHIFT));
+			WARN_ON(!is_power_of_2(extension_bytes));
+			align_mask = extension_bytes - 1;
+			align_offset =
+				extension_bytes -
+				(reg->initial_commit << PAGE_SHIFT);
+#endif /* !MALI_USE_CSF */
+		} else if (reg->flags & KBASE_REG_GPU_VA_SAME_4GB_PAGE) {
+			is_same_4gb_page = true;
+		}
+		kbase_gpu_vm_unlock(kctx);
 #ifndef CONFIG_64BIT
 	} else {
 		return current->mm->get_unmapped_area(
@@ -359,9 +402,15 @@ unsigned long kbase_context_get_unmapped_area(struct kbase_context *const kctx,
 
 	if (IS_ERR_VALUE(ret) && high_limit == mm->mmap_base &&
 	    high_limit < same_va_end_addr) {
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+		/* Retry above TASK_UNMAPPED_BASE */
+		info.low_limit = TASK_UNMAPPED_BASE;
+		info.high_limit = min_t(u64, mmap_end, same_va_end_addr);
+#else
 		/* Retry above mmap_base */
 		info.low_limit = mm->mmap_base;
 		info.high_limit = min_t(u64, TASK_SIZE, same_va_end_addr);
+#endif
 
 		ret = kbase_unmapped_area_topdown(&info, is_shader_code,
 				is_same_4gb_page);

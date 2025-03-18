@@ -209,11 +209,18 @@ static struct attribute *fw_cfg_attrs[] = {
 	&fw_cfg_attr_cur,
 	NULL,
 };
+#if (KERNEL_VERSION(5, 2, 0) <= LINUX_VERSION_CODE)
+ATTRIBUTE_GROUPS(fw_cfg);
+#endif
 
 static struct kobj_type fw_cfg_kobj_type = {
 	.release = &fw_cfg_kobj_release,
 	.sysfs_ops = &fw_cfg_ops,
+#if (KERNEL_VERSION(5, 2, 0) <= LINUX_VERSION_CODE)
+	.default_groups = fw_cfg_groups,
+#else
 	.default_attrs = fw_cfg_attrs,
+#endif
 };
 
 int kbase_csf_firmware_cfg_init(struct kbase_device *kbdev)

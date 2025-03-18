@@ -303,7 +303,7 @@ static struct protected_memory_allocation *simple_pma_alloc_page(
 #endif /* MTK_PMA_DEBUG */
 
 	if (epma_dev->num_free_pages < num_pages_to_alloc) {
-		dev_err(epma_dev->dev, "not enough free pages %u / %u\n",
+		dev_err(epma_dev->dev, "not enough free pages %zu / %zu\n",
                         num_pages_to_alloc, epma_dev->num_free_pages);
 		devm_kfree(epma_dev->dev, pma);
 #if MTK_PMA_DEBUG
@@ -679,7 +679,7 @@ static int mtk_protected_memory_allocator_probe(struct platform_device *pdev)
 	rmem_size = rmem_size >> PAGE_SHIFT;
 
 	dev_info(&pdev->dev,
-		"addr(%llx), size: %u pages\n", rmem_base, rmem_size);
+		"addr(%llx), size: %zu pages\n", (unsigned long long)rmem_base, rmem_size);
 
 	devm_iounmap(&pdev->dev, gpueb_base);
 

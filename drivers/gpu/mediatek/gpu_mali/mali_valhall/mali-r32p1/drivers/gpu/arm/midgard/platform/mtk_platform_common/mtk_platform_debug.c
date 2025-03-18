@@ -658,7 +658,7 @@ void mtk_debug_csf_dump_groups_and_queues(struct kbase_device *kbdev, int pid)
 							         kctx->tgid,
 							         kctx->id);
 							dev_info(kbdev->dev,
-							         "[%d_%d] %9lu(  %s ), %7d,      None, (command index out of size limits %d)",
+							         "[%d_%d] %9lu(  %s ), %7d,      None, (command index out of size limits %zu)",
 							         kctx->tgid,
 							         kctx->id,
 							         idx,
@@ -952,7 +952,7 @@ void mtk_common_gpu_fence_debug_dump(int fd, int pid, int type, int timeouts)
 
 	lockdep_on();
 
-#if IS_ENABLED(CONFIG_MALI_MTK_DEBUG) && IS_ENABLED(CONFIG_MALI_MTK_FENCE_DEBUG)
+#if IS_ENABLED(CONFIG_MALI_MTK_DEBUG) && IS_ENABLED(CONFIG_MALI_MTK_FENCE_DEBUG) && IS_ENABLED(CONFIG_MALI_CSF_SUPPORT)
 	if (!mtk_common_gpufreq_bringup()) {
 //#ifdef CONFIG_MALI_FENCE_DEBUG
 //		if (timeouts > 3000)

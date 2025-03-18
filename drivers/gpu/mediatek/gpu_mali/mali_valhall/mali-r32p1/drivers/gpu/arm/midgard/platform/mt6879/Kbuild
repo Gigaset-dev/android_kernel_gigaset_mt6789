@@ -19,13 +19,13 @@
 #
 #
 
-include $(src)/Kbuild-mtk-custom-env
+include $(srctree)/$(src)/Kbuild-mtk-custom-env
 
 mali_kbase-y += \
 	platform/$(MALI_PLATFORM_DIR)/mali_kbase_config_mt6879.o
 
 ccflags-y += \
-	-I$(srctree)/drivers/misc/mediatek/base/power/include
+	-I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/base/power/include
 ccflags-y += \
-	-I$(srctree)/drivers/misc/mediatek/include/mt-plat
+	-I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/include/mt-plat
 

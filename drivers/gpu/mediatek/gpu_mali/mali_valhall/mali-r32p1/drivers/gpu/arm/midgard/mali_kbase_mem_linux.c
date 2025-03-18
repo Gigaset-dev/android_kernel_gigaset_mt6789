@@ -784,7 +784,11 @@ int kbase_mem_evictable_init(struct kbase_context *kctx)
 	 * struct shrinker does not define batch
 	 */
 	kctx->reclaim.batch = 0;
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+	register_shrinker(&kctx->reclaim, "");
+#else
 	register_shrinker(&kctx->reclaim);
+#endif
 	return 0;
 }
 
@@ -1810,10 +1814,19 @@ KERNEL_VERSION(4, 5, 0) > LINUX_VERSION_CODE
      */
     if (pages != NULL) {
         faulted_pages =
-            pin_user_pages(address, *va_pages, write ? FOLL_WRITE : 0, pages, NULL);
+		#if KERNEL_VERSION(6, 1, 0) >= LINUX_VERSION_CODE
+			pin_user_pages(address, *va_pages, write ? FOLL_WRITE : 0, pages, NULL);
+		#else
+			pin_user_pages(address, *va_pages, write ? FOLL_WRITE : 0, pages);
+		#endif
     } else {
         faulted_pages =
+		#if KERNEL_VERSION(6, 1, 0) >= LINUX_VERSION_CODE
             get_user_pages(address, *va_pages, write ? FOLL_WRITE : 0, pages, NULL);
+		#else
+            get_user_pages(address, *va_pages, write ? FOLL_WRITE : 0, pages);
+		#endif
+
     }
 #endif
 
@@ -1851,7 +1864,8 @@ KERNEL_VERSION(4, 5, 0) > LINUX_VERSION_CODE
 
 		for (i = 0; i < faulted_pages; i++) {
 			dma_addr_t dma_addr =
-				dma_map_page_attrs(dev, pages[i], 0, PAGE_SIZE, DMA_BIDIRECTIONAL,
+				dma_map_page_attrs(dev, pages[i], 0, PAGE_SIZE,
+						   write ? DMA_BIDIRECTIONAL : DMA_TO_DEVICE,
 						   DMA_ATTR_SKIP_CPU_SYNC);
 
 			if (dma_mapping_error(dev, dma_addr))
@@ -1880,7 +1894,8 @@ unwind_dma_map:
 		dma_addr_t dma_addr = user_buf->dma_addrs[i];
 
 		dma_sync_single_for_device(dev, dma_addr, PAGE_SIZE, DMA_BIDIRECTIONAL);
-		dma_unmap_page_attrs(dev, dma_addr, PAGE_SIZE, DMA_BIDIRECTIONAL,
+		dma_unmap_page_attrs(dev, dma_addr, PAGE_SIZE,
+				     write ? DMA_BIDIRECTIONAL : DMA_TO_DEVICE,
 				     DMA_ATTR_SKIP_CPU_SYNC);
 	}
 fault_mismatch:
@@ -2702,8 +2717,12 @@ static int kbase_cpu_mmap(struct kbase_context *kctx,
 	 * This will need updating to propagate coherency flags
 	 * See MIDBASE-1057
 	 */
-
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	vm_flags_set(vma, VM_DONTCOPY | VM_DONTDUMP | VM_DONTEXPAND | VM_IO);
+#else
 	vma->vm_flags |= VM_DONTCOPY | VM_DONTDUMP | VM_DONTEXPAND | VM_IO;
+#endif
+
 	vma->vm_ops = &kbase_vm_ops;
 	vma->vm_private_data = map;
 
@@ -2731,12 +2750,22 @@ static int kbase_cpu_mmap(struct kbase_context *kctx,
 		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 	}
 
-	if (!kaddr) {
+	if (!kaddr)
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+		vm_flags_set(vma, VM_PFNMAP);
+#else
 		vma->vm_flags |= VM_PFNMAP;
-	} else {
+#endif
+
+	else {
 		WARN_ON(aligned_offset);
 		/* MIXEDMAP so we can vfree the kaddr early and not track it after map time */
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+		vm_flags_set(vma, VM_MIXEDMAP);
+#else
 		vma->vm_flags |= VM_MIXEDMAP;
+#endif
+
 		/* vmalloc remaping is easy... */
 		err = remap_vmalloc_range(vma, kaddr, 0);
 		WARN_ON(err);
@@ -2944,9 +2973,17 @@ int kbase_context_mmap(struct kbase_context *const kctx,
 	dev_vdbg(dev, "kbase_mmap\n");
 
 	if (!(vma->vm_flags & VM_READ))
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+		vm_flags_clear(vma, VM_MAYREAD);
+#else
 		vma->vm_flags &= ~VM_MAYREAD;
+#endif
 	if (!(vma->vm_flags & VM_WRITE))
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+		vm_flags_clear(vma, VM_MAYWRITE);
+#else
 		vma->vm_flags &= ~VM_MAYWRITE;
+#endif
 
 	if (nr_pages == 0) {
 		err = -EINVAL;
@@ -3313,11 +3350,14 @@ KBASE_EXPORT_TEST_API(kbase_vunmap);
 
 static void kbasep_add_mm_counter(struct mm_struct *mm, int member, long value)
 {
-#if (KERNEL_VERSION(4, 19, 0) <= LINUX_VERSION_CODE)
-	/* To avoid the build breakage due to an unexported kernel symbol
-	 * 'mm_trace_rss_stat' from later kernels, i.e. from V4.19.0 onwards,
-	 * we inline here the equivalent of 'add_mm_counter()' from linux
-	 * kernel V5.4.0~8.
+#if (KERNEL_VERSION(6, 2, 0) <= LINUX_VERSION_CODE)
+	/* To avoid the build breakage due to the type change in rss_stat,
+	 * we inline here the equivalent of 'add_mm_counter()' from linux kernel V6.2.
+	 */
+	percpu_counter_add(&mm->rss_stat[member], value);
+#elif (KERNEL_VERSION(5, 5, 0) <= LINUX_VERSION_CODE)
+	/* To avoid the build breakage due to an unexported kernel symbol 'mm_trace_rss_stat',
+	 * we inline here the equivalent of 'add_mm_counter()' from linux kernel V5.5.
 	 */
 	atomic_long_add(value, &mm->rss_stat.count[member]);
 #else
@@ -3348,9 +3388,14 @@ static int kbase_tracking_page_setup(struct kbase_context *kctx, struct vm_area_
 		return -EINVAL;
 
 	/* no real access */
+
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	vm_flags_clear(vma, VM_READ | VM_MAYREAD | VM_WRITE | VM_MAYWRITE | VM_EXEC | VM_MAYEXEC);
+	vm_flags_set(vma, VM_DONTCOPY | VM_DONTEXPAND | VM_DONTDUMP | VM_IO);
+#else
 	vma->vm_flags &= ~(VM_READ | VM_MAYREAD | VM_WRITE | VM_MAYWRITE | VM_EXEC | VM_MAYEXEC);
 	vma->vm_flags |= VM_DONTCOPY | VM_DONTEXPAND | VM_DONTDUMP | VM_IO;
-
+#endif
 	return 0;
 }
 
@@ -3568,14 +3613,23 @@ static int kbase_csf_cpu_mmap_user_io_pages(struct kbase_context *kctx,
 	err = kbase_csf_alloc_command_stream_user_pages(kctx, queue);
 	if (err)
 		goto map_failed;
-
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	vm_flags_set(vma, VM_DONTCOPY | VM_DONTDUMP | VM_DONTEXPAND | VM_IO);
+#else
 	vma->vm_flags |= VM_DONTCOPY | VM_DONTDUMP | VM_DONTEXPAND | VM_IO;
+#endif
+
 	/* TODO use VM_MIXEDMAP, since it is more appropriate as both types of
 	 * memory with and without "struct page" backing are being inserted here.
 	 * Hw Doorbell pages comes from the device register area so kernel does
 	 * not use "struct page" for them.
 	 */
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	vm_flags_set(vma, VM_PFNMAP);
+#else
 	vma->vm_flags |= VM_PFNMAP;
+#endif
+
 
 	vma->vm_ops = &kbase_csf_user_io_pages_vm_ops;
 	vma->vm_private_data = queue;
@@ -3676,13 +3730,22 @@ static int kbase_csf_cpu_mmap_user_reg_page(struct kbase_context *kctx,
 
 	/* Map uncached */
 	vma->vm_page_prot = pgprot_device(vma->vm_page_prot);
-
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	vm_flags_set(vma, VM_DONTCOPY | VM_DONTDUMP | VM_DONTEXPAND | VM_IO);
+#else
 	vma->vm_flags |= VM_DONTCOPY | VM_DONTDUMP | VM_DONTEXPAND | VM_IO;
+#endif
+
 
 	/* User register page comes from the device register area so
 	 * "struct page" isn't available for it.
 	 */
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	vm_flags_set(vma, VM_PFNMAP);
+#else
 	vma->vm_flags |= VM_PFNMAP;
+#endif
+
 
 	kctx->csf.user_reg_vma = vma;
 
@@ -3693,3 +3756,5 @@ static int kbase_csf_cpu_mmap_user_reg_page(struct kbase_context *kctx,
 }
 
 #endif /* MALI_USE_CSF */
+
+MODULE_IMPORT_NS(DMA_BUF);

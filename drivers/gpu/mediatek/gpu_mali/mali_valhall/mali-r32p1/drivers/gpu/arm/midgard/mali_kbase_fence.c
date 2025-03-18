@@ -44,7 +44,7 @@ kbase_fence_out_new(struct kbase_jd_atom *katom)
 
 	WARN_ON(katom->dma_fence.fence);
 
-	fence = kzalloc(sizeof(*fence), GFP_KERNEL);
+ 	fence = kzalloc(sizeof(*fence), GFP_KERNEL);
 	if (!fence)
 		return NULL;
 

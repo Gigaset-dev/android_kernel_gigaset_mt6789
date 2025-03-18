@@ -8,7 +8,7 @@
 #include <linux/slab.h>
 #include <platform/mtk_mfg_counter.h>
 #include <mali_kbase_gator_api.h>
-#include <string.h>
+#include <linux/string.h>
 #include <linux/math64.h>
 #if IS_ENABLED(CONFIG_MTK_GPU_SWPM_SUPPORT)
 #include <mali_kbase_vinstr.h>
@@ -760,7 +760,7 @@ void mtk_mfg_counter_destroy(void)
 
 
 // init but don't enable met
-int gator_gpu_pmu_init()
+int gator_gpu_pmu_init(void)
 {
 	int ret = PMU_OK;
 	int i, j, cnt, block_type;

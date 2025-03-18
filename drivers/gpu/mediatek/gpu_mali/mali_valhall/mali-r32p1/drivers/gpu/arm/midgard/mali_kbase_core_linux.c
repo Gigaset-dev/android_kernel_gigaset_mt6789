@@ -473,6 +473,12 @@ static struct kbase_device *to_kbase_device(struct device *dev)
 
 int assign_irqs(struct kbase_device *kbdev)
 {
+	static char* IRQ_TAG_NAME_TABLE[] = {
+		[JOB_IRQ_TAG] = "JOB",
+		[MMU_IRQ_TAG] = "MMU",
+		[GPU_IRQ_TAG] = "GPU",
+	};
+
 	struct platform_device *pdev;
 	int i;
 
@@ -480,6 +486,22 @@ int assign_irqs(struct kbase_device *kbdev)
 		return -ENODEV;
 
 	pdev = to_platform_device(kbdev->dev);
+
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+	/* 3 IRQ resources */
+	for (i = 0; i < 3; i++) {
+		int irqtag;
+		int irq;
+		irq = platform_get_irq_byname(pdev, IRQ_TAG_NAME_TABLE[i]);
+		if (irq < 0) {
+			dev_err(kbdev->dev, "No IRQ resource at index %d\n", i);
+			return -ENOENT;
+		}
+		irqtag = i;
+		kbdev->irqs[irqtag].irq = irq;
+		kbdev->irqs[irqtag].flags = irqd_get_trigger_type(irq_get_irq_data(irq));
+	}
+#else
 	/* 3 IRQ resources */
 	for (i = 0; i < 3; i++) {
 		struct resource *irq_res;
@@ -509,6 +531,7 @@ int assign_irqs(struct kbase_device *kbdev)
 		kbdev->irqs[irqtag].irq = irq_res->start;
 		kbdev->irqs[irqtag].flags = irq_res->flags & IRQF_TRIGGER_MASK;
 	}
+#endif /* KERNEL_VERSION(6, 0, 0) */
 
 	return 0;
 }
@@ -1696,7 +1719,7 @@ static int kbasep_ioctl_local_fence_wait(struct kbase_context *kctx,
 		fence_wait->pid);
 #endif
 
-#if IS_ENABLED(CONFIG_MALI_MTK_DEBUG) && IS_ENABLED(CONFIG_MALI_MTK_FENCE_DEBUG)
+#if IS_ENABLED(CONFIG_MALI_MTK_DEBUG) && IS_ENABLED(CONFIG_MALI_MTK_FENCE_DEBUG) && IS_ENABLED(CONFIG_MALI_CSF_SUPPORT)
 	if (fence_wait->flags & BASE_LOCAL_FENCE_DUMP_FLAG)
 		mtk_debug_csf_dump_groups_and_queues(kctx->kbdev, (int)fence_wait->pid);
 #endif
@@ -4691,17 +4714,45 @@ int power_control_init(struct kbase_device *kbdev)
 	 * from completing its initialization.
 	 */
 #if defined(CONFIG_PM_OPP)
-#if ((KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE) && \
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+	if (kbdev->nr_regulators > 0) {
+		err = dev_pm_opp_set_regulators(kbdev->dev,
+			regulator_names);
+
+		if (err < 0) {
+			goto regulators_probe_defer;
+		}
+	}
+#elif ((KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE) && \
 	defined(CONFIG_REGULATOR))
 	if (kbdev->nr_regulators > 0) {
 		kbdev->opp_table = dev_pm_opp_set_regulators(kbdev->dev,
 			regulator_names, BASE_MAX_NR_CLOCKS_REGULATORS);
+
+		if (IS_ERR_OR_NULL(kbdev->opp_table)) {
+			err = PTR_ERR(kbdev->opp_table);
+			goto regulators_probe_defer;
+		}
 	}
 #endif /* (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE */
 	err = dev_pm_opp_of_add_table(kbdev->dev);
 	CSTD_UNUSED(err);
 #endif /* CONFIG_PM_OPP */
 	return 0;
+
+#if defined(CONFIG_PM_OPP) &&                                                                      \
+	((KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE) && defined(CONFIG_REGULATOR))
+regulators_probe_defer:
+	for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++) {
+		if (kbdev->clocks[i]) {
+			if (__clk_is_enabled(kbdev->clocks[i]))
+				clk_disable_unprepare(kbdev->clocks[i]);
+			clk_put(kbdev->clocks[i]);
+			kbdev->clocks[i] = NULL;
+		} else
+			break;
+	}
+#endif
 
 clocks_probe_defer:
 #if defined(CONFIG_REGULATOR)
@@ -4718,7 +4769,10 @@ void power_control_term(struct kbase_device *kbdev)
 
 #if defined(CONFIG_PM_OPP)
 	dev_pm_opp_of_remove_table(kbdev->dev);
-#if ((KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE) && \
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+	if (kbdev->nr_regulators > 0)
+		dev_pm_opp_put_regulators(kbdev->nr_regulators);
+#elif ((KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE) && \
 	defined(CONFIG_REGULATOR))
 	if (!IS_ERR_OR_NULL(kbdev->opp_table))
 		dev_pm_opp_put_regulators(kbdev->opp_table);
