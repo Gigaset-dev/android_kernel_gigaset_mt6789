@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
  * Copyright (c) 2021 MediaTek Inc.
  */
@@ -7,10 +7,27 @@
 #define _NAN_DISCOVERY_H_
 
 #if CFG_SUPPORT_NAN
+#define NAN_VENDOR_REQUEST_VERSION_V1   1
+
+#define MAX_SIZE_NAN_ATTRIBUTE_REPORT	1024
 
 extern uint8_t g_u2IndPubId;
 extern uint8_t g_aucNanServiceId[NAN_SERVICE_HASH_LENGTH];
 
+extern uint8_t g_aucNanServiceName[NAN_MAX_SERVICE_NAME_LEN + 1];
+
+/*******************************************************************************
+ *                                 M A C R O S
+ *******************************************************************************
+ */
+#ifndef MIN
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+#endif
+
+/*******************************************************************************
+ *                            P U B L I C   D A T A
+ *******************************************************************************
+ */
 struct NAN_DISCOVERY_EVENT {
 	uint16_t u2SubscribeID;
 	uint16_t u2PublishID;
@@ -46,11 +63,12 @@ struct NAN_FOLLOW_UP_EVENT {
 	 * beyond the service name
 	 */
 	uint16_t service_specific_info_len;
-	uint8_t service_specific_info[NAN_MAX_SERVICE_SPECIFIC_INFO_LEN];
+	uint8_t service_specific_info[NAN_FW_MAX_SERVICE_SPECIFIC_INFO_LEN];
 
 	/* Sequence of values indicating the service specific info in SDEA */
 	uint16_t sdea_service_specific_info_len;
-	uint8_t sdea_service_specific_info[NAN_SDEA_SERVICE_SPECIFIC_INFO_LEN];
+	uint8_t sdea_service_specific_info
+		[NAN_FW_MAX_SDEA_SERVICE_SPECIFIC_INFO_LEN];
 };
 
 struct NAN_DE_EVENT {
@@ -442,13 +460,33 @@ struct _NAN_SERVICE_SESSION_T {
 	uint8_t aaucSupportedSCID[NAN_MAX_SCID_NUM][NAN_SCID_DEFAULT_LEN];
 };
 
+enum NAN_INSTANCE_TYPE {
+	NAN_PUBLISH,
+	NAN_SUBSCRIBE
+};
+
+struct _NAN_INSTANCE_T {
+	enum NAN_INSTANCE_TYPE eType;
+
+	uint8_t ucInstanceID;
+	uint8_t ucServiceNameLength;
+	uint8_t aucServiceName[NAN_MAX_SERVICE_NAME_LEN+1];
+	uint8_t aucServiceHash[NAN_SERVICE_HASH_LENGTH];
+};
+
 struct _NAN_DISC_ENGINE_T {
 	unsigned char fgInit;
+
+	uint8_t ucNumInstance;
+	struct _NAN_INSTANCE_T arNanInstanceTbl[NUM_OF_NAN_INSTANCE];
 
 	struct LINK rSeviceSessionList;
 	struct LINK rFreeServiceSessionList;
 	struct _NAN_SERVICE_SESSION_T
 		arServiceSessionList[NAN_NUM_SERVICE_SESSION];
+
+	uint8_t arPubIdList[NAN_MAX_PUBLISH_NUM];
+	uint8_t arSubIdList[NAN_MAX_PUBLISH_NUM];
 };
 
 struct _NAN_DISC_CMD_ADD_CSID_T {
@@ -463,6 +501,106 @@ struct _NAN_DISC_CMD_MANAGE_SCID_T {
 	uint8_t aucSCID[NAN_SCID_DEFAULT_LEN];
 } __KAL_ATTRIB_PACKED__;
 
+struct NanFWPublishRequestExt {
+	uint8_t ucVersion;
+	uint8_t ucPublishId;
+
+	uint8_t fgDiscoveryRangeValid;
+	int32_t i4DiscoveryRange;
+
+	uint8_t fgAnnouncePeriodValid;
+	uint32_t u4AnnouncePeriod;
+
+	uint8_t fgSrvUpdateIndicatorValid;
+	uint8_t ucSrvUpdateIndicator;
+
+	uint8_t fgMatchFilterTypeValid;
+	uint8_t ucMatchFilterType;	/* 0: match by equal (default) */
+} __KAL_ATTRIB_PACKED__;
+
+struct NanFWSubscribeRequestExt {
+	uint8_t ucVersion;
+	uint8_t ucSubscribeId;
+
+	uint8_t fgDiscoveryRangeValid;
+	int32_t i4DiscoveryRange;
+
+	uint8_t fgQueryPeriodValid;
+	uint32_t u4QueryPeriod;
+
+	uint8_t fgMatchFilterTypeValid;
+	uint8_t ucMatchFilterType;	/* 0: match by equal (default) */
+
+	uint32_t u4BloomFilterLength;
+	uint8_t ucBloomIdx;
+	uint8_t aucBloomFilter[NAN_MAX_BLOOM_FILTER_LENGTH];
+} __KAL_ATTRIB_PACKED__;
+
+struct NanFWTransmitFollowupRequestExt {
+	uint8_t ucVersion;
+	uint16_t u2PublishSubscribeId;
+	uint32_t u4RequestorInstanceId;
+
+	uint8_t fgFollowUpTokenValid;
+	uint16_t u2FollowUpToken;
+} __KAL_ATTRIB_PACKED__;
+
+struct NAN_VENDOR_DISCOVERY_EVENT {
+	uint8_t ucVersion;
+
+	uint16_t u2SubscribeID;
+	uint16_t u2PublishID;
+	uint8_t aucNanAddress[6];
+	int8_t i1PublishRssi;
+	uint8_t ucPrimaryCh;
+	uint8_t ucChBand;
+	uint8_t ucChBw;
+	uint16_t u2PublishAttrListLength;
+	uint8_t aucPublishAttrList[MAX_SIZE_NAN_ATTRIBUTE_REPORT];
+};
+
+struct NAN_VENDOR_REPLIED_EVENT {
+	uint8_t ucVersion;
+
+	uint16_t u2Pubid;
+	uint16_t u2Subid;
+	uint8_t aucPeerNanAddr[MAC_ADDR_LEN];
+	int8_t i1SubRssi;
+	uint8_t ucPrimaryCh;
+	uint8_t ucChBand;
+	uint8_t ucChBw;
+	uint16_t u2SubscribeAttrListLength;
+	uint8_t aucSubscribeAttrList[MAX_SIZE_NAN_ATTRIBUTE_REPORT];
+};
+
+struct NAN_VENDOR_FOLLOW_UP_RX_EVENT {
+	uint8_t ucVersion;
+
+	uint8_t ucLocalServiceId;
+	uint8_t ucPeerServiceId;
+	uint8_t aucPeerAddr[NAN_MAC_ADDR_LEN];
+	int8_t i1FollowUpRssi;
+	uint8_t ucPrimaryCh;
+	uint8_t ucChBand;
+	uint8_t ucChBw;
+	uint16_t u2AttrListLength;
+	uint8_t aucAttrList[MAX_SIZE_NAN_ATTRIBUTE_REPORT];
+};
+
+struct NAN_VENDOR_FOLLOW_UP_TX_EVENT {
+	uint8_t ucVersion;
+
+	uint8_t ucLocalServiceId;
+	uint8_t ucPeerServiceId;
+	uint8_t aucPeerAddr[NAN_MAC_ADDR_LEN];
+	uint32_t u4FollowUpToken;
+	uint32_t u4TxStatus;
+};
+
+/*******************************************************************************
+ *                   F U N C T I O N   D E C L A R A T I O N S
+ *******************************************************************************
+ */
 uint32_t nanCancelPublishRequest(struct ADAPTER *prAdapter,
 				 struct NanPublishCancelRequest *msg);
 
@@ -499,5 +637,31 @@ nanDiscSearchServiceSession(struct ADAPTER *prAdapter,
 struct _NAN_SERVICE_SESSION_T *
 nanDiscAcquireServiceSession(struct ADAPTER *prAdapter,
 			     uint8_t *pucPublishNmiAddr, uint8_t ucPubID);
+
+void nanDiscServiceStart(struct ADAPTER *prAdapter,
+			uint8_t ucID, unsigned char fgIsPubOrSub);
+void nanDiscServiceTerminate(struct ADAPTER *prAdapter,
+			uint8_t ucID, unsigned char fgIsPubOrSub);
+
+struct _NAN_INSTANCE_T *
+nanDiscInstanceSearch(struct ADAPTER *prAdapter,
+	uint8_t ucID);
+int32_t
+nanDiscInstanceAdd(struct ADAPTER *prAdapter,
+	uint8_t ucID, enum NAN_INSTANCE_TYPE eType,
+	uint8_t *pucServiceHashName, uint8_t *pucServiceName,
+	uint8_t ucServiceNameLength);
+int32_t
+nanDiscInstanceDel(struct ADAPTER *prAdapter, uint8_t ucID);
+void
+nanDiscInstanceResetAll(struct ADAPTER *prAdapter);
+void
+nanDiscInstanceQueryServiceList(struct ADAPTER *prAdapter,
+	enum NAN_INSTANCE_TYPE eType,
+	uint8_t *pucList, uint16_t *u2MaxListSize);
+uint32_t
+nanDiscInstanceCount(struct ADAPTER *prAdapter,
+	enum NAN_INSTANCE_TYPE eType);
+
 #endif
 #endif

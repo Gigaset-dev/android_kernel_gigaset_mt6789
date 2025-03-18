@@ -1,54 +1,8 @@
-/*******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- ******************************************************************************/
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
  ** gl_vendor.c
  **
@@ -92,9 +46,6 @@
  *                            P U B L I C   D A T A
  *******************************************************************************
  */
-uint8_t g_GetResultsBufferedCnt;
-uint8_t g_GetResultsCmdCnt;
-
 const struct nla_policy nal_parse_wifi_setband[
 	QCA_WLAN_VENDOR_ATTR_MAX + 1] = {
 	[QCA_WLAN_VENDOR_ATTR_SETBAND_VALUE] = {.type = NLA_U32},
@@ -128,12 +79,11 @@ const struct nla_policy nla_parse_wifi_attribute[
 	[WIFI_ATTRIBUTE_ROAMING_CAPABILITIES] = {.type = NLA_UNSPEC},
 	[WIFI_ATTRIBUTE_ROAMING_BLACKLIST_NUM] = {.type = NLA_U32},
 #if KERNEL_VERSION(5, 9, 0) <= CFG80211_VERSION_CODE
-	[WIFI_ATTRIBUTE_ROAMING_BLACKLIST_BSSID] = NLA_POLICY_MIN_LEN(0),
-#elif KERNEL_VERSION(5, 4, 0) <= CFG80211_VERSION_CODE
-	[WIFI_ATTRIBUTE_ROAMING_BLACKLIST_BSSID] = {
-		.type = NLA_MIN_LEN, .len = 0 },
+	[WIFI_ATTRIBUTE_ROAMING_BLACKLIST_BSSID] =
+		NLA_POLICY_EXACT_LEN_WARN(MAC_ADDR_LEN),
 #else
-	[WIFI_ATTRIBUTE_ROAMING_BLACKLIST_BSSID] = {.type = NLA_BINARY},
+	[WIFI_ATTRIBUTE_ROAMING_BLACKLIST_BSSID] = {
+		.type = NLA_BINARY, .len = MAC_ADDR_LEN},
 #endif
 	[WIFI_ATTRIBUTE_ROAMING_WHITELIST_NUM] = {.type = NLA_U32},
 #if KERNEL_VERSION(5, 9, 0) <= CFG80211_VERSION_CODE
@@ -329,6 +279,11 @@ int mtk_cfg80211_vendor_get_channel_list(struct wiphy *wiphy,
 	if (!prGlueInfo)
 		return -EFAULT;
 
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		return -EFAULT;
+	}
+
 	aucChannelList = (struct RF_CHANNEL_INFO *)
 		kalMemAlloc(sizeof(struct RF_CHANNEL_INFO)*MAX_CHN_NUM,
 			VIR_MEM_TYPE);
@@ -431,7 +386,8 @@ int mtk_cfg80211_vendor_set_country_code(struct wiphy
 	       wdev->iftype);
 
 	attr = (struct nlattr *)data;
-	if (attr->nla_type == WIFI_ATTRIBUTE_COUNTRY_CODE) {
+	if (attr->nla_type == WIFI_ATTRIBUTE_COUNTRY_CODE &&
+			nla_len(attr) >= 2) {
 		country[0] = *((uint8_t *)nla_data(attr));
 		country[1] = *((uint8_t *)nla_data(attr) + 1);
 	}
@@ -450,6 +406,11 @@ int mtk_cfg80211_vendor_set_country_code(struct wiphy
 
 	if (!prGlueInfo)
 		return -EFAULT;
+
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		return -EFAULT;
+	}
 
 	rStatus = kalIoctl(prGlueInfo, wlanoidSetCountryCode,
 			   country, 2, FALSE, FALSE, TRUE, &u4BufLen);
@@ -472,9 +433,14 @@ int mtk_cfg80211_vendor_set_scan_mac_oui(struct wiphy *wiphy,
 	uint32_t u4BufLen = 0;
 	struct NETDEV_PRIVATE_GLUE_INFO *prNetDevPrivate = NULL;
 
-	ASSERT(wiphy);
-	ASSERT(wdev);
-
+	if (wiphy == NULL) {
+		log_dbg(REQ, ERROR, "wiphy is NULL\n");
+		return -EINVAL;
+	}
+	if (wdev == NULL) {
+		log_dbg(REQ, ERROR, "wdev is NULL\n");
+		return -EINVAL;
+	}
 	if (data == NULL || data_len <= 0) {
 		log_dbg(REQ, ERROR, "data error(len=%d)\n", data_len);
 		return -EINVAL;
@@ -492,6 +458,12 @@ int mtk_cfg80211_vendor_set_scan_mac_oui(struct wiphy *wiphy,
 		log_dbg(REQ, ERROR, "Invalid glue info\n");
 		return -EFAULT;
 	}
+
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		log_dbg(REQ, WARN, "driver is not ready\n");
+		return -EFAULT;
+	}
+
 	prNetDevPrivate =
 		(struct NETDEV_PRIVATE_GLUE_INFO *) netdev_priv(wdev->netdev);
 	if (!prNetDevPrivate) {
@@ -627,6 +599,11 @@ int mtk_cfg80211_vendor_config_roaming(struct wiphy *wiphy,
 	if (!prGlueInfo)
 		return -EINVAL;
 
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		return -EFAULT;
+	}
+
 	if (prGlueInfo->u4FWRoamingEnable == 0) {
 		DBGLOG(REQ, INFO,
 		       "FWRoaming is disabled (FWRoamingEnable=%d)\n",
@@ -657,15 +634,15 @@ int mtk_cfg80211_vendor_config_roaming(struct wiphy *wiphy,
 	for (i = 0; i < numOfList[0]; i++) {
 		if (attrlist->nla_type ==
 		    WIFI_ATTRIBUTE_ROAMING_BLACKLIST_BSSID) {
+			aucBSSID = nla_data(attrlist);
 			prBssDesc =
 				scanSearchBssDescByBssid(prGlueInfo->prAdapter,
-							nla_data(attrlist));
+							aucBSSID);
 			len_shift += NLA_ALIGN(attrlist->nla_len);
 			attrlist =
 				(struct nlattr *)((uint8_t *) data + len_shift);
 
 			if (prBssDesc == NULL) {
-				aucBSSID = nla_data(attrlist);
 				DBGLOG(REQ, ERROR, "No found blacklist BSS="
 					MACSTR "\n",
 					MAC2STR(aucBSSID));
@@ -711,10 +688,17 @@ int mtk_cfg80211_vendor_enable_roaming(struct wiphy *wiphy,
 
 	ASSERT(wiphy);	/* change to if (wiphy == NULL) then return? */
 	ASSERT(wdev);	/* change to if (wiphy == NULL) then return? */
+	if ((data == NULL) || (data_len == 0))
+		return -EINVAL;
 
 	prGlueInfo = (struct GLUE_INFO *) wiphy_priv(wiphy);
 	if (!prGlueInfo)
 		return -EFAULT;
+
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		return -EFAULT;
+	}
 
 	attr = (struct nlattr *)data;
 	if (attr->nla_type == WIFI_ATTRIBUTE_ROAMING_STATE)
@@ -740,6 +724,14 @@ int mtk_cfg80211_vendor_get_rtt_capabilities(
 	ASSERT(wiphy);
 	ASSERT(wdev);
 	prGlueInfo = (struct GLUE_INFO *) wiphy_priv(wiphy);
+
+	if (!prGlueInfo)
+		return -EFAULT;
+
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		return -EFAULT;
+	}
 
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy,
 			sizeof(rRttCapabilities));
@@ -854,16 +846,24 @@ int mtk_cfg80211_vendor_set_band(struct wiphy *wiphy,
 	if ((data == NULL) || !data_len)
 		goto nla_put_failure;
 
-	DBGLOG(REQ, TRACE,
-	       "vendor command: data_len=%d, data=0x%x 0x%x\r\n",
-	       data_len, *((uint32_t *) data), *((uint32_t *) data + 1));
-
 	attr = (struct nlattr *)data;
-	setBand = nla_get_u32(attr);
+	if (attr->nla_type == QCA_WLAN_VENDOR_ATTR_SETBAND_VALUE)
+		setBand = nla_get_u32(attr);
+	else
+		return -EINVAL;
+
 	prGlueInfo = (struct GLUE_INFO *) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
 
-	DBGLOG(REQ, INFO, "Vendor Set Band value=%d\r\n", setBand);
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		return -EFAULT;
+	}
+
+	DBGLOG(REQ, INFO,
+	       "vendor command: data_len=%d, data=0x%x 0x%x, set band value=%d\r\n",
+	       data_len, *((uint32_t *) data), *((uint32_t *) data + 1),
+	       setBand);
 
 	if (setBand == QCA_SETBAND_5G)
 		band = BAND_5G;
@@ -898,9 +898,17 @@ int mtk_cfg80211_vendor_set_roaming_policy(
 		goto nla_put_failure;
 
 	attr = (struct nlattr *)data;
-	setRoaming = nla_get_u32(attr);
+	if (attr->nla_type == QCA_WLAN_VENDOR_ATTR_ROAMING_POLICY)
+		setRoaming = nla_get_u32(attr);
+	else
+		return -EINVAL;
 	prGlueInfo = (struct GLUE_INFO *) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		return -EFAULT;
+	}
 
 	DBGLOG(REQ, INFO,
 	       "vendor command: data_len=%d, data=0x%x 0x%x, roaming policy=%d\r\n",
@@ -984,6 +992,11 @@ int mtk_cfg80211_vendor_set_rssi_monitoring(
 	prGlueInfo = (struct GLUE_INFO *) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
 
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		return -EFAULT;
+	}
+
 	rStatus = kalIoctl(prGlueInfo,
 			   wlanoidRssiMonitor,
 			   &rRSSIMonitor, sizeof(struct PARAM_RSSI_MONITOR_T),
@@ -998,26 +1011,35 @@ int mtk_cfg80211_vendor_packet_keep_alive_start(
 	struct wiphy *wiphy, struct wireless_dev *wdev,
 	const void *data, int data_len)
 {
-	uint32_t rStatus = WLAN_STATUS_SUCCESS;
-	unsigned short u2IpPktLen = 0;
-	uint32_t u4BufLen = 0;
 	struct GLUE_INFO *prGlueInfo = NULL;
-
-	int32_t i4Status = -EINVAL;
 	struct PARAM_PACKET_KEEPALIVE_T *prPkt = NULL;
 	struct nlattr *attr[MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC + 1];
-	uint32_t i = 0;
+
+	uint32_t rStatus = WLAN_STATUS_SUCCESS;
+	uint16_t u2IpPktLen = 0;
+	uint32_t u4BufLen = 0;
+	uint8_t ucBssIndex = 0, ucIdx = 0;
+	int32_t i4Status = -EINVAL;
 
 	ASSERT(wiphy);
 	ASSERT(wdev);
 	if ((data == NULL) || !data_len)
 		goto nla_put_failure;
 
-	DBGLOG(REQ, TRACE, "vendor command: data_len=%d\r\n",
-	       data_len);
-	prPkt = (struct PARAM_PACKET_KEEPALIVE_T *)
-		kalMemAlloc(sizeof(struct PARAM_PACKET_KEEPALIVE_T),
-			    VIR_MEM_TYPE);
+	prGlueInfo = (struct GLUE_INFO *) wiphy_priv(wiphy);
+	if (prGlueInfo == NULL)
+		goto nla_put_failure;
+
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		i4Status = -EFAULT;
+		goto nla_put_failure;
+	}
+
+	ucBssIndex = prGlueInfo->prAdapter->prAisBssInfo->ucBssIndex;
+	DBGLOG(REQ, TRACE, "vendor command: data_len=%d\r\n", data_len);
+	prPkt = (struct PARAM_PACKET_KEEPALIVE_T *) kalMemAlloc(
+		sizeof(struct PARAM_PACKET_KEEPALIVE_T), VIR_MEM_TYPE);
 	if (!prPkt) {
 		DBGLOG(REQ, ERROR,
 		       "Can not alloc memory for struct PARAM_PACKET_KEEPALIVE_T\n");
@@ -1027,7 +1049,8 @@ int mtk_cfg80211_vendor_packet_keep_alive_start(
 	kalMemZero(attr, sizeof(struct nlattr *)
 		   * (MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC + 1));
 
-	prPkt->enable = TRUE; /*start packet keep alive*/
+	prPkt->fgEnable = TRUE; /*start packet keep alive*/
+	prPkt->reserved[0] = ucBssIndex;
 	if (NLA_PARSE_NESTED(attr,
 			     MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC,
 			     (struct nlattr *)(data - NLA_HDRLEN),
@@ -1037,64 +1060,68 @@ int mtk_cfg80211_vendor_packet_keep_alive_start(
 		goto nla_put_failure;
 	}
 
-	for (i = MKEEP_ALIVE_ATTRIBUTE_ID;
-	     i <= MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC; i++) {
-		if (attr[i]) {
-			switch (i) {
+	for (ucIdx = MKEEP_ALIVE_ATTRIBUTE_ID;
+	     ucIdx <= MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC; ucIdx++) {
+		if (attr[ucIdx]) {
+			switch (ucIdx) {
 			case MKEEP_ALIVE_ATTRIBUTE_ID:
-				prPkt->index = nla_get_u8(attr[i]);
+				prPkt->index = nla_get_u8(attr[ucIdx]);
 				break;
 			case MKEEP_ALIVE_ATTRIBUTE_IP_PKT_LEN:
-				prPkt->u2IpPktLen = nla_get_u16(attr[i]);
+				prPkt->u2IpPktLen = nla_get_u16(attr[ucIdx]);
 				break;
 			case MKEEP_ALIVE_ATTRIBUTE_IP_PKT:
 				u2IpPktLen = prPkt->u2IpPktLen <= 256
 					? prPkt->u2IpPktLen : 256;
-				kalMemCopy(prPkt->pIpPkt, nla_data(attr[i]),
+				kalMemCopy(prPkt->pIpPkt, nla_data(attr[ucIdx]),
 					u2IpPktLen);
 				break;
 			case MKEEP_ALIVE_ATTRIBUTE_SRC_MAC_ADDR:
 				kalMemCopy(prPkt->ucSrcMacAddr,
-				   nla_data(attr[i]), sizeof(uint8_t) * 6);
+				   nla_data(attr[ucIdx]), sizeof(uint8_t) * 6);
 				break;
 			case MKEEP_ALIVE_ATTRIBUTE_DST_MAC_ADDR:
 				kalMemCopy(prPkt->ucDstMacAddr,
-				   nla_data(attr[i]), sizeof(uint8_t) * 6);
+				   nla_data(attr[ucIdx]), sizeof(uint8_t) * 6);
 				break;
 			case MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC:
-				prPkt->u4PeriodMsec = nla_get_u32(attr[i]);
+				prPkt->u4PeriodMsec = nla_get_u32(attr[ucIdx]);
 				break;
 			}
 		}
 	}
 
 	DBGLOG(REQ, INFO,
-	       "enable=%d, index=%d, u2IpPktLen=%d u4PeriodMsec=%d\n",
-	       prPkt->enable, prPkt->index,
-	       prPkt->u2IpPktLen, prPkt->u4PeriodMsec);
+		"BssIdx=%d fgEnable=%d, index=%d, u2IpPktLen=%d u4PeriodMsec=%d\n",
+		prPkt->reserved[0], prPkt->fgEnable, prPkt->index,
+		prPkt->u2IpPktLen, prPkt->u4PeriodMsec);
 	DBGLOG(REQ, TRACE, "prPkt->pIpPkt=0x%02x%02x%02x%02x\n",
-	       prPkt->pIpPkt[0], prPkt->pIpPkt[1],
-	       prPkt->pIpPkt[2], prPkt->pIpPkt[3]);
+		prPkt->pIpPkt[0], prPkt->pIpPkt[1],
+		prPkt->pIpPkt[2], prPkt->pIpPkt[3]);
 	DBGLOG(REQ, TRACE, "%02x%02x%02x%02x, %02x%02x%02x%02x\n",
-	       prPkt->pIpPkt[4], prPkt->pIpPkt[5],
-	       prPkt->pIpPkt[6], prPkt->pIpPkt[7],
-	       prPkt->pIpPkt[8], prPkt->pIpPkt[9],
-	       prPkt->pIpPkt[10], prPkt->pIpPkt[11]);
+		prPkt->pIpPkt[4], prPkt->pIpPkt[5],
+		prPkt->pIpPkt[6], prPkt->pIpPkt[7],
+		prPkt->pIpPkt[8], prPkt->pIpPkt[9],
+		prPkt->pIpPkt[10], prPkt->pIpPkt[11]);
 	DBGLOG(REQ, TRACE, "%02x%02x%02x%02x\n",
-	       prPkt->pIpPkt[12], prPkt->pIpPkt[13],
-	       prPkt->pIpPkt[14], prPkt->pIpPkt[15]);
+		prPkt->pIpPkt[12], prPkt->pIpPkt[13],
+		prPkt->pIpPkt[14], prPkt->pIpPkt[15]);
 	DBGLOG(REQ, TRACE,
-	       "prPkt->srcMAC=%02x:%02x:%02x:%02x:%02x:%02x\n",
-	       prPkt->ucSrcMacAddr[0], prPkt->ucSrcMacAddr[1],
-	       prPkt->ucSrcMacAddr[2], prPkt->ucSrcMacAddr[3],
-	       prPkt->ucSrcMacAddr[4], prPkt->ucSrcMacAddr[5]);
+		"prPkt->srcMAC=%02x:%02x:%02x:%02x:%02x:%02x\n",
+		prPkt->ucSrcMacAddr[0], prPkt->ucSrcMacAddr[1],
+		prPkt->ucSrcMacAddr[2], prPkt->ucSrcMacAddr[3],
+		prPkt->ucSrcMacAddr[4], prPkt->ucSrcMacAddr[5]);
 	DBGLOG(REQ, TRACE, "dstMAC=%02x:%02x:%02x:%02x:%02x:%02x\n",
-	       prPkt->ucDstMacAddr[0], prPkt->ucDstMacAddr[1],
-	       prPkt->ucDstMacAddr[2], prPkt->ucDstMacAddr[3],
-	       prPkt->ucDstMacAddr[4], prPkt->ucDstMacAddr[5]);
+		prPkt->ucDstMacAddr[0], prPkt->ucDstMacAddr[1],
+		prPkt->ucDstMacAddr[2], prPkt->ucDstMacAddr[3],
+		prPkt->ucDstMacAddr[4], prPkt->ucDstMacAddr[5]);
 
-	prGlueInfo = (struct GLUE_INFO *) wiphy_priv(wiphy);
-	ASSERT(prGlueInfo);
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		kalMemFree(prPkt, VIR_MEM_TYPE,
+			   sizeof(struct PARAM_PACKET_KEEPALIVE_T));
+		return -EFAULT;
+	}
 
 	rStatus = kalIoctl(prGlueInfo,
 			   wlanoidPacketKeepAlive,
@@ -1140,16 +1167,23 @@ int mtk_cfg80211_vendor_packet_keep_alive_stop(
 	}
 	kalMemZero(prPkt, sizeof(struct PARAM_PACKET_KEEPALIVE_T));
 
-	prPkt->enable = FALSE;  /*stop packet keep alive*/
+	prPkt->fgEnable = FALSE;  /*stop packet keep alive*/
 	attr = (struct nlattr *)data;
 	if (attr->nla_type == MKEEP_ALIVE_ATTRIBUTE_ID)
 		prPkt->index = nla_get_u8(attr);
 
-	DBGLOG(REQ, INFO, "enable=%d, index=%d\r\n",
-	       prPkt->enable, prPkt->index);
+	DBGLOG(REQ, INFO, "fgEnable=%d, index=%d\r\n",
+	       prPkt->fgEnable, prPkt->index);
 
 	prGlueInfo = (struct GLUE_INFO *) wiphy_priv(wiphy);
 	ASSERT(prGlueInfo);
+
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		kalMemFree(prPkt, VIR_MEM_TYPE,
+		   sizeof(struct PARAM_PACKET_KEEPALIVE_T));
+		return -EFAULT;
+	}
 
 	rStatus = kalIoctl(prGlueInfo,
 			   wlanoidPacketKeepAlive,
@@ -1259,6 +1293,11 @@ int mtk_cfg80211_vendor_get_supported_feature_set(struct wiphy *wiphy,
 
 	if (!prGlueInfo)
 		return -EFAULT;
+
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		return -EFAULT;
+	}
 
 	u4FeatureSet = wlanGetSupportedFeatureSet(prGlueInfo);
 
@@ -1435,12 +1474,21 @@ int mtk_cfg80211_vendor_get_preferred_freq_list(struct wiphy
 	if (!prGlueInfo)
 		return -EFAULT;
 
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		return -EFAULT;
+	}
+
 	if (NLA_PARSE(tb, WIFI_VENDOR_ATTR_PREFERRED_FREQ_LIST_MAX,
 			data, data_len, nla_get_preferred_freq_list_policy)) {
 		DBGLOG(REQ, ERROR, "Invalid ATTR.\n");
 		return -EINVAL;
 	}
 
+	if (!tb[WIFI_VENDOR_ATTR_PREFERRED_FREQ_LIST_IFACE_TYPE]) {
+		DBGLOG(REQ, ERROR, "Invalid type.\n");
+		return -EINVAL;
+	}
 	type = nla_get_u32(tb[WIFI_VENDOR_ATTR_PREFERRED_FREQ_LIST_IFACE_TYPE]);
 
 	DBGLOG(REQ, INFO, "type: %d\n", type);
@@ -1544,6 +1592,11 @@ int mtk_cfg80211_vendor_acs(struct wiphy *wiphy,
 		DBGLOG(REQ, ERROR, "get glue structure fail.\n");
 		rStatus = -EFAULT;
 		goto exit;
+	}
+
+	if (prGlueInfo->u4ReadyFlag == 0) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		return -EFAULT;
 	}
 
 	if (mtk_Netdev_To_RoleIdx(prGlueInfo, wdev->netdev, &role_idx) < 0) {

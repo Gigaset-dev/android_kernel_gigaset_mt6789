@@ -843,9 +843,11 @@ void scnFsmRemovePendingMsg(IN struct ADAPTER *prAdapter, IN uint8_t ucSeqNum,
 			}
 
 			/* remove from pending list */
-			LINK_REMOVE_KNOWN_ENTRY(&(prScanInfo->rPendingMsgList),
-				prRemoveLinkEntry);
-			cnmMemFree(prAdapter, prRemoveMsgHdr);
+			if (!LINK_IS_EMPTY(&(prScanInfo->rPendingMsgList))) {
+				LINK_REMOVE_KNOWN_ENTRY(&(prScanInfo->
+					rPendingMsgList), prRemoveLinkEntry);
+				cnmMemFree(prAdapter, prRemoveMsgHdr);
+			}
 
 			break;
 		}

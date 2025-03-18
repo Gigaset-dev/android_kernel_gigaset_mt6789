@@ -235,6 +235,8 @@ BOOLEAN secIsProtectedFrame(IN P_ADAPTER_T prAdapter, IN P_MSDU_INFO_T prMsdu, I
 
 VOID secClearPmkid(IN P_ADAPTER_T prAdapter);
 
+UINT32 secDelPmkid(IN P_ADAPTER_T prAdapter, IN P_PARAM_PMKID_T prPmkid);
+
 BOOLEAN secRsnKeyHandshakeEnabled(IN P_ADAPTER_T prAdapter);
 
 UINT_8 secGetBmcWlanIndex(IN P_ADAPTER_T prAdapter, IN ENUM_NETWORK_TYPE_T eNetType, IN P_STA_RECORD_T prStaRec);

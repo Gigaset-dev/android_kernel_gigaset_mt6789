@@ -446,9 +446,6 @@ struct BSS_DESC {
 	 */
 	uint8_t ucIsAdaptive11r;
 
-	/* The received IE length exceed the maximum IE buffer size */
-	u_int8_t fgIsIEOverflow;
-
 	uint16_t u2RawLength;		/* The byte count of aucRawBuf[] */
 	uint16_t u2IELength;		/* The byte count of aucIEBuf[] */
 
@@ -456,7 +453,7 @@ struct BSS_DESC {
 	union ULARGE_INTEGER u8TimeStamp;
 
 	uint8_t aucRawBuf[CFG_RAW_BUFFER_SIZE];
-	uint8_t aucIEBuf[CFG_IE_BUFFER_SIZE];
+	uint8_t *pucIeBuf;
 	uint16_t u2JoinStatus;
 	OS_SYSTIME rJoinFailTime;
 
@@ -780,7 +777,7 @@ extern const char aucScanLogPrefix[][SCAN_LOG_PREFIX_MAX_LEN];
 #endif /* DBG_DISABLE_ALL_LOG */
 
 #define IS_6G_OP_CLASS(_opClass) \
-	((_opClass >= 131) && (_opClass <= 135))
+	((_opClass >= 131) && (_opClass <= 137))
 
 /*******************************************************************************
  *                   F U N C T I O N   D E C L A R A T I O N S
@@ -1039,6 +1036,7 @@ void scanParseHEOpIE(IN uint8_t *pucIE, IN struct BSS_DESC *prBssDesc,
 	IN enum ENUM_BAND eHwBand);
 #endif
 
+void scanOpClassToBand(uint8_t ucOpClass, uint8_t *band);
 void updateLinkStatsApRec(struct ADAPTER *prAdapter,
 		struct BSS_DESC *prBssDesc);
 #endif /* _SCAN_H */

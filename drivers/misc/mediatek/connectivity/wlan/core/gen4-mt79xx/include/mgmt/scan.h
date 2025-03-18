@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: @(#)
  */
@@ -92,6 +93,12 @@
 /* dwell time setting, should align FW setting */
 #define SCAN_CHANNEL_DWELL_TIME_MIN_MSEC         (42)
 
+/* Define RNR scan related parameter */
+#if (CFG_SUPPORT_WIFI_RNR == 1)
+#define SCAN_MAX_SHORT_SSID_LEN			(4)
+#define SCAN_TBTT_INFO_SET_OFFSET		(4)
+#endif
+
 /*----------------------------------------------------------------------------*/
 /* MSG_SCN_SCAN_REQ                                                           */
 /*----------------------------------------------------------------------------*/
@@ -105,7 +112,6 @@
 /*----------------------------------------------------------------------------*/
 /* Support Multiple SSID SCAN                                                 */
 /*----------------------------------------------------------------------------*/
-#define SCN_SSID_MAX_NUM			CFG_SCAN_SSID_MAX_NUM
 #define SCN_SSID_MATCH_MAX_NUM			CFG_SCAN_SSID_MATCH_MAX_NUM
 
 #if CFG_SUPPORT_AGPS_ASSIST
@@ -133,7 +139,8 @@
 
 #define SCN_CTRL_DEFAULT_SCAN_CTRL		SCN_CTRL_IGNORE_AIS_FIX_CHANNEL
 
-#define SCN_SCAN_DONE_PRINT_BUFFER_LENGTH	350
+#define SCN_SCAN_DONE_PRINT_BUFFER_LENGTH	500
+
 /*******************************************************************************
  *                             D A T A   T Y P E S
  *******************************************************************************
@@ -330,9 +337,11 @@ struct BSS_DESC {
 	uint32_t u4RsnSelectedAKMSuite;
 
 	uint16_t u2RsnCap;
+	uint16_t u2RsnxCap;
 
 	struct RSN_INFO rRSNInfo;
 	struct RSN_INFO rWPAInfo;
+	struct RSNX_INFO rRSNXInfo;
 #if 1	/* CFG_SUPPORT_WAPI */
 	struct WAPI_INFO rIEWAPI;
 	u_int8_t fgIEWAPI;
@@ -340,6 +349,7 @@ struct BSS_DESC {
 	u_int8_t fgIERSN;
 	u_int8_t fgIEWPA;
 	u_int8_t fgIEOsen;
+	u_int8_t fgIERSNX;
 
 	/*! \brief RSN parameters selected for connection */
 	/*! \brief The Select score for final AP selection,
@@ -377,9 +387,6 @@ struct BSS_DESC {
 	 */
 #endif
 
-	/* The received IE length exceed the maximum IE buffer size */
-	u_int8_t fgIsIEOverflow;
-
 	uint16_t u2RawLength;		/* The byte count of aucRawBuf[] */
 	uint16_t u2IELength;		/* The byte count of aucIEBuf[] */
 
@@ -387,7 +394,7 @@ struct BSS_DESC {
 	union ULARGE_INTEGER u8TimeStamp;
 
 	uint8_t aucRawBuf[CFG_RAW_BUFFER_SIZE];
-	uint8_t aucIEBuf[CFG_IE_BUFFER_SIZE];
+	uint8_t *pucIeBuf;
 	uint16_t u2JoinStatus;
 	OS_SYSTIME rJoinFailTime;
 
@@ -431,10 +438,10 @@ struct SCAN_PARAM {	/* Used by SCAN FSM */
 	uint8_t ucShortSSIDNum;
 
 	/* Length of Specified SSID */
-	uint8_t ucSpecifiedSSIDLen[SCN_SSID_MAX_NUM];
+	uint8_t ucSpecifiedSSIDLen[CFG_SCAN_SSID_MAX_NUM];
 
 	/* Specified SSID */
-	uint8_t aucSpecifiedSSID[SCN_SSID_MAX_NUM][ELEM_MAX_LEN_SSID];
+	uint8_t aucSpecifiedSSID[CFG_SCAN_SSID_MAX_NUM][ELEM_MAX_LEN_SSID];
 
 #if CFG_ENABLE_WIFI_DIRECT
 	u_int8_t fgFindSpecificDev;	/* P2P: Discovery Protocol */
@@ -449,7 +456,7 @@ struct SCAN_PARAM {	/* Used by SCAN FSM */
 	uint16_t u2ChannelMinDwellTime;
 	uint16_t u2TimeoutValue;
 
-	uint8_t aucBSSID[SCN_SSID_MAX_NUM][MAC_ADDR_LEN];
+	uint8_t aucBSSID[CFG_SCAN_OOB_MAX_NUM][MAC_ADDR_LEN];
 
 	u_int8_t fgIsObssScan;
 	u_int8_t fgIsScanV2;
@@ -470,14 +477,13 @@ struct SCAN_PARAM {	/* Used by SCAN FSM */
 	uint8_t ucSeqNum;
 
 	/* For 6G OOB discovery*/
-	uint8_t ucBssidMatchCh[CFG_SCAN_SSID_MAX_NUM];
-	uint8_t ucBssidMatchSsidInd[CFG_SCAN_SSID_MAX_NUM];
+	uint8_t ucBssidMatchCh[CFG_SCAN_OOB_MAX_NUM];
+	uint8_t ucBssidMatchSsidInd[CFG_SCAN_OOB_MAX_NUM];
 	u_int8_t fg6gOobRnrParseEn;
 
 	/* Information Element */
 	uint16_t u2IELen;
 	uint8_t aucIE[MAX_IE_LENGTH];
-
 };
 
 struct SCHED_SCAN_PARAM {	/* Used by SCAN FSM */
@@ -552,6 +558,10 @@ struct SCAN_INFO {
 	/* Support AP Selection */
 	uint32_t u4ScanUpdateIdx;
 
+#if (CFG_SUPPORT_WIFI_RNR == 1)
+	struct LINK rNeighborAPInfoList;
+#endif
+
 	/* Scan log cache */
 	struct SCAN_LOG_CACHE rScanLogCache;
 	/*record time when begin scan*/
@@ -604,11 +614,11 @@ struct MSG_SCN_SCAN_REQ_V2 {
 	uint8_t ucScnFuncMask;
 	uint8_t aucRandomMac[MAC_ADDR_LEN];	/* random mac */
 	/* pass from PARAM_SCAN_REQUEST_ADV.aucBssid */
-	uint8_t aucExtBssid[CFG_SCAN_SSID_MAX_NUM][MAC_ADDR_LEN];
+	uint8_t aucExtBssid[CFG_SCAN_OOB_MAX_NUM][MAC_ADDR_LEN];
 	uint8_t ucShortSSIDNum;
 	/* For 6G OOB discovery*/
-	uint8_t ucBssidMatchCh[CFG_SCAN_SSID_MAX_NUM];
-	uint8_t ucBssidMatchSsidInd[CFG_SCAN_SSID_MAX_NUM];
+	uint8_t ucBssidMatchCh[CFG_SCAN_OOB_MAX_NUM];
+	uint8_t ucBssidMatchSsidInd[CFG_SCAN_OOB_MAX_NUM];
 	u_int8_t fg6gOobRnrParseEn;
 	uint16_t u2IELen;
 	uint8_t aucIE[MAX_IE_LENGTH];
@@ -659,12 +669,41 @@ struct AGPS_AP_LIST {
 #endif
 
 #if (CFG_SUPPORT_WIFI_RNR == 1)
+struct NEIGHBOR_AP_PARAM {
+	/* Specified SSID Type */
+	uint8_t ucSSIDType;
+	uint8_t ucSSIDNum;
+	uint8_t ucShortSSIDNum;
+
+	/* Length of Specified SSID */
+	uint8_t ucSpecifiedSSIDLen[CFG_SCAN_SSID_MAX_NUM];
+
+	/* Specified SSID */
+	uint8_t aucSpecifiedSSID[CFG_SCAN_SSID_MAX_NUM][ELEM_MAX_LEN_SSID];
+	uint8_t aucBSSID[CFG_SCAN_OOB_MAX_NUM][MAC_ADDR_LEN];
+
+	/* channel information */
+	enum ENUM_SCAN_CHANNEL eScanChannel;
+	uint8_t ucChannelListNum;
+	struct RF_CHANNEL_INFO arChnlInfoList[CFG_SCAN_SSID_MAX_NUM];
+
+	/* random mac */
+	uint8_t ucScnFuncMask;
+
+	/* For 6G OOB discovery*/
+	uint8_t ucBssidMatchCh[CFG_SCAN_OOB_MAX_NUM];
+	uint8_t ucBssidMatchSsidInd[CFG_SCAN_OOB_MAX_NUM];
+
+	/* Information Element */
+	uint16_t u2IELen;
+	uint8_t aucIE[MAX_IE_LENGTH];
+};
+
 struct NEIGHBOR_AP_INFO {
 	struct LINK_ENTRY rLinkEntry;
-	struct PARAM_SCAN_REQUEST_ADV rScanRequest;
-	uint8_t aucScanIEBuf[MAX_IE_LENGTH];
+	struct NEIGHBOR_AP_PARAM rNeighborParam;
 };
-#endif
+#endif /* CFG_SUPPORT_WIFI_RNR */
 
 /*******************************************************************************
  *                            P U B L I C   D A T A
@@ -939,4 +978,6 @@ void scanParseVHTOpIE(IN uint8_t *pucIE, IN struct BSS_DESC *prBssDesc);
 void scanParseHEOpIE(IN uint8_t *pucIE, IN struct BSS_DESC *prBssDesc,
 	IN enum ENUM_BAND eHwBand);
 #endif
+
+const char *SSID2STR(const uint8_t *ssid, uint8_t ssid_len);
 #endif /* _SCAN_H */

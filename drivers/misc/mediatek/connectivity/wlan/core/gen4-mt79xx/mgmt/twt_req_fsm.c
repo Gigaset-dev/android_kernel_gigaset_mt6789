@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2017 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   "twt_req_fsm.c"
 *   \brief  FSM for TWT Requesting STA negotiation
 */

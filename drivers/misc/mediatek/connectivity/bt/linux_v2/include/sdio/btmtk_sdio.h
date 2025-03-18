@@ -175,6 +175,13 @@ struct btmtk_sdio_dev {
 	atomic_t fw_own_timer_flag;
 };
 
+#ifdef CFG_CHIP_RESET_KO_SUPPORT
+struct wifi_read_mcu_pc {
+	uint8_t PcLogSel;
+	uint32_t *pu4Val;
+};
+#endif
+
 int btmtk_sdio_read_bt_mcu_pc(u32 *val);
 int btmtk_sdio_read_conn_infra_pc(u32 *val);
 int btmtk_sdio_set_driver_own_for_subsys_reset(int enable);

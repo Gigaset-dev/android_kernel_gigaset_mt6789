@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3
  *     /include/mgmt/cnm.h#1
@@ -44,6 +45,7 @@
 enum ENUM_CH_SWITCH_TYPE {
 	CH_SWITCH_2G, /* Default */
 	CH_SWITCH_5G,
+	CH_SWITCH_6G,
 	CH_SWITCH_NUM
 };
 #endif
@@ -171,6 +173,20 @@ enum ENUM_CNM_NETWORK_TYPE_T {
 	ENUM_CNM_NETWORK_TYPE_NUM
 };
 
+#if (CFG_WIFI_RAM_COEX_SPDT_SHR_ANT_CTRL == 1)
+enum ENUM_SHR_ANT_GRANT {
+	SHR_ANT_GRANT_TO_WIFI = 0x0,
+	SHR_ANT_GRANT_TO_BT = 0x1,
+};
+
+enum ENUM_DBDC_SETTING_REASON {
+	DBDC_SETTING_REASON_NULL,
+	DBDC_SETTING_REASON_SWCH_SHR_ANT_TO_BT_DIRECTLY,
+	DBDC_SETTING_REASON_SWCH_SHR_ANT_TO_BT_AFTER_DBDC,
+	DBDC_SETTING_REASON_NUM
+};
+#endif
+
 /*******************************************************************************
  *                            P U B L I C   D A T A
  *******************************************************************************
@@ -279,6 +295,9 @@ u_int8_t cnmBss80mBwPermitted(struct ADAPTER *prAdapter, uint8_t ucBssIndex);
 
 uint8_t cnmGetBssMaxBw(struct ADAPTER *prAdapter, uint8_t ucBssIndex);
 
+uint8_t cnmGetBssBandBw(struct ADAPTER *prAdapter,
+	struct BSS_INFO *prBssInfo,	enum ENUM_BAND eBand);
+
 uint8_t cnmGetBssMaxBwToChnlBW(struct ADAPTER *prAdapter, uint8_t ucBssIndex);
 
 #if CFG_SUPPORT_DBDC
@@ -327,6 +346,12 @@ u_int8_t cnmDbdcIsP2pListenDbdcEn(void);
 
 void cnmDbdcGuardTimerCallback(IN struct ADAPTER *prAdapter,
 	IN unsigned long plParamPtr);
+
+#if (CFG_WIFI_RAM_COEX_SPDT_SHR_ANT_CTRL == 1)
+void cnmUpdateSharedAntennaSwitch(IN struct ADAPTER *prAdapter,
+	IN struct WIFI_EVENT *prEvent);
+#endif
+
 void cnmDbdcEventHwSwitchDone(IN struct ADAPTER *prAdapter,
 	IN struct WIFI_EVENT *prEvent);
 u_int8_t cnmDbdcIsWaitHwDisable(IN struct ADAPTER *prAdapter);
@@ -403,5 +428,11 @@ static __KAL_INLINE__ void cnmMsgDataTypeCheck(void)
 			== OFFSET_OF(struct MSG_CH_REOCVER, eReqType));
 }
 #endif /* _lint */
+
+uint8_t cnmOpModeGetApMaxBw(struct ADAPTER *prAdapter,
+	struct BSS_INFO *prBssInfo);
+
+uint8_t cnmOpModeGetMaxBw(struct ADAPTER *prAdapter,
+	struct BSS_INFO *prBssInfo);
 
 #endif /* _CNM_H */

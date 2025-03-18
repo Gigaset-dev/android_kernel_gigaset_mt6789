@@ -1150,6 +1150,56 @@ static void rlmFillHtOpIE(struct ADAPTER *prAdapter, struct BSS_INFO *prBssInfo,
 	prMsduInfo->u2FrameLength += IE_SIZE(prHtOp);
 }
 
+
+void rlmGenerateHtTPEIE(
+	struct ADAPTER *prAdapter,
+	struct MSDU_INFO *prMsduInfo)
+{
+	struct BSS_INFO *prBssInfo;
+	struct STA_RECORD *prStaRec;
+	uint8_t ucPhyTypeSet;
+
+	ASSERT(prAdapter);
+	ASSERT(prMsduInfo);
+
+	prStaRec = cnmGetStaRecByIndex(prAdapter, prMsduInfo->ucStaRecIndex);
+
+	prBssInfo = prAdapter->aprBssInfo[prMsduInfo->ucBssIndex];
+	if (!prBssInfo || !IS_BSS_APGO(prBssInfo))
+		return;
+
+	if (!IS_BSS_ACTIVE(prBssInfo))
+		return;
+
+	if (IS_FEATURE_DISABLED(prAdapter->rWifiVar.fgSapAddTPEIE))
+		return;
+
+	/* Decide PHY type set source */
+	if (prStaRec) {
+		/* Get PHY type set from target STA */
+		ucPhyTypeSet = prStaRec->ucPhyTypeSet;
+	} else {
+		/* Get PHY type set from current BSS */
+		ucPhyTypeSet = prBssInfo->ucPhyTypeSet;
+	}
+
+	if (RLM_NET_IS_11N(prBssInfo) &&
+		(ucPhyTypeSet & PHY_TYPE_SET_802_11N)) {
+		struct IE_HT_TPE *prHtTpe;
+
+		prHtTpe = (struct IE_HT_TPE *)
+			(((uint8_t *)prMsduInfo->prPacket) +
+			prMsduInfo->u2FrameLength);
+
+		prHtTpe->ucId = ELEM_ID_PWR_CONSTRAINT;
+		prHtTpe->ucLength =
+			sizeof(struct IE_HT_TPE) - ELEM_HDR_LEN;
+		prHtTpe->u8TxPowerInfo = 3;
+
+		prMsduInfo->u2FrameLength += IE_SIZE(prHtTpe);
+	}
+}
+
 #if CFG_SUPPORT_802_11AC
 
 /*----------------------------------------------------------------------------*/
@@ -2324,6 +2374,11 @@ void rlmRevisePreferBandwidthNss(struct ADAPTER *prAdapter,
 #define AR_IS_STA_2SS_AC(prStaRec) ((AR_STA_2AC_MCS(prStaRec) != BITS(0, 1)))
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIndex);
+	if (prBssInfo == NULL) {
+		DBGLOG(RLM, ERROR, "prBssInfo is %d NULL\n",
+			ucBssIndex);
+		return;
+	}
 
 	eChannelWidth = prBssInfo->ucVhtChannelWidth;
 
@@ -2372,6 +2427,11 @@ void rlmReviseMaxBw(struct ADAPTER *prAdapter, uint8_t ucBssIndex,
 	enum ENUM_CHNL_EXT eScoModify;
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIndex);
+	if (prBssInfo == NULL) {
+		DBGLOG(RLM, WARN, "prBssInfo %d is NULL\n",
+			ucBssIndex);
+		return;
+	}
 	ucMaxBandwidth = cnmGetDbdcBwCapability(prAdapter, ucBssIndex);
 
 	if (*peChannelWidth > CW_20_40MHZ) {
@@ -4060,8 +4120,15 @@ void rlmProcessBcn(struct ADAPTER *prAdapter, struct SW_RFB *prSwRfb,
 
 			/* Appy new parameters if necessary */
 			if (fgNewParameter) {
-				nicUpdateBss(prAdapter, prBssInfo->ucBssIndex);
-				rlmSyncOperationParams(prAdapter, prBssInfo);
+				if (IS_BSS_AIS(prBssInfo) &&
+					IS_AIS_ROAMING(prAdapter,
+						prBssInfo->ucBssIndex))
+					roamingFsmSetRecoverBitmap(prAdapter,
+						prBssInfo->ucBssIndex,
+						ROAMING_RECOVER_BSS_UPDATE);
+				else
+					nicUpdateBss(prAdapter,
+						     prBssInfo->ucBssIndex);
 				fgNewParameter = FALSE;
 			}
 #if (CFG_SUPPORT_802_11AX == 1)
@@ -5738,6 +5805,12 @@ void rlmProcessSpecMgtAction(struct ADAPTER *prAdapter, struct SW_RFB *prSwRfb)
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, prStaRec->ucBssIndex);
 
+	if (prBssInfo == NULL) {
+		DBGLOG(RLM, INFO, "prBssInfo %d is null\n",
+			prStaRec->ucBssIndex);
+		return;
+	}
+
 	DBGLOG_MEM8(RLM, INFO, pucIE, u2IELength);
 	switch (ucAction) {
 	case ACTION_MEASUREMENT_REQ:
@@ -5769,7 +5842,8 @@ void rlmProcessSpecMgtAction(struct ADAPTER *prAdapter, struct SW_RFB *prSwRfb)
 		DBGLOG(RLM, INFO, "[Mgt Action] TPC Request\n");
 		prTpcReqIE = SM_TPC_REQ_IE(pucIE);
 
-		if (prTpcReqIE->ucId == ELEM_ID_TPC_REQ)
+		if ((prTpcReqIE->ucId == ELEM_ID_TPC_REQ) &&
+			(prStaRec->ucBssIndex < MAX_BSS_INDEX))
 			tpcComposeReportFrame(prAdapter, prStaRec, NULL);
 
 		break;
@@ -5846,13 +5920,14 @@ void rlmProcessSpecMgtAction(struct ADAPTER *prAdapter, struct SW_RFB *prSwRfb)
 						prBssInfo->ucPrimaryChannel,
 						prChannelSwitchAnnounceIE
 						    ->ucNewChannelNum);
-
-					prCSAParams->ucCsaNewCh =
-						prChannelSwitchAnnounceIE->
+					if (prCSAParams) {
+						prCSAParams->ucCsaNewCh
+						 = prChannelSwitchAnnounceIE->
 							ucNewChannelNum;
-					ucCurrentCsaCount =
-						prChannelSwitchAnnounceIE->
+						ucCurrentCsaCount
+						 = prChannelSwitchAnnounceIE->
 							ucChannelSwitchCount;
+					}
 
 				} else {
 					DBGLOG(RLM, INFO,
@@ -5874,28 +5949,32 @@ void rlmProcessSpecMgtAction(struct ADAPTER *prAdapter, struct SW_RFB *prSwRfb)
 				       "[CSA Mgt] SCO [%d]->[%d]\n",
 				       prBssInfo->eBssSCO,
 				       prSecondaryOffsetIE->ucSecondaryOffset);
-
-				prCSAParams->eSco = (enum ENUM_CHNL_EXT)
-					prSecondaryOffsetIE->ucSecondaryOffset;
-				break;
+				if (prCSAParams) {
+					prCSAParams->eSco = (enum ENUM_CHNL_EXT)
+						prSecondaryOffsetIE->
+							ucSecondaryOffset;
+				}
+					break;
 
 			default:
 				break;
 			} /*end of switch IE_ID */
 		}	 /*end of IE_FOR_EACH */
-
-		if (SHOULD_CH_SWITCH(ucCurrentCsaCount, prCSAParams)) {
-			cnmTimerStopTimer(prAdapter, &prBssInfo->rCsaTimer);
-			cnmTimerStartTimer(prAdapter, &prBssInfo->rCsaTimer,
-				prBssInfo->u2BeaconInterval *
-					ucCurrentCsaCount);
-			prCSAParams->ucCsaCount = ucCurrentCsaCount;
-			DBGLOG(RLM, INFO,
-				"[CSA Mgt] Channel switch Countdown: %d msecs\n",
-				prBssInfo->u2BeaconInterval *
-					prCSAParams->ucCsaCount);
+		if (prCSAParams) {
+			if (SHOULD_CH_SWITCH(ucCurrentCsaCount, prCSAParams)) {
+				cnmTimerStopTimer(prAdapter,
+					&prBssInfo->rCsaTimer);
+				cnmTimerStartTimer(prAdapter,
+					&prBssInfo->rCsaTimer,
+					prBssInfo->u2BeaconInterval *
+						ucCurrentCsaCount);
+				prCSAParams->ucCsaCount = ucCurrentCsaCount;
+				DBGLOG(RLM, INFO,
+					"[CSA Mgt] Channel switch Countdown: %d msecs\n",
+					prBssInfo->u2BeaconInterval *
+						prCSAParams->ucCsaCount);
+				}
 		}
-
 		break;
 #endif
 	default:
@@ -7129,8 +7208,15 @@ static void rlmCompleteOpModeChange(struct ADAPTER *prAdapter,
 		rlmChangeOwnOpInfo(prAdapter, prBssInfo);
 
 		/* <2> Update OP BW/Nss to FW */
-		if (!fgIsSwitchingP2pChnl)
-			rlmSyncOperationParams(prAdapter, prBssInfo);
+		if (!fgIsSwitchingP2pChnl) {
+			if (IS_BSS_AIS(prBssInfo) &&
+			    IS_AIS_ROAMING(prAdapter, prBssInfo->ucBssIndex))
+				roamingFsmSetRecoverBitmap(prAdapter,
+					prBssInfo->ucBssIndex,
+					ROAMING_RECOVER_RLM_SYNC);
+			else
+				rlmSyncOperationParams(prAdapter, prBssInfo);
+		}
 
 		/* <3> Update BCN/Probe Resp IE to notify peers our OP info is
 		 * changed (AP mode)

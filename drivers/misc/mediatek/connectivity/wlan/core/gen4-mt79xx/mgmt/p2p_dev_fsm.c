@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 #include "precomp.h"
 #include "p2p_dev_state.h"
 #if CFG_ENABLE_WIFI_DIRECT
@@ -43,14 +44,16 @@ uint8_t p2pDevFsmInit(IN struct ADAPTER *prAdapter)
 		cnmTimerInitTimer(prAdapter,
 			&(prP2pDevFsmInfo->rP2pFsmTimeoutTimer),
 			(PFN_MGMT_TIMEOUT_FUNC) p2pDevFsmRunEventTimeout,
-			(unsigned long) prP2pDevFsmInfo);
+			(unsigned long) prP2pDevFsmInfo,
+			TIMER_WAKELOCK_AUTO);
 
 #if (CFG_DBDC_SW_FOR_P2P_LISTEN == 1)
 		prP2pDevFsmInfo->fgIsP2pListening = FALSE;
 		cnmTimerInitTimer(prAdapter,
 			&(prP2pDevFsmInfo->rP2pListenDbdcTimer),
 			(PFN_MGMT_TIMEOUT_FUNC) p2pDevDbdcSwDelayTimeout,
-			(unsigned long) prP2pDevFsmInfo);
+			(unsigned long) prP2pDevFsmInfo,
+			TIMER_WAKELOCK_AUTO);
 #endif
 
 		prP2pBssInfo =
@@ -152,7 +155,8 @@ uint8_t p2pDevFsmInit(IN struct ADAPTER *prAdapter)
 		cnmTimerInitTimer(prAdapter,
 			&(prP2pFsmInfo->rP2pFsmTimeoutTimer),
 			(PFN_MGMT_TIMEOUT_FUNC) p2pFsmRunEventFsmTimeout,
-			(unsigned long) prP2pFsmInfo);
+			(unsigned long) prP2pFsmInfo,
+			TIMER_WAKELOCK_AUTO);
 
 		/* 4 <2> Initiate BSS_INFO_T - common part */
 		BSS_INFO_INIT(prAdapter, NETWORK_TYPE_P2P_INDEX);
@@ -1287,6 +1291,30 @@ p2pDevFsmRunEventMgmtFrameTxDone(IN struct ADAPTER *prAdapter,
 		kalP2PIndicateMgmtTxStatus(prAdapter->prGlueInfo,
 			prMsduInfo,
 			fgIsSuccess);
+
+#if CFG_SUPPORT_SOFTAP_OWE
+		if (IS_BSS_INDEX_VALID(prMsduInfo->ucBssIndex)) {
+			struct BSS_INFO *prBssInfo =
+				GET_BSS_INFO_BY_INDEX(prAdapter,
+				prMsduInfo->ucBssIndex);
+			struct WLAN_MAC_HEADER *prWlanHdr =
+				(struct WLAN_MAC_HEADER *)
+				((unsigned long) prMsduInfo->prPacket +
+				MAC_TX_RESERVED_FIELD);
+
+			/* Redirect to assoc rsp tx done */
+			if (IS_BSS_APGO(prBssInfo) &&
+				(prBssInfo->u4RsnSelectedAKMSuite ==
+				RSN_AKM_SUITE_OWE) &&
+				((prWlanHdr->u2FrameCtrl &
+				MASK_FRAME_TYPE) ==
+				MAC_FRAME_ASSOC_RSP))
+				aaaFsmRunEventTxDone(prAdapter,
+					prMsduInfo,
+					rTxDoneStatus);
+		}
+#endif
+
 	} while (FALSE);
 
 	return WLAN_STATUS_SUCCESS;

@@ -1,54 +1,8 @@
-/*******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- ******************************************************************************/
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*! \file   wlan_lib.c
  *    \brief  Internal driver stack will export the required procedures here for
  *            GLUE Layer.
@@ -625,7 +579,8 @@ uint32_t wlanAdapterStart(IN struct ADAPTER *prAdapter,
 		cnmTimerInitTimer(prAdapter,
 				  &prAdapter->rOidTimeoutTimer,
 				  (PFN_MGMT_TIMEOUT_FUNC) wlanReleasePendingOid,
-				  (unsigned long) NULL);
+				  (unsigned long) NULL,
+				  TIMER_WAKELOCK_AUTO);
 
 		prAdapter->ucOidTimeoutCount = 0;
 
@@ -636,7 +591,8 @@ uint32_t wlanAdapterStart(IN struct ADAPTER *prAdapter,
 				  &prAdapter->rPacketDelaySetupTimer,
 				  (PFN_MGMT_TIMEOUT_FUNC)
 					wlanReturnPacketDelaySetupTimeout,
-				  (unsigned long) NULL);
+				  (unsigned long) NULL,
+				  TIMER_WAKELOCK_AUTO);
 
 		/* Power state initialization */
 		prAdapter->fgWiFiInSleepyState = FALSE;
@@ -836,10 +792,12 @@ uint32_t wlanAdapterStart(IN struct ADAPTER *prAdapter,
 		cnmTimerInitTimer(prAdapter,
 				  &prAdapter->rSerSyncTimer,
 				 (PFN_MGMT_TIMEOUT_FUNC) nicSerSyncTimerHandler,
-				  (unsigned long) NULL);
+				  (unsigned long) NULL,
+				  TIMER_WAKELOCK_NONE);
 		cnmTimerStartTimer(prAdapter,
 				   &prAdapter->rSerSyncTimer,
 				   WIFI_SER_SYNC_TIMER_TIMEOUT_IN_MS);
+		prAdapter->ucSerNoAckCount = 0;
 #endif	/* _HIF_USB */
 #endif	/* CFG_SUPPORT_SER */
 	} else {
@@ -1189,7 +1147,9 @@ uint32_t wlanProcessCommandQueue(IN struct ADAPTER
 					eFrameAction = FRAME_ACTION_DROP_PKT;
 					break;
 				case SEC_QUEUE_KEY_COMMAND:
-					eFrameAction = FRAME_ACTION_QUEUE_PKT;
+					if (!prAdapter->fgIsPostponeTxEAPOLM3)
+						eFrameAction =
+							FRAME_ACTION_QUEUE_PKT;
 					break;
 				case SEC_TX_KEY_COMMAND:
 				default:
@@ -1584,12 +1544,22 @@ uint32_t wlanTxCmdMthread(IN struct ADAPTER *prAdapter)
 
 	KAL_SPIN_LOCK_DECLARATION();
 
-	ASSERT(prAdapter);
+	if (!prAdapter) {
+		DBGLOG(INIT, ERROR, "prAdapter is NULL error\n");
+		return WLAN_STATUS_FAILURE;
+	}
 
 	if (halIsHifStateSuspend(prAdapter)) {
-		DBGLOG(TX, WARN, "Suspend TxCmdMthread\n");
+		DBGLOG(TX, ERROR, "Suspend TxCmdMthread\n");
 		return WLAN_STATUS_SUCCESS;
 	}
+
+#if defined(_HIF_USB)
+	if (halTxGetFreeCmdCnt(prAdapter) <= 0) {
+		DBGLOG(TX, ERROR, "Waiting for HIF-resource\n");
+		return WLAN_STATUS_RESOURCES;
+	}
+#endif
 
 	prTempCmdQue = &rTempCmdQue;
 	QUEUE_INITIALIZE(prTempCmdQue);
@@ -1936,6 +1906,8 @@ void wlanClearDataQueue(IN struct ADAPTER *prAdapter)
 		while (QUEUE_IS_NOT_EMPTY(&prAdapter->rTxDataDoneQueue)) {
 			QUEUE_REMOVE_HEAD(&prAdapter->rTxDataDoneQueue,
 					  prMsduInfo, struct MSDU_INFO *);
+			if (prMsduInfo == NULL)
+				break;
 
 			nicTxFreePacket(prAdapter, prMsduInfo, FALSE);
 			nicTxReturnMsduInfo(prAdapter, prMsduInfo);
@@ -3497,6 +3469,11 @@ u_int8_t wlanProcessTxFrame(IN struct ADAPTER *prAdapter,
 				 *	GLUE_SET_PKT_FLAG(prPacket,
 				 *			ENUM_PKT_PROTECTED_1X);
 				 */
+				if (prStaRec
+				&& (prStaRec->fgIsTxKeyReady == TRUE)
+				&& (prStaRec->fg1xKey4Done == TRUE))
+					rTxPacketInfo.u2Flag &=
+					~(BIT(ENUM_PKT_NON_PROTECTED_1X));
 			}
 
 			if (rTxPacketInfo.u2Flag &
@@ -6065,7 +6042,6 @@ void wlanBindBssIdxToNetInterface(IN struct GLUE_INFO *prGlueInfo,
 	/* prGlueInfo->aprBssIdxToNetInterfaceInfo[ucBssIndex] = prNetIfInfo; */
 }
 
-#if 0
 /*----------------------------------------------------------------------------*/
 /*!
  * @brief This function is to GET BSS index for a network interface.
@@ -6082,18 +6058,17 @@ uint8_t wlanGetBssIdxByNetInterface(IN struct GLUE_INFO
 {
 	uint8_t ucIdx = 0;
 
-	ASSERT(prGlueInfo);
-
-	for (ucIdx = 0; ucIdx < prGlueInfo->prAdapter->ucHwBssIdNum;
-	     ucIdx++) {
-		if (prGlueInfo->arNetInterfaceInfo[ucIdx].pvNetInterface ==
-		    pvNetInterface)
-			break;
+	if (prGlueInfo != NULL) {
+		for (ucIdx = 0; ucIdx < prGlueInfo->prAdapter->ucHwBssIdNum;
+			 ucIdx++) {
+			if (prGlueInfo->arNetInterfaceInfo[ucIdx].pvNetInterface
+				== pvNetInterface)
+				break;
+		}
 	}
 
 	return ucIdx;
 }
-#endif
 /*----------------------------------------------------------------------------*/
 /*!
  * @brief This function is to GET network interface for a BSS.
@@ -6108,6 +6083,11 @@ uint8_t wlanGetBssIdxByNetInterface(IN struct GLUE_INFO
 void *wlanGetNetInterfaceByBssIdx(IN struct GLUE_INFO
 				  *prGlueInfo, IN uint8_t ucBssIndex)
 {
+	if (ucBssIndex >= prGlueInfo->prAdapter->ucHwBssIdNum) {
+		DBGLOG(INIT, ERROR,
+		       "Array index out of bound, ucBssIndex=%u\n", ucBssIndex);
+		return NULL;
+	}
 	return prGlueInfo->arNetInterfaceInfo[ucBssIndex].pvNetInterface;
 }
 
@@ -6167,6 +6147,9 @@ void wlanInitFeatureOption(IN struct ADAPTER *prAdapter)
 					FEATURE_ENABLED);
 	prWifiVar->ucP2pGcVht = (uint8_t) wlanCfgGetUint32(prAdapter,
 					"P2pGcVHT", FEATURE_ENABLED);
+
+	prWifiVar->ucDisP2pPs = (uint8_t) wlanCfgGetUint32(prAdapter,
+					"DisP2pPs", FEATURE_DISABLED);
 
 	prWifiVar->ucAmpduRx = (uint8_t) wlanCfgGetUint32(prAdapter, "AmpduRx",
 					FEATURE_ENABLED);
@@ -6549,6 +6532,23 @@ void wlanInitFeatureOption(IN struct ADAPTER *prAdapter)
 	prWifiVar->u4ForceEdca = (uint32_t) wlanCfgGetUint32(
 					prAdapter, "EdcaSet", 0);
 
+	/*
+	* Format of WmmParams
+	* Bits[0]     - Enable
+	* Bits[7:4]   - AIFS
+	* Bits[11:8]  - CWmin
+	* Bits[15:12] - CWmax
+	* Bits[31:16] - TXOP
+	*/
+	prWifiVar->u4P2pGoWmmParamAC0 = wlanCfgGetUint32(prAdapter,
+					"P2pGoWmmParamAC0", 0);
+	prWifiVar->u4P2pGoWmmParamAC1 = wlanCfgGetUint32(prAdapter,
+					"P2pGoWmmParamAC1", 0);
+	prWifiVar->u4P2pGoWmmParamAC2 = wlanCfgGetUint32(prAdapter,
+					"P2pGoWmmParamAC2", 0);
+	prWifiVar->u4P2pGoWmmParamAC3 = wlanCfgGetUint32(prAdapter,
+					"P2pGoWmmParamAC3", 0);
+
 #if 0
 	prWifiVar->ucSigmaTestMode = (uint8_t) wlanCfgGetUint32(
 					prAdapter, "SigmaTestMode", 0);
@@ -6771,6 +6771,18 @@ void wlanInitFeatureOption(IN struct ADAPTER *prAdapter)
 		"Ed5GEU", ED_CCA_BW20_5G_DEFAULT);
 	prWifiVar->ucEnforceCAM2G =
 		(uint8_t) wlanCfgGetUint32(prAdapter, "EnforceCAM2G", 0);
+
+#if (CFG_SUPPORT_P2PGO_ACS == 1)
+	prWifiVar->ucP2pGoACS = (uint32_t) wlanCfgGetUint32(
+			prAdapter, "P2pGoACSEnable",
+			FEATURE_DISABLED);
+#endif
+
+#if CFG_SUPPORT_P2P_CSA
+	prWifiVar->ucP2pCsaCount = (uint32_t) wlanCfgGetUint32(
+			prAdapter, "P2pCsaCount",
+			3);
+#endif
 }
 
 void wlanCfgSetSwCtrl(IN struct ADAPTER *prAdapter)
@@ -7088,9 +7100,10 @@ uint32_t wlanCfgGet(IN struct ADAPTER *prAdapter,
 			   WLAN_CFG_VALUE_LEN_MAX - 1);
 		return WLAN_STATUS_SUCCESS;
 	}
-	if (pucValueDef)
+	if (pucValueDef &&
+		(strlen(pucValueDef) <= WLAN_CFG_VALUE_LEN_MAX - 1))
 		kalMemCopy(pucValue, pucValueDef,
-			   WLAN_CFG_VALUE_LEN_MAX - 1);
+			   strlen(pucValueDef) + 1);
 	return WLAN_STATUS_FAILURE;
 
 
@@ -8778,6 +8791,7 @@ wlanPktTxDone(IN struct ADAPTER *prAdapter,
 {
 	OS_SYSTIME rCurrent = kalGetTimeTick();
 	struct PKT_PROFILE *prPktProfile = &prMsduInfo->rPktProfile;
+	struct STA_RECORD *prStaRec = NULL;
 
 	uint8_t *apucPktType[ENUM_PKT_FLAG_NUM] = {
 		(uint8_t *) DISP_STRING("INVALID"),
@@ -8830,6 +8844,14 @@ wlanPktTxDone(IN struct ADAPTER *prAdapter,
 		prMsduInfo->ucTxSeqNum);
 
 	if (prMsduInfo->ucPktType == ENUM_PKT_1X) {
+		/* For AIS Only */
+		prStaRec = prAdapter->prAisBssInfo->prStaRecOfAP;
+		if (prStaRec && prStaRec->fgIsInUse
+		&& (prStaRec->ucBssIndex == prMsduInfo->ucBssIndex)
+		&& (prMsduInfo->eEapolKeyType == EAPOL_KEY_4_OF_4)
+		&& (rTxDoneStatus == TX_RESULT_SUCCESS))
+			prStaRec->fg1xKey4Done = TRUE;
+
 		p2pRoleFsmNotifyEapolTxStatus(prAdapter,
 				prMsduInfo->ucBssIndex,
 				prMsduInfo->eEapolKeyType,
@@ -8849,13 +8871,15 @@ void wlanCorDumpTimerInit(IN struct ADAPTER *prAdapter,
 		cnmTimerInitTimer(prAdapter,
 				  &prAdapter->rN9CorDumpTimer,
 				  (PFN_MGMT_TIMEOUT_FUNC) wlanN9CorDumpTimeOut,
-				  (unsigned long) NULL);
+				  (unsigned long) NULL,
+				  TIMER_WAKELOCK_AUTO);
 
 	} else {
 		cnmTimerInitTimer(prAdapter,
 				  &prAdapter->rCr4CorDumpTimer,
 				  (PFN_MGMT_TIMEOUT_FUNC) wlanCr4CorDumpTimeOut,
-				  (unsigned long) NULL);
+				  (unsigned long) NULL,
+				  TIMER_WAKELOCK_AUTO);
 	}
 }
 
@@ -9472,19 +9496,30 @@ wlanGetChannelNumFromIndex(IN uint8_t ucIdx)
 }
 
 void
-wlanSortChannel(IN struct ADAPTER *prAdapter)
+wlanSortChannel(IN struct ADAPTER *prAdapter,
+		IN enum ENUM_CHNL_SORT_POLICY ucSortType)
 {
 	struct PARAM_GET_CHN_INFO *prChnLoadInfo = &
 			(prAdapter->rWifiVar.rChnLoadInfo);
 	int8_t ucIdx = 0, ucRoot = 0, ucChild = 0;
 	struct PARAM_CHN_RANK_INFO rChnRankInfo;
 
-	/* prepare unsorted ch rank list */
-	for (ucIdx = 0; ucIdx < MAX_CHN_NUM; ++ucIdx) {
-		prChnLoadInfo->rChnRankList[ucIdx].ucChannel =
-			prChnLoadInfo->rEachChnLoad[ucIdx].ucChannel;
-		prChnLoadInfo->rChnRankList[ucIdx].u4Dirtiness =
-			prChnLoadInfo->rEachChnLoad[ucIdx].u4Dirtiness;
+	if (ucSortType == CHNL_SORT_POLICY_NONE)
+		return;
+
+#if (CFG_SUPPORT_P2PGO_ACS == 1)
+	if (ucSortType == CHNL_SORT_POLICY_BY_CH_DOMAIN)
+		wlanGetChannelListUnsortedPerBand(prAdapter);
+	else
+#endif
+	{
+		/* prepare unsorted ch rank list */
+		for (ucIdx = 0; ucIdx < MAX_CHN_NUM; ++ucIdx) {
+			prChnLoadInfo->rChnRankList[ucIdx].ucChannel =
+				prChnLoadInfo->rEachChnLoad[ucIdx].ucChannel;
+			prChnLoadInfo->rChnRankList[ucIdx].u4Dirtiness =
+				prChnLoadInfo->rEachChnLoad[ucIdx].u4Dirtiness;
+		}
 	}
 
 	/* heapify ch rank list */
@@ -9535,10 +9570,66 @@ wlanSortChannel(IN struct ADAPTER *prAdapter)
 	}
 
 	for (ucIdx = 0; ucIdx < MAX_CHN_NUM; ++ucIdx)
-		log_dbg(P2P, TEMP, "[ACS]channel=%d, dirtiness=%d\n",
+		DBGLOG(P2P, TRACE, "[ACS]channel=%d, dirtiness=%d\n",
 		       prChnLoadInfo->rChnRankList[ucIdx].ucChannel,
 		       prChnLoadInfo->rChnRankList[ucIdx].u4Dirtiness);
 
+}
+#endif
+
+#if (CFG_SUPPORT_P2PGO_ACS == 1)
+void wlanGetChannelListUnsortedPerBand(
+			IN struct ADAPTER *prAdapter) {
+	int8_t ucIdx = 0;
+	uint8_t i = 0, ucBandIdx = 0, ucNumOfChannel = 0, uc2gChNum = 0;
+	struct RF_CHANNEL_INFO aucChannelList[MAX_PER_BAND_CHN_NUM] = { { 0 } };
+	struct PARAM_GET_CHN_INFO *prChnLoadInfo = &
+			(prAdapter->rWifiVar.rChnLoadInfo);
+
+	for (ucBandIdx = BAND_2G4; ucBandIdx < BAND_NUM; ucBandIdx++) {
+		rlmDomainGetChnlList(prAdapter, ucBandIdx,
+			TRUE, MAX_PER_BAND_CHN_NUM,
+			&ucNumOfChannel, aucChannelList);
+
+		DBGLOG(SCN, TRACE, "[ACS]Band=%d, Channel Number=%d\n",
+			ucBandIdx,
+			ucNumOfChannel);
+
+		for (i = 0; i < ucNumOfChannel; i++) {
+			ucIdx = wlanGetChannelIndex(
+				aucChannelList[i].ucChannelNum);
+			prChnLoadInfo->
+				rChnRankList[uc2gChNum+i].ucChannel =
+				prChnLoadInfo->rEachChnLoad[ucIdx].
+					ucChannel;
+			prChnLoadInfo->
+				rChnRankList[uc2gChNum+i].u4Dirtiness =
+				prChnLoadInfo->rEachChnLoad[ucIdx].
+					u4Dirtiness;
+
+			DBGLOG(SCN, TRACE, "[ACS]Ch[%d],cIdx[%d]\n",
+				aucChannelList[i].ucChannelNum,
+				uc2gChNum+i);
+			DBGLOG(SCN, TRACE, "[ACS]ChR[%d],eCh[%d]\n",
+				prChnLoadInfo->
+					rChnRankList[uc2gChNum+i].
+					ucChannel,
+				prChnLoadInfo->rEachChnLoad[ucIdx].
+					ucChannel);
+		}
+		uc2gChNum = uc2gChNum + ucNumOfChannel;
+	}
+
+	/*Set the reset idx to invalid value*/
+	for (i = uc2gChNum; i < MAX_CHN_NUM; i++) {
+		prChnLoadInfo->rChnRankList[i].u4Dirtiness = 0xFFFFFFFF;
+		prChnLoadInfo->rChnRankList[i].ucChannel = 0xFF;
+
+		DBGLOG(SCN, TRACE, "uc2gChNum=%d,[ACS]Chn=%d,D=0x%x\n",
+			i,
+			prChnLoadInfo->rChnRankList[i].ucChannel,
+			prChnLoadInfo->rChnRankList[i].u4Dirtiness);
+	}
 }
 #endif
 
@@ -10366,10 +10457,6 @@ void wlanResumePmHandle(struct GLUE_INFO *prGlueInfo)
 		ucRpyOffload =
 			prGlueInfo->prAdapter->rWifiVar.ucRpyDetectOffload;
 
-		/* sync BC/MC PN */
-		if (ucRpyOffload && ucGtkOffload)
-			wlanSuspendRekeyOffload(prGlueInfo,
-				GTK_REKEY_CMD_MODE_GET_BCMC_PN);
 #endif
 
 		if (ucGtkOffload) {
@@ -10402,6 +10489,392 @@ void wlanResumePmHandle(struct GLUE_INFO *prGlueInfo)
 #endif
 
 }
+
+#if CFG_SUPPORT_CSI
+u_int8_t
+wlanPushCSIData(IN struct ADAPTER *prAdapter, struct CSI_DATA_T *prCSIData)
+{
+	struct CSI_INFO_T *prCSIInfo = &(prAdapter->rCSIInfo);
+
+	KAL_ACQUIRE_MUTEX(prAdapter, MUTEX_CSI_BUFFER);
+
+	/* Put the CSI data into CSI event queue */
+	if (prCSIInfo->u4CSIBufferUsed != 0) {
+		prCSIInfo->u4CSIBufferTail++;
+		prCSIInfo->u4CSIBufferTail %= CSI_RING_SIZE;
+	}
+
+	kalMemCopy(&(prCSIInfo->arCSIBuffer[prCSIInfo->u4CSIBufferTail]),
+		prCSIData, sizeof(struct CSI_DATA_T));
+
+	if (prCSIInfo->u4CSIBufferUsed < CSI_RING_SIZE) {
+		prCSIInfo->u4CSIBufferUsed++;
+	} else {
+		/*
+		 * While new CSI event comes and the ring buffer is
+		 * already full, the new coming CSI event will
+		 * overwrite the oldest one in the ring buffer.
+		 * Thus, the Head pointer which points to * the
+		 * oldest CSI event in the buffer should be moved too.
+		 */
+		prCSIInfo->u4CSIBufferHead++;
+		prCSIInfo->u4CSIBufferHead %= CSI_RING_SIZE;
+	}
+
+	KAL_RELEASE_MUTEX(prAdapter, MUTEX_CSI_BUFFER);
+
+	return TRUE;
+}
+
+u_int8_t
+wlanPopCSIData(IN struct ADAPTER *prAdapter, struct CSI_DATA_T *prCSIData)
+{
+	struct CSI_INFO_T *prCSIInfo = &(prAdapter->rCSIInfo);
+
+	KAL_ACQUIRE_MUTEX(prAdapter, MUTEX_CSI_BUFFER);
+
+	/* No CSI data in the ring buffer */
+	if (prCSIInfo->u4CSIBufferUsed == 0) {
+		KAL_RELEASE_MUTEX(prAdapter, MUTEX_CSI_BUFFER);
+		return FALSE;
+	}
+
+	kalMemCopy(prCSIData,
+		&(prCSIInfo->arCSIBuffer[prCSIInfo->u4CSIBufferHead]),
+		sizeof(struct CSI_DATA_T));
+
+	prCSIInfo->u4CSIBufferUsed--;
+	if (prCSIInfo->u4CSIBufferUsed != 0) {
+		prCSIInfo->u4CSIBufferHead++;
+		prCSIInfo->u4CSIBufferHead %= CSI_RING_SIZE;
+	}
+	KAL_RELEASE_MUTEX(prAdapter, MUTEX_CSI_BUFFER);
+
+	return TRUE;
+}
+
+/*
+ * CSI TONE MASK
+ * this function mask(clear) the null tone && pilot tones
+ * for example, bw20 has  64 tones in total.however there
+ * are some null tone && pilot tones we do not need for the
+ * feature of channel state information(CSI).
+ * so we need to clear these tone.
+ */
+void
+wlanApplyCSIToneMask(
+	uint8_t ucRxMode,
+	uint8_t ucCBW,
+	uint8_t ucDBW,
+	uint8_t ucPrimaryChIdx,
+	int16_t *ai2IData,
+	int16_t *ai2QData)
+{
+	uint8_t ucSize = sizeof(int16_t);
+
+#define ZERO(index) \
+{ ai2IData[index] = 0; ai2QData[index] = 0; }
+
+#define ZERO_RANGE(start, end) \
+{\
+	kalMemZero(&ai2IData[start], ucSize * (end - start + 1));\
+	kalMemZero(&ai2QData[start], ucSize * (end - start + 1));\
+}
+	if (ucRxMode == RX_VT_LEGACY_OFDM) {
+		if (ucCBW == RX_VT_FR_MODE_20) {
+			ZERO(0);
+			ZERO_RANGE(27, 37);
+		} else if (ucCBW == RX_VT_FR_MODE_40) {
+			if (ucDBW == RX_VT_FR_MODE_40) {
+				ZERO(32); ZERO(96);
+				ZERO_RANGE(0, 5);
+				ZERO_RANGE(59, 69);
+				ZERO_RANGE(123, 127);
+			} else if (ucDBW == RX_VT_FR_MODE_20) {
+				if (ucPrimaryChIdx == 0) {
+					ZERO(96);
+					ZERO_RANGE(0, 69);
+					ZERO_RANGE(123, 127);
+				} else {
+					ZERO(32);
+					ZERO_RANGE(0, 5);
+					ZERO_RANGE(59, 127);
+				}
+			}
+		} else if (ucCBW == RX_VT_FR_MODE_80) {
+			if (ucDBW == RX_VT_FR_MODE_80) {
+				ZERO(32); ZERO(96);
+				ZERO(160); ZERO(224);
+				ZERO_RANGE(0, 5);
+				ZERO_RANGE(59, 69);
+				ZERO_RANGE(123, 133);
+				ZERO_RANGE(187, 197);
+				ZERO_RANGE(251, 255);
+			} else if (ucDBW == RX_VT_FR_MODE_40) {
+				if (ucPrimaryChIdx <= 1) {
+					ZERO(160); ZERO(224);
+					ZERO_RANGE(0, 133);
+					ZERO_RANGE(187, 197);
+					ZERO_RANGE(251, 255);
+				} else {
+					ZERO(32); ZERO(96);
+					ZERO_RANGE(0, 5);
+					ZERO_RANGE(59, 69);
+					ZERO_RANGE(123, 255);
+				}
+			} else if (ucDBW == RX_VT_FR_MODE_20) {
+				if (ucPrimaryChIdx == 0) {
+					ZERO(160);
+					ZERO_RANGE(0, 133);
+					ZERO_RANGE(187, 255);
+				} else if (ucPrimaryChIdx == 1) {
+					ZERO(224);
+					ZERO_RANGE(0, 197);
+					ZERO_RANGE(251, 255);
+				} else if (ucPrimaryChIdx == 2) {
+					ZERO(32);
+					ZERO_RANGE(0, 5);
+					ZERO_RANGE(59, 255);
+				} else {
+					ZERO(96);
+					ZERO_RANGE(0, 69);
+					ZERO_RANGE(123, 255);
+				}
+			}
+		}
+	} else if (ucRxMode == RX_VT_MIXED_MODE ||
+		ucRxMode == RX_VT_GREEN_MODE ||
+		ucRxMode == RX_VT_VHT_MODE) {
+		if (ucCBW == RX_VT_FR_MODE_20) {
+			ZERO(0);
+			ZERO_RANGE(29, 35);
+		} else if (ucCBW == RX_VT_FR_MODE_40) {
+			if (ucDBW == RX_VT_FR_MODE_40) {
+				ZERO(0); ZERO(1); ZERO(127);
+				ZERO_RANGE(59, 69);
+			} else if (ucDBW == RX_VT_FR_MODE_20) {
+				if (ucPrimaryChIdx == 0) {
+					ZERO(96);
+					ZERO_RANGE(0, 67);
+					ZERO_RANGE(125, 127);
+				} else {
+					ZERO(32);
+					ZERO_RANGE(0, 3);
+					ZERO_RANGE(61, 127);
+				}
+			}
+		} else if (ucCBW == RX_VT_FR_MODE_80) {
+			if (ucDBW == RX_VT_FR_MODE_80) {
+				ZERO(0); ZERO(1); ZERO(255);
+				ZERO_RANGE(123, 133);
+			} else if (ucDBW == RX_VT_FR_MODE_40) {
+				if (ucPrimaryChIdx <= 1) {
+					ZERO_RANGE(0, 133);
+					ZERO_RANGE(191, 193);
+					ZERO_RANGE(251, 255);
+				} else {
+					ZERO_RANGE(0, 5);
+					ZERO_RANGE(63, 65);
+					ZERO_RANGE(123, 127);
+				}
+			} else if (ucDBW == RX_VT_FR_MODE_20) {
+				if (ucPrimaryChIdx == 0) {
+					ZERO(160);
+					ZERO_RANGE(0, 131);
+					ZERO_RANGE(189, 255);
+				} else if (ucPrimaryChIdx == 1) {
+					ZERO(224);
+					ZERO_RANGE(0, 195);
+					ZERO_RANGE(253, 255);
+				} else if (ucPrimaryChIdx == 2) {
+					ZERO(32);
+					ZERO_RANGE(0, 3);
+					ZERO_RANGE(61, 255);
+				} else {
+					ZERO(96);
+					ZERO_RANGE(0, 67);
+					ZERO_RANGE(125, 255);
+				}
+			}
+		}
+	}
+
+	/* Mask the VHT Pilots */
+	if (ucRxMode == RX_VT_VHT_MODE) {
+		if (ucCBW == RX_VT_FR_MODE_20) {
+			ZERO(7); ZERO(21); ZERO(43); ZERO(57);
+		} else if (ucCBW == RX_VT_FR_MODE_40) {
+			if (ucDBW == RX_VT_FR_MODE_40) {
+				ZERO(11); ZERO(25); ZERO(53);
+				ZERO(75); ZERO(103); ZERO(117);
+			} else if (ucDBW == RX_VT_FR_MODE_20) {
+				if (ucPrimaryChIdx == 0) {
+					ZERO(75); ZERO(89);
+					ZERO(103); ZERO(117);
+				} else {
+					ZERO(11); ZERO(25);
+					ZERO(39); ZERO(53);
+				}
+			}
+		} else if (ucCBW == RX_VT_FR_MODE_80) {
+			if (ucDBW == RX_VT_FR_MODE_80) {
+				ZERO(11); ZERO(39); ZERO(75); ZERO(103);
+				ZERO(153); ZERO(181); ZERO(217); ZERO(245);
+			} else if (ucDBW == RX_VT_FR_MODE_40) {
+				if (ucPrimaryChIdx <= 1) {
+					ZERO(139); ZERO(167); ZERO(181);
+					ZERO(203); ZERO(217); ZERO(245);
+				} else {
+					ZERO(11); ZERO(39); ZERO(53);
+					ZERO(75); ZERO(89); ZERO(117);
+				}
+			} else if (ucDBW == RX_VT_FR_MODE_20) {
+				if (ucPrimaryChIdx == 0) {
+					ZERO(139); ZERO(153);
+					ZERO(167); ZERO(181);
+				} else if (ucPrimaryChIdx == 1) {
+					ZERO(203); ZERO(217);
+					ZERO(231); ZERO(245);
+				} else if (ucPrimaryChIdx == 2) {
+					ZERO(11); ZERO(25);
+					ZERO(39); ZERO(53);
+				} else {
+					ZERO(75); ZERO(89);
+					ZERO(103); ZERO(117);
+				}
+			}
+		}
+	}
+}
+
+void
+wlanShiftCSI(
+	uint8_t ucRxMode,
+	uint8_t ucCBW,
+	uint8_t ucDBW,
+	uint8_t ucPrimaryChIdx,
+	int16_t *ai2IData,
+	int16_t *ai2QData,
+	int16_t *ai2ShiftIData,
+	int16_t *ai2ShiftQData)
+{
+	uint8_t ucSize = sizeof(int16_t);
+#define COPY_RANGE(dest, start, end) \
+{\
+	kalMemCopy(&ai2ShiftIData[dest], \
+		&ai2IData[start], ucSize * (end - start + 1)); \
+	kalMemCopy(&ai2ShiftQData[dest], \
+		&ai2QData[start], ucSize * (end - start + 1)); \
+}
+
+#define COPY(dest, src) \
+{ ai2ShiftIData[dest] = ai2IData[src]; ai2ShiftQData[dest] = ai2QData[src]; }
+
+	if (ucRxMode == RX_VT_LEGACY_OFDM) {
+		if (ucCBW == RX_VT_FR_MODE_20) {
+			COPY_RANGE(0, 0, 63);
+		} else if (ucCBW == RX_VT_FR_MODE_40) {
+			if (ucDBW == RX_VT_FR_MODE_40) {
+				COPY_RANGE(0, 0, 127);
+			} else if (ucDBW == RX_VT_FR_MODE_20) {
+				if (ucPrimaryChIdx == 0) {
+					COPY(0, 96);
+					COPY_RANGE(38, 70, 95);
+					COPY_RANGE(1, 97, 122);
+				} else {
+					COPY(0, 32);
+					COPY_RANGE(38, 6, 31);
+					COPY_RANGE(1, 33, 58);
+				}
+			}
+		} else if (ucCBW == RX_VT_FR_MODE_80) {
+			if (ucDBW == RX_VT_FR_MODE_80) {
+				COPY_RANGE(0, 0, 255);
+			} else if (ucDBW == RX_VT_FR_MODE_40) {
+				if (ucPrimaryChIdx <= 1) {
+					COPY(0, 192);
+					COPY_RANGE(2, 198, 250);
+					COPY_RANGE(74, 134, 186);
+				} else {
+					COPY(0, 64);
+					COPY_RANGE(2, 70, 122);
+					COPY_RANGE(74, 6, 58);
+				}
+			} else if (ucDBW == RX_VT_FR_MODE_20) {
+				if (ucPrimaryChIdx == 0) {
+					COPY(0, 160);
+					COPY_RANGE(1, 161, 186);
+					COPY_RANGE(38, 134, 159);
+				} else if (ucPrimaryChIdx == 1) {
+					COPY(0, 224);
+					COPY_RANGE(1, 225, 250);
+					COPY_RANGE(38, 198, 223);
+				} else if (ucPrimaryChIdx == 2) {
+					COPY(0, 32);
+					COPY_RANGE(1, 33, 58);
+					COPY_RANGE(38, 6, 31);
+				} else {
+					COPY(0, 96);
+					COPY_RANGE(1, 97, 122);
+					COPY_RANGE(38, 70, 95);
+				}
+			}
+		}
+	} else if (ucRxMode == RX_VT_MIXED_MODE ||
+		ucRxMode == RX_VT_GREEN_MODE ||
+		ucRxMode == RX_VT_VHT_MODE) {
+		if (ucCBW == RX_VT_FR_MODE_20) {
+			COPY_RANGE(0, 0, 63);
+		} else if (ucCBW == RX_VT_FR_MODE_40) {
+			if (ucDBW == RX_VT_FR_MODE_40) {
+				COPY_RANGE(0, 0, 127);
+			} else if (ucDBW == RX_VT_FR_MODE_20) {
+				if (ucPrimaryChIdx == 0) {
+					COPY(0, 96);
+					COPY_RANGE(36, 68, 95);
+					COPY_RANGE(1, 97, 124);
+				} else {
+					COPY(0, 32);
+					COPY_RANGE(36, 4, 31);
+					COPY_RANGE(1, 33, 60);
+				}
+			}
+		} else if (ucCBW == RX_VT_FR_MODE_80) {
+			if (ucDBW == RX_VT_FR_MODE_80) {
+				COPY_RANGE(0, 0, 255);
+			} else if (ucDBW == RX_VT_FR_MODE_40) {
+				if (ucPrimaryChIdx <= 1) {
+					COPY(0, 192);
+					COPY_RANGE(2, 194, 250);
+					COPY_RANGE(70, 134, 190);
+				} else {
+					COPY(0, 64);
+					COPY_RANGE(2, 66, 122);
+					COPY_RANGE(70, 6, 62);
+				}
+			} else if (ucDBW == RX_VT_FR_MODE_20) {
+				if (ucPrimaryChIdx == 0) {
+					COPY(0, 160);
+					COPY_RANGE(1, 161, 188);
+					COPY_RANGE(36, 132, 159);
+				} else if (ucPrimaryChIdx == 1) {
+					COPY(0, 224);
+					COPY_RANGE(1, 225, 252);
+					COPY_RANGE(36, 196, 223);
+				} else if (ucPrimaryChIdx == 2) {
+					COPY(0, 32);
+					COPY_RANGE(1, 33, 60);
+					COPY_RANGE(36, 4, 31);
+				} else {
+					COPY(0, 96);
+					COPY_RANGE(1, 97, 124);
+					COPY_RANGE(36, 68, 95);
+				}
+			}
+		}
+	}
+}
+#endif
 
 /*----------------------------------------------------------------------------*/
 /*!
@@ -10784,7 +11257,7 @@ uint32_t wlanKeepFullPwr(struct ADAPTER *prAdapter, uint8_t fgEnable)
 	struct CMD_KEEP_FULL_PWR rCmdKeepFullPwr;
 
 	ASSERT(prAdapter);
-
+	kalMemZero(&rCmdKeepFullPwr, sizeof(struct CMD_KEEP_FULL_PWR));
 	rCmdKeepFullPwr.ucEnable = fgEnable;
 	DBGLOG(HAL, STATE, "KeepFullPwr: %d\n", rCmdKeepFullPwr.ucEnable);
 

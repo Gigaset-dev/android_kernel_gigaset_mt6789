@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2019 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   hal_dmashdl_mt7961.h
 *    \brief  DMASHDL HAL API for MT7961
 *
@@ -40,9 +41,15 @@
 #define MT7961_DMASHDL_PKT_PSE_MAX_PAGE                (0x0)
 #define MT7961_DMASHDL_GROUP_0_REFILL_EN               (1)
 #define MT7961_DMASHDL_GROUP_1_REFILL_EN               (1)
+#if defined(_PCIE_WMM_DMASH)
+#define MT7961_DMASHDL_GROUP_2_REFILL_EN               (1)
+#define MT7961_DMASHDL_GROUP_3_REFILL_EN               (1)
+#define MT7961_DMASHDL_GROUP_4_REFILL_EN               (1)
+#else
 #define MT7961_DMASHDL_GROUP_2_REFILL_EN               (0)
 #define MT7961_DMASHDL_GROUP_3_REFILL_EN               (0)
 #define MT7961_DMASHDL_GROUP_4_REFILL_EN               (0)
+#endif
 #define MT7961_DMASHDL_GROUP_5_REFILL_EN               (0)
 #define MT7961_DMASHDL_GROUP_6_REFILL_EN               (0)
 #define MT7961_DMASHDL_GROUP_7_REFILL_EN               (0)
@@ -56,9 +63,15 @@
 #define MT7961_DMASHDL_GROUP_15_REFILL_EN              (0)
 #define MT7961_DMASHDL_GROUP_0_MAX_QUOTA               (0xFFF)
 #define MT7961_DMASHDL_GROUP_1_MAX_QUOTA               (0xFFF)
+#if defined(_PCIE_WMM_DMASH)
+#define MT7961_DMASHDL_GROUP_2_MAX_QUOTA               (0xFFF)
+#define MT7961_DMASHDL_GROUP_3_MAX_QUOTA               (0xFFF)
+#define MT7961_DMASHDL_GROUP_4_MAX_QUOTA               (0xFFF)
+#else
 #define MT7961_DMASHDL_GROUP_2_MAX_QUOTA               (0x0)
 #define MT7961_DMASHDL_GROUP_3_MAX_QUOTA               (0x0)
 #define MT7961_DMASHDL_GROUP_4_MAX_QUOTA               (0x0)
+#endif
 #define MT7961_DMASHDL_GROUP_5_MAX_QUOTA               (0x0)
 #define MT7961_DMASHDL_GROUP_6_MAX_QUOTA               (0x0)
 #define MT7961_DMASHDL_GROUP_7_MAX_QUOTA               (0x0)
@@ -70,11 +83,17 @@
 #define MT7961_DMASHDL_GROUP_13_MAX_QUOTA              (0x0)
 #define MT7961_DMASHDL_GROUP_14_MAX_QUOTA              (0x0)
 #define MT7961_DMASHDL_GROUP_15_MAX_QUOTA              (0x0)
-#define MT7961_DMASHDL_GROUP_0_MIN_QUOTA               (0x3)
-#define MT7961_DMASHDL_GROUP_1_MIN_QUOTA               (0x3)
+#define MT7961_DMASHDL_GROUP_0_MIN_QUOTA               (0x6)
+#define MT7961_DMASHDL_GROUP_1_MIN_QUOTA               (0x6)
+#if defined(_PCIE_WMM_DMASH)
+#define MT7961_DMASHDL_GROUP_2_MIN_QUOTA               (0x6)
+#define MT7961_DMASHDL_GROUP_3_MIN_QUOTA               (0x6)
+#define MT7961_DMASHDL_GROUP_4_MIN_QUOTA               (0x3)
+#else
 #define MT7961_DMASHDL_GROUP_2_MIN_QUOTA               (0x0)
 #define MT7961_DMASHDL_GROUP_3_MIN_QUOTA               (0x0)
 #define MT7961_DMASHDL_GROUP_4_MIN_QUOTA               (0x0)
+#endif
 #define MT7961_DMASHDL_GROUP_5_MIN_QUOTA               (0x0)
 #define MT7961_DMASHDL_GROUP_6_MIN_QUOTA               (0x0)
 #define MT7961_DMASHDL_GROUP_7_MIN_QUOTA               (0x0)
@@ -86,6 +105,24 @@
 #define MT7961_DMASHDL_GROUP_13_MIN_QUOTA              (0x0)
 #define MT7961_DMASHDL_GROUP_14_MIN_QUOTA              (0x0)
 #define MT7961_DMASHDL_GROUP_15_MIN_QUOTA              (0x0)
+#if defined(_PCIE_WMM_DMASH)
+#define MT7961_DMASHDL_QUEUE_0_TO_GROUP                (0x0)   /* LMAC AC00 */
+#define MT7961_DMASHDL_QUEUE_1_TO_GROUP                (0x1)   /* LMAC AC01 */
+#define MT7961_DMASHDL_QUEUE_2_TO_GROUP                (0x2)   /* LMAC AC02 */
+#define MT7961_DMASHDL_QUEUE_3_TO_GROUP                (0x3)   /* LMAC AC03 */
+#define MT7961_DMASHDL_QUEUE_4_TO_GROUP                (0x4)   /* LMAC AC10 */
+#define MT7961_DMASHDL_QUEUE_5_TO_GROUP                (0x4)   /* LMAC AC11 */
+#define MT7961_DMASHDL_QUEUE_6_TO_GROUP                (0x4)   /* LMAC AC12 */
+#define MT7961_DMASHDL_QUEUE_7_TO_GROUP                (0x4)   /* LMAC AC13 */
+#define MT7961_DMASHDL_QUEUE_8_TO_GROUP                (0x4)   /* LMAC AC20 */
+#define MT7961_DMASHDL_QUEUE_9_TO_GROUP                (0x4)   /* LMAC AC21 */
+#define MT7961_DMASHDL_QUEUE_10_TO_GROUP               (0x4)   /* LMAC AC22 */
+#define MT7961_DMASHDL_QUEUE_11_TO_GROUP               (0x4)   /* LMAC AC23 */
+#define MT7961_DMASHDL_QUEUE_12_TO_GROUP               (0x4)   /* LMAC AC30 */
+#define MT7961_DMASHDL_QUEUE_13_TO_GROUP               (0x4)   /* LMAC AC31 */
+#define MT7961_DMASHDL_QUEUE_14_TO_GROUP               (0x4)   /* LMAC AC32 */
+#define MT7961_DMASHDL_QUEUE_15_TO_GROUP               (0x4)   /* LMAC AC33 */
+#else
 #define MT7961_DMASHDL_QUEUE_0_TO_GROUP                (0x0)   /* LMAC AC00 */
 #define MT7961_DMASHDL_QUEUE_1_TO_GROUP                (0x0)   /* LMAC AC01 */
 #define MT7961_DMASHDL_QUEUE_2_TO_GROUP                (0x0)   /* LMAC AC02 */
@@ -102,6 +139,7 @@
 #define MT7961_DMASHDL_QUEUE_13_TO_GROUP               (0x0)   /* LMAC AC31 */
 #define MT7961_DMASHDL_QUEUE_14_TO_GROUP               (0x0)   /* LMAC AC32 */
 #define MT7961_DMASHDL_QUEUE_15_TO_GROUP               (0x0)   /* LMAC AC33 */
+#endif
 #define MT7961_DMASHDL_QUEUE_16_TO_GROUP               (0x0)   /* ALTX */
 #define MT7961_DMASHDL_QUEUE_17_TO_GROUP               (0x0)   /* BMC */
 #define MT7961_DMASHDL_QUEUE_18_TO_GROUP               (0x0)   /* BCN */
@@ -118,10 +156,17 @@
 #define MT7961_DMASHDL_QUEUE_29_TO_GROUP               (0x1)   /* Reserved */
 #define MT7961_DMASHDL_QUEUE_30_TO_GROUP               (0x1)   /* Reserved */
 #define MT7961_DMASHDL_QUEUE_31_TO_GROUP               (0x1)   /* Reserved */
+#if defined(_PCIE_WMM_DMASH)
+#define MT7961_DMASHDL_PRIORITY0_GROUP                 (0x3)
+#define MT7961_DMASHDL_PRIORITY1_GROUP                 (0x2)
+#define MT7961_DMASHDL_PRIORITY2_GROUP                 (0x1)
+#define MT7961_DMASHDL_PRIORITY3_GROUP                 (0x0)
+#else
 #define MT7961_DMASHDL_PRIORITY0_GROUP                 (0x0)
 #define MT7961_DMASHDL_PRIORITY1_GROUP                 (0x1)
 #define MT7961_DMASHDL_PRIORITY2_GROUP                 (0x2)
 #define MT7961_DMASHDL_PRIORITY3_GROUP                 (0x3)
+#endif
 #define MT7961_DMASHDL_PRIORITY4_GROUP                 (0x4)
 #define MT7961_DMASHDL_PRIORITY5_GROUP                 (0x5)
 #define MT7961_DMASHDL_PRIORITY6_GROUP                 (0x6)
@@ -140,10 +185,10 @@
 #define MT7961_DMASHDL_DBDC_2G_MAX_QUOTA               (0x1E8)
 #define MT7961_DMASHDL_DBDC_5G_6G_MAX_QUOTA            (0x1E8)
 #else
-/*TODO: fine tune*/
-#define MT7961_DMASHDL_DBDC_5G_MAX_QUOTA               (0xFFF)
-#define MT7961_DMASHDL_DBDC_2G_MAX_QUOTA               (0xFFF)
-#define MT7961_DMASHDL_DBDC_5G_6G_MAX_QUOTA            (0xFFF)
+/* PLE Quota 0x3CE */
+#define MT7961_DMASHDL_DBDC_5G_MAX_QUOTA               (0x1E7)
+#define MT7961_DMASHDL_DBDC_2G_MAX_QUOTA               (0x1E7)
+#define MT7961_DMASHDL_DBDC_5G_6G_MAX_QUOTA            (0x1E7)
 #endif
 
 #elif defined(_HIF_USB)

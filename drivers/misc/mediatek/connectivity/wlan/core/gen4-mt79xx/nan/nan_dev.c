@@ -1,8 +1,9 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
  * Copyright (c) 2021 MediaTek Inc.
  */
 
+#if CFG_SUPPORT_NAN
 #include "precomp.h"
 #include "nan/nan_sec.h"
 
@@ -155,10 +156,18 @@ nanDevInit(IN struct ADAPTER *prAdapter, uint8_t ucIdx) {
 			prnanBssInfo->u2BSSBasicRateSet,
 			prnanBssInfo->aucAllSupportedRates,
 			&prnanBssInfo->ucAllSupportedRatesLen);
+
+		/* Set DBRTS to 0x3FF as default */
+		prnanBssInfo->ucHeOpParams[0] |=
+			HE_OP_PARAM0_TXOP_DUR_RTS_THRESHOLD_MASK;
+		prnanBssInfo->ucHeOpParams[1] |=
+			HE_OP_PARAM1_TXOP_DUR_RTS_THRESHOLD_MASK;
+
 		/* Activate NAN BSS */
 		if (!IS_BSS_ACTIVE(
 			    prAdapter->aprBssInfo
 				    [prnanBssInfo->ucBssIndex])) {
+
 			nicUpdateBss(prAdapter, prnanBssInfo->ucBssIndex);
 
 #if (CFG_SUPPORT_DBDC == 1)
@@ -177,13 +186,13 @@ nanDevInit(IN struct ADAPTER *prAdapter, uint8_t ucIdx) {
 				&prnanBssInfo->ucOpRxNss,
 				&prnanBssInfo->ucOpTxNss);
 
+			/* Set BSS to active for DBDC on*/
 			SET_NET_ACTIVE(prAdapter,
 				prnanBssInfo->ucBssIndex);
 			prnanBssInfo->eConnectionState
 				= MEDIA_STATE_CONNECTED;
 
-			nicQmUpdateWmmParms(prAdapter,
-					    prnanBssInfo->ucBssIndex);
+			nanDevDumpBssStatus(prAdapter);
 		}
 	}
 
@@ -194,14 +203,62 @@ nanDevInit(IN struct ADAPTER *prAdapter, uint8_t ucIdx) {
 } /* p2pDevFsmInit */
 
 void
-nanDevFsmUninit(IN struct ADAPTER *prAdapter, uint8_t ucIdx) {
-	struct _NAN_SPECIFIC_BSS_INFO_T *prNANSpecInfo =
-		(struct _NAN_SPECIFIC_BSS_INFO_T *)NULL;
-	struct BSS_INFO *prnanBssInfo = (struct BSS_INFO *)NULL;
+nanDevFsmUninit(IN struct ADAPTER *prAdapter) {
 
 	if (prAdapter == NULL) {
 		DBGLOG(NAN, ERROR,
-			"[%s] prAdapter is NULL\n", __func__);
+			"prAdapter is NULL\n");
+		return;
+	}
+
+	nanDevBssDeactivate(prAdapter, TRUE);
+}
+
+void
+nanDevDumpBssStatus(struct ADAPTER *prAdapter)
+{
+	struct _NAN_SPECIFIC_BSS_INFO_T *prNANSpecInfo =
+		(struct _NAN_SPECIFIC_BSS_INFO_T *)NULL;
+	struct BSS_INFO *prnanBssInfo = (struct BSS_INFO *)NULL;
+	uint8_t ucIdx = 0;
+
+	for (ucIdx = 0; ucIdx < NAN_BSS_INDEX_NUM; ucIdx++) {
+		prNANSpecInfo =
+			prAdapter->rWifiVar.aprNanSpecificBssInfo[ucIdx];
+
+		if (prNANSpecInfo == NULL) {
+			DBGLOG(NAN, ERROR,
+				"prNANSpecInfo is NULL\n");
+			return;
+		}
+
+		prnanBssInfo = prAdapter->aprBssInfo[prNANSpecInfo->ucBssIndex];
+
+		DBGLOG(NAN, INFO,
+			"[NAN INIT] BSSIFO INDEX %u Act/Con:[%u/%u]\n",
+			prnanBssInfo->ucBssIndex,
+			prnanBssInfo->fgIsNetActive,
+			prnanBssInfo->eConnectionState);
+	}
+}
+
+void
+nanDevBssActivate(struct ADAPTER *prAdapter)
+{
+	struct _NAN_SPECIFIC_BSS_INFO_T *prNANSpecInfo =
+		(struct _NAN_SPECIFIC_BSS_INFO_T *)NULL;
+	struct BSS_INFO *prnanBssInfo = (struct BSS_INFO *)NULL;
+	uint8_t ucIdx = 0;
+	struct AC_QUE_PARMS *prACQueParms = NULL;
+	enum ENUM_WMM_ACI eAci = WMM_AC_BE_INDEX;
+	uint8_t auCWmin[WMM_AC_INDEX_NUM] = { 4, 4, 3, 2 };
+	uint8_t auCWmax[WMM_AC_INDEX_NUM] = { 10, 10, 4, 3 };
+	uint8_t auAifs[WMM_AC_INDEX_NUM] = { 3, 7, 2, 2 };
+	uint8_t auTxop[WMM_AC_INDEX_NUM] = { 0, 0, 94, 47 };
+
+	if (prAdapter == NULL) {
+		DBGLOG(NAN, ERROR,
+			"prAdapter is NULL\n");
 		return;
 	}
 
@@ -211,13 +268,85 @@ nanDevFsmUninit(IN struct ADAPTER *prAdapter, uint8_t ucIdx) {
 
 		if (prNANSpecInfo == NULL) {
 			DBGLOG(NAN, ERROR,
-				"[%s] prNANSpecInfo is NULL\n", __func__);
-			return;
+				"prNANSpecInfo is NULL\n");
+			continue;
 		}
 
 		prnanBssInfo = prAdapter->aprBssInfo[prNANSpecInfo->ucBssIndex];
-		DBGLOG(NAN, INFO, "UNINIT NAN DEV BSSIFO INDEX %d\n",
-		       prnanBssInfo->ucBssIndex);
+
+		if (!IS_BSS_ACTIVE(prnanBssInfo)) {
+			SET_NET_ACTIVE(prAdapter, prnanBssInfo->ucBssIndex);
+			nicActivateNetwork(prAdapter, prnanBssInfo->ucBssIndex);
+		}
+
+		DBGLOG(NAN, INFO,
+				"[NAN INIT] ACTIVATE NAN DEV BSSIFO INDEX %u\n",
+				prnanBssInfo->ucBssIndex);
+
+		prnanBssInfo->eConnectionState = MEDIA_STATE_CONNECTED;
+
+		nicUpdateBss(prAdapter, prnanBssInfo->ucBssIndex);
+
+#if CFG_SUPPORT_DBDC
+		cnmDbdcRuntimeCheckDecision(prAdapter,
+						prnanBssInfo->ucBssIndex,
+						FALSE);
+#endif
+
+		/** Update AC WMM Parm with correct BN info in BSSInfo */
+		prACQueParms = prnanBssInfo->arACQueParms;
+
+		for (eAci = 0; eAci < WMM_AC_INDEX_NUM; eAci++) {
+
+			prACQueParms[eAci].ucIsACMSet = FALSE;
+			prACQueParms[eAci].u2Aifsn = auAifs[eAci];
+			prACQueParms[eAci].u2CWmin = BIT(auCWmin[eAci]) - 1;
+			prACQueParms[eAci].u2CWmax = BIT(auCWmax[eAci]) - 1;
+			prACQueParms[eAci].u2TxopLimit = auTxop[eAci];
+		}
+		nicQmUpdateWmmParms(prAdapter,
+			prnanBssInfo->ucBssIndex);
+	}
+
+	nanDevDumpBssStatus(prAdapter);
+}
+
+void
+nanDevBssDeactivate(IN struct ADAPTER *prAdapter, bool fgFreeBss)
+{
+	struct _NAN_SPECIFIC_BSS_INFO_T *prNANSpecInfo =
+		(struct _NAN_SPECIFIC_BSS_INFO_T *)NULL;
+	struct BSS_INFO *prnanBssInfo = (struct BSS_INFO *)NULL;
+	uint8_t ucIdx = 0;
+
+	if (prAdapter == NULL) {
+		DBGLOG(NAN, ERROR,
+			"prAdapter is NULL\n");
+		return;
+	}
+
+	for (ucIdx = 0; ucIdx < NAN_BSS_INDEX_NUM; ucIdx++) {
+		prNANSpecInfo =
+			prAdapter->rWifiVar.aprNanSpecificBssInfo[ucIdx];
+
+		if (prNANSpecInfo == NULL) {
+			DBGLOG(NAN, ERROR,
+				"prNANSpecInfo is NULL\n");
+			continue;
+		}
+
+		prnanBssInfo = prAdapter->aprBssInfo[prNANSpecInfo->ucBssIndex];
+
+		if (!IS_BSS_ACTIVE(prnanBssInfo)) {
+			DBGLOG(NAN, WARN,
+				"[NAN INIT] NAN DEV BSS_IDX %u already deactivate\n",
+				prnanBssInfo->ucBssIndex);
+			goto free_bss;
+		}
+
+		DBGLOG(NAN, INFO,
+			"[NAN INIT] DEACTIVATE NAN DEV BSS_IDX %u\n",
+			prnanBssInfo->ucBssIndex);
 
 		/* Clear CmdQue */
 		kalClearMgmtFramesByBssIdx(prAdapter->prGlueInfo,
@@ -239,9 +368,18 @@ nanDevFsmUninit(IN struct ADAPTER *prAdapter, uint8_t ucIdx) {
 		nicDeactivateNetwork(prAdapter, prnanBssInfo->ucBssIndex);
 		nicUpdateBss(prAdapter, prnanBssInfo->ucBssIndex);
 
-		cnmFreeBssInfo(prAdapter, prnanBssInfo);
+free_bss:
+		if (fgFreeBss) {
+			DBGLOG(NAN, INFO,
+				"[NAN INIT] FREE NAN DEV BSSIFO INDEX %u\n",
+				prnanBssInfo->ucBssIndex);
+			cnmFreeBssInfo(prAdapter, prnanBssInfo);
+		}
 	}
-} /* p2pDevFsmUninit */
+
+	nanDevDumpBssStatus(prAdapter);
+}
+
 struct _NAN_SPECIFIC_BSS_INFO_T *
 nanGetSpecificBssInfo(IN struct ADAPTER *prAdapter,
 		      enum NAN_BSS_ROLE_INDEX eIndex) {
@@ -338,6 +476,212 @@ nanDevSetMasterPreference(IN struct ADAPTER *prAdapter,
 				      (uint8_t *)prCmdBuffer, NULL, 0);
 
 	cnmMemFree(prAdapter, prCmdBuffer);
+}
+
+enum NanStatusType
+nanDevSetDiscBcn(IN struct ADAPTER *prAdapter,
+		 struct _NAN_CMD_EVENT_SET_DISC_BCN_T *prNanSetDiscBcn)
+{
+	uint32_t rStatus = 0;
+	void *prCmdBuffer = NULL;
+	uint32_t u4CmdBufferLen = 0;
+	struct _CMD_EVENT_TLV_COMMOM_T *prTlvCommon = NULL;
+	struct _CMD_EVENT_TLV_ELEMENT_T *prTlvElement = NULL;
+	struct _NAN_CMD_EVENT_SET_DISC_BCN_T *prCmdNanSetDiscBcn = NULL;
+
+	u4CmdBufferLen = sizeof(struct _CMD_EVENT_TLV_COMMOM_T) +
+			 sizeof(struct _CMD_EVENT_TLV_ELEMENT_T) +
+			 sizeof(struct _NAN_CMD_EVENT_SET_DISC_BCN_T);
+	prCmdBuffer = cnmMemAlloc(prAdapter, RAM_TYPE_BUF, u4CmdBufferLen);
+
+	if (!prCmdBuffer) {
+		DBGLOG(CNM, ERROR, "Memory allocation fail\n");
+		cnmMemFree(prAdapter, prCmdBuffer);
+		return NAN_STATUS_INTERNAL_FAILURE;
+	}
+
+	prTlvCommon = (struct _CMD_EVENT_TLV_COMMOM_T *)prCmdBuffer;
+
+	prTlvCommon->u2TotalElementNum = 0;
+
+	rStatus =
+		nicAddNewTlvElement(NAN_CMD_SET_DISC_BCN,
+			sizeof(struct _NAN_CMD_EVENT_SET_DISC_BCN_T),
+			u4CmdBufferLen, prCmdBuffer);
+
+	if (rStatus != WLAN_STATUS_SUCCESS) {
+		DBGLOG(TX, ERROR, "Add new Tlv element fail\n");
+		cnmMemFree(prAdapter, prCmdBuffer);
+		return NAN_STATUS_INTERNAL_FAILURE;
+	}
+
+	prTlvElement = nicGetTargetTlvElement(1, prCmdBuffer);
+
+	if (prTlvElement == NULL) {
+		DBGLOG(TX, ERROR, "Get target Tlv element fail\n");
+		cnmMemFree(prAdapter, prCmdBuffer);
+		return NAN_STATUS_INTERNAL_FAILURE;
+	}
+
+	prCmdNanSetDiscBcn =
+		(struct _NAN_CMD_EVENT_SET_DISC_BCN_T *)prTlvElement->aucbody;
+	prCmdNanSetDiscBcn->ucDiscBcnType = prNanSetDiscBcn->ucDiscBcnType;
+	prCmdNanSetDiscBcn->ucDiscBcnPeriod = prNanSetDiscBcn->ucDiscBcnPeriod;
+
+	kalMemCopy(&prCmdNanSetDiscBcn->rDiscBcnTimeline[0],
+		   &prNanSetDiscBcn->rDiscBcnTimeline[0],
+		   sizeof(prNanSetDiscBcn->rDiscBcnTimeline));
+
+	rStatus = wlanSendSetQueryCmd(prAdapter, CMD_ID_NAN_EXT_CMD, TRUE,
+				      FALSE, FALSE, nanDevCommonSetCb,
+				      nicCmdTimeoutCommon, u4CmdBufferLen,
+				      (uint8_t *)prCmdBuffer, NULL, 0);
+
+	cnmMemFree(prAdapter, prCmdBuffer);
+
+	if (rStatus == WLAN_STATUS_SUCCESS)
+		return NAN_STATUS_SUCCESS;
+	else
+		return NAN_STATUS_INTERNAL_FAILURE;
+}
+
+void nanDevDiscBcnPeriodEvtHandler(IN struct ADAPTER *prAdapter,
+	IN uint8_t *pcuEvtBuf)
+{
+	struct _NAN_CMD_EVENT_SET_DISC_BCN_T *prDiscBcnPeriodEvt = NULL;
+
+	if (prAdapter == NULL) {
+		DBGLOG(NAN, ERROR, "prAdapter is NULL\n");
+		return;
+	}
+
+	prDiscBcnPeriodEvt = (struct _NAN_CMD_EVENT_SET_DISC_BCN_T *)
+		pcuEvtBuf;
+
+	DBGLOG(NAN, INFO, "Update Disc Bcn Period(%d): %d->%d\n",
+		prDiscBcnPeriodEvt->ucDiscBcnType,
+		prAdapter->rWifiVar.ucDiscBcnPeriod,
+		prDiscBcnPeriodEvt->ucDiscBcnPeriod);
+
+	prAdapter->rWifiVar.ucDiscBcnPeriod =
+		prDiscBcnPeriodEvt->ucDiscBcnPeriod;
+}
+
+void
+nanDevUpdateBss(IN struct ADAPTER *prAdapter, int u4Idx)
+{
+	struct BSS_INFO *prnanBssInfo;
+	struct _NAN_SPECIFIC_BSS_INFO_T *prNANSpecInfo;
+
+	prNANSpecInfo = nanGetSpecificBssInfo(prAdapter, u4Idx);
+	prnanBssInfo = GET_BSS_INFO_BY_INDEX(
+		prAdapter, prNANSpecInfo->ucBssIndex);
+
+	prnanBssInfo->eConnectionState = MEDIA_STATE_DISCONNECTED;
+	UNSET_NET_ACTIVE(prAdapter, prnanBssInfo->ucBssIndex);
+	nicDeactivateNetwork(prAdapter, prnanBssInfo->ucBssIndex);
+	nicUpdateBss(prAdapter, prnanBssInfo->ucBssIndex);
+
+	if (!IS_BSS_ACTIVE(prnanBssInfo)) {
+		SET_NET_ACTIVE(prAdapter, prnanBssInfo->ucBssIndex);
+		nicActivateNetwork(prAdapter, prnanBssInfo->ucBssIndex);
+	}
+	prnanBssInfo->eConnectionState = MEDIA_STATE_CONNECTED;
+	nicUpdateBss(prAdapter, prnanBssInfo->ucBssIndex);
+}
+
+enum NanStatusType nanDevSetNmiAddress(IN struct ADAPTER *prAdapter,
+	uint8_t *macAddress)
+{
+	uint32_t rStatus;
+	void *prCmdBuffer;
+	uint32_t u4CmdBufferLen;
+	struct _CMD_EVENT_TLV_COMMOM_T *prTlvCommon = NULL;
+	struct _CMD_EVENT_TLV_ELEMENT_T *prTlvElement = NULL;
+	struct NanMacAddressEvent *prCmdNanChangeAddress = NULL;
+	struct BSS_INFO *prnanBssInfo = (struct BSS_INFO *)NULL;
+	struct _NAN_SPECIFIC_BSS_INFO_T *prNANSpecInfo;
+	enum NAN_BSS_ROLE_INDEX eRole = NAN_BSS_INDEX_BAND0;
+
+	for (eRole = 0; eRole < NAN_BSS_INDEX_NUM; eRole++) {
+		prNANSpecInfo = nanGetSpecificBssInfo(prAdapter, eRole);
+		prnanBssInfo = GET_BSS_INFO_BY_INDEX(
+			prAdapter, prNANSpecInfo->ucBssIndex);
+
+		DBGLOG(NAN, INFO, "BSS Idx:%d, Update NMI [" MACSTR "]\n",
+				prNANSpecInfo->ucBssIndex, MAC2STR(macAddress));
+		COPY_MAC_ADDR(prnanBssInfo->aucOwnMacAddr, macAddress);
+		nanDevUpdateBss(prAdapter, eRole);
+	}
+	COPY_MAC_ADDR(prAdapter->rDataPathInfo.aucLocalNMIAddr, macAddress);
+
+	/* Driver CMD */
+	u4CmdBufferLen = sizeof(struct _CMD_EVENT_TLV_COMMOM_T) +
+			 sizeof(struct _CMD_EVENT_TLV_ELEMENT_T) +
+			 sizeof(struct NanMacAddressEvent);
+	prCmdBuffer = cnmMemAlloc(prAdapter, RAM_TYPE_BUF, u4CmdBufferLen);
+
+	if (!prCmdBuffer) {
+		DBGLOG(CNM, ERROR, "Memory allocation fail\n");
+		cnmMemFree(prAdapter, prCmdBuffer);
+		return NAN_STATUS_NO_RESOURCE_AVAILABLE;
+	}
+
+	prTlvCommon = (struct _CMD_EVENT_TLV_COMMOM_T *)prCmdBuffer;
+	prTlvCommon->u2TotalElementNum = 0;
+
+	rStatus = nicAddNewTlvElement(NAN_CMD_CHANGE_ADDRESS,
+				      sizeof(struct NanMacAddressEvent),
+				      u4CmdBufferLen, prCmdBuffer);
+
+	if (rStatus != WLAN_STATUS_SUCCESS) {
+		DBGLOG(TX, ERROR, "Add new Tlv element fail\n");
+		cnmMemFree(prAdapter, prCmdBuffer);
+		return NAN_STATUS_NO_RESOURCE_AVAILABLE;
+	}
+
+	prTlvElement = nicGetTargetTlvElement(1, prCmdBuffer);
+
+	if (prTlvElement == NULL) {
+		DBGLOG(TX, ERROR, "Get target Tlv element fail\n");
+		cnmMemFree(prAdapter, prCmdBuffer);
+		return NAN_STATUS_NO_RESOURCE_AVAILABLE;
+	}
+
+	prCmdNanChangeAddress = (struct NanMacAddressEvent *)
+		prTlvElement->aucbody;
+	COPY_MAC_ADDR(prCmdNanChangeAddress, macAddress);
+
+	rStatus = wlanSendSetQueryCmd(prAdapter, CMD_ID_NAN_EXT_CMD, TRUE,
+				      FALSE, FALSE, nanDevCommonSetCb,
+				      nicCmdTimeoutCommon, u4CmdBufferLen,
+				      (uint8_t *)prCmdBuffer, NULL, 0);
+
+	cnmMemFree(prAdapter, prCmdBuffer);
+
+	if (rStatus == WLAN_STATUS_SUCCESS)
+		return NAN_STATUS_SUCCESS;
+	else
+		return NAN_STATUS_INTERNAL_FAILURE;
+}
+
+enum NanStatusType nanDevSetNdiAddress(IN struct ADAPTER *prAdapter,
+	uint8_t *macAddress)
+{
+	struct _GL_NAN_INFO_T *prNANInfo = (struct _GL_NAN_INFO_T *)NULL;
+
+	prNANInfo = prAdapter->prGlueInfo->aprNANDevInfo[NAN_BSS_INDEX_BAND0];
+
+	DBGLOG(NAN, INFO, "MAC dev addr in netdev [" MACSTR "]\n",
+		MAC2STR(prNANInfo->prDevHandler->dev_addr));
+	DBGLOG(NAN, INFO, "MAC perm addr in netdev [" MACSTR "]\n",
+		MAC2STR(prNANInfo->prDevHandler->perm_addr));
+
+	COPY_MAC_ADDR(prNANInfo->prDevHandler->dev_addr, macAddress);
+	COPY_MAC_ADDR(prNANInfo->prDevHandler->perm_addr, macAddress);
+	COPY_MAC_ADDR(prAdapter->rDataPathInfo.aucLocalNDIAddr, macAddress);
+
+	return NAN_STATUS_SUCCESS;
 }
 
 enum NanStatusType
@@ -547,11 +891,17 @@ nanDevSendEnableRequestToCnm(IN struct ADAPTER *prAdapter)
 
 	prNANSpecInfo = prAdapter
 		->rWifiVar.aprNanSpecificBssInfo[NAN_BSS_INDEX_BAND0];
-	prnanBssInfo =
-		GET_BSS_INFO_BY_INDEX(prAdapter, prNANSpecInfo->ucBssIndex);
 	if (prNANSpecInfo == NULL) {
 		DBGLOG(NAN, ERROR,
 			"[%s] prNANSpecInfo is NULL\n", __func__);
+		return WLAN_STATUS_FAILURE;
+	}
+
+	prnanBssInfo =
+		GET_BSS_INFO_BY_INDEX(prAdapter, prNANSpecInfo->ucBssIndex);
+	if (prnanBssInfo == NULL) {
+		DBGLOG(NAN, ERROR,
+			"[%s] prnanBssInfo is NULL\n", __func__);
 		return WLAN_STATUS_FAILURE;
 	}
 
@@ -582,15 +932,21 @@ nanDevSendEnableRequestToCnm(IN struct ADAPTER *prAdapter)
 		prMsgChReq->ucBssIndex,
 		prMsgChReq->ucTokenID);
 
-	/** Set BSS to active */
+	/** Set BSS to inactive */
 	for (ucIdx = 0; ucIdx < NAN_BSS_INDEX_NUM; ucIdx++) {
 		prNANSpecInfo = prAdapter
 			->rWifiVar.aprNanSpecificBssInfo[ucIdx];
+		if (prNANSpecInfo == NULL)
+			continue;
 		prnanBssInfo =
-			GET_BSS_INFO_BY_INDEX(prAdapter, prNANSpecInfo->ucBssIndex);
-
+			GET_BSS_INFO_BY_INDEX(prAdapter,
+			prNANSpecInfo->ucBssIndex);
+		if (prnanBssInfo == NULL)
+			continue;
 		UNSET_NET_ACTIVE(prAdapter, prnanBssInfo->ucBssIndex);
 	}
+
+	nanDevDumpBssStatus(prAdapter);
 
 	mboxSendMsg(prAdapter, MBOX_ID_0,
 		(struct MSG_HDR *)prMsgChReq,
@@ -691,5 +1047,69 @@ nanDevSendEnableRequest(struct ADAPTER *prAdapter,
 
 	nanDevSendAbortRequestToCnm(prAdapter);
 
+	DBGLOG(NAN, INFO, "[NAN INIT] done\n");
+
 	cnmMemFree(prAdapter, prMsgHdr);
 }
+
+void nanDevSetConfig(IN struct ADAPTER *prAdapter)
+{
+	uint32_t rStatus;
+	void *prCmdBuffer;
+	uint32_t u4CmdBufferLen;
+	struct _CMD_EVENT_TLV_COMMOM_T *prTlvCommon = NULL;
+	struct _CMD_EVENT_TLV_ELEMENT_T *prTlvElement = NULL;
+	struct _NAN_CMD_UPDATE_CONFIG *prCmdNanUpdateConfig = NULL;
+
+	u4CmdBufferLen = sizeof(struct _CMD_EVENT_TLV_COMMOM_T) +
+			 sizeof(struct _CMD_EVENT_TLV_ELEMENT_T) +
+			 sizeof(struct _NAN_CMD_UPDATE_CONFIG);
+	prCmdBuffer = cnmMemAlloc(prAdapter, RAM_TYPE_BUF, u4CmdBufferLen);
+
+	if (!prCmdBuffer) {
+		DBGLOG(CNM, ERROR, "Memory allocation fail\n");
+		cnmMemFree(prAdapter, prCmdBuffer);
+		return;
+	}
+
+	prTlvCommon = (struct _CMD_EVENT_TLV_COMMOM_T *)prCmdBuffer;
+
+	prTlvCommon->u2TotalElementNum = 0;
+
+	rStatus =
+		nicAddNewTlvElement(NAN_CMD_SET_NAN_CONFIG,
+				    sizeof(struct _NAN_CMD_UPDATE_CONFIG),
+				    u4CmdBufferLen, prCmdBuffer);
+
+	if (rStatus != WLAN_STATUS_SUCCESS) {
+		DBGLOG(TX, ERROR, "Add new Tlv element fail\n");
+		cnmMemFree(prAdapter, prCmdBuffer);
+		return;
+	}
+
+	prTlvElement = nicGetTargetTlvElement(1, prCmdBuffer);
+
+	if (prTlvElement == NULL) {
+		DBGLOG(TX, ERROR, "Get target Tlv element fail\n");
+		cnmMemFree(prAdapter, prCmdBuffer);
+		return;
+	}
+
+	prCmdNanUpdateConfig =
+		(struct _NAN_CMD_UPDATE_CONFIG *)prTlvElement->aucbody;
+
+	prCmdNanUpdateConfig->ucSupportVendorIoctl =
+		prAdapter->rWifiVar.ucNanVendorIoctl;
+
+	DBGLOG(NAN, INFO,
+		"SET_NAN_CONFIG:0x%x\n",
+		prCmdNanUpdateConfig->ucSupportVendorIoctl);
+
+	rStatus = wlanSendSetQueryCmd(prAdapter, CMD_ID_NAN_EXT_CMD, TRUE,
+				      FALSE, FALSE, nanDevCommonSetCb,
+				      nicCmdTimeoutCommon, u4CmdBufferLen,
+				      (uint8_t *)prCmdBuffer, NULL, 0);
+
+	cnmMemFree(prAdapter, prCmdBuffer);
+}
+#endif

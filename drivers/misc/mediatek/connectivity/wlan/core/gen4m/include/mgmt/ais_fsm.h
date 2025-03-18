@@ -108,6 +108,8 @@
 #define AIS_BLACKLIST_TIMEOUT               15 /* seconds */
 #define AIS_AUTORN_MIN_INTERVAL		    20
 
+#define IS_AIS_ROAMING(_adapter, _bss_idx) \
+	aisGetAisFsmInfo(_adapter, _bss_idx)->ucIsStaRoaming
 
 /*******************************************************************************
  *                             D A T A   T Y P E S
@@ -294,6 +296,7 @@ struct AIS_FSM_INFO {
 
 	/* Scan target channel when device roaming */
 	uint8_t fgTargetChnlScanIssued;
+	uint8_t ucIsStaRoaming;
 
 	struct LINK rAxBlacklist;
 	struct LINK rHeHtcBlacklist;

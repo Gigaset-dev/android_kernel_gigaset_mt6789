@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/
  *      MT6620_WIFI_DRIVER_V2_3/include/nic/nic.h#1
@@ -65,12 +66,11 @@ enum ENUM_INT_EVENT_T {
 };
 
 enum ENUM_IE_UPD_METHOD {
-	IE_UPD_METHOD_UPDATE_RANDOM,
-	IE_UPD_METHOD_UPDATE_ALL,
-	IE_UPD_METHOD_DELETE_ALL,
-#if CFG_SUPPORT_P2P_GO_OFFLOAD_PROBE_RSP
-	IE_UPD_METHOD_UPDATE_PROBE_RSP,
-#endif
+	IE_UPD_METHOD_UPDATE_RANDOM = 0,
+	IE_UPD_METHOD_UPDATE_ALL = 1,
+	IE_UPD_METHOD_DELETE_ALL = 2,
+	IE_UPD_METHOD_UPDATE_PROBE_RSP = 3,
+	IE_UPD_METHOD_UNSOL_PROBE_RSP = 4,
 };
 
 enum ENUM_SER_STATE {
@@ -127,6 +127,11 @@ enum ENUM_REMOVE_BY_MSDU_TPYE {
 	MSDU_REMOVE_BY_BSS_INDEX,
 	ENUM_REMOVE_BY_MSDU_TPYE_NUM
 };
+
+#if (CONFIG_WIFI_ULTRA_RADIO_OFF_CTRL == 1)
+#define PM_RADIO_OFF  0x1
+#define PM_RADIO_ON   0x2
+#endif
 
 /* Test mode bitmask of disable flag */
 #define TEST_MODE_DISABLE_ONLINE_SCAN  BIT(0)
@@ -252,18 +257,40 @@ uint32_t nicChannelNum2Freq(IN uint32_t u4ChannelNum,
 
 uint32_t nicFreq2ChannelNum(IN uint32_t u4FreqInKHz);
 
+uint32_t nicGetS1Freq(IN enum ENUM_BAND eBand,
+	IN uint8_t ucPrimaryChannel,
+	IN uint8_t ucBandwidth);
+
+/* Utility to get S1, S2 */
+uint8_t nicGetS1(IN enum ENUM_BAND eBand,
+			IN uint8_t ucPrimaryChannel,
+		    IN uint8_t ucBandwidth);
+
+uint8_t nicGetS2(IN enum ENUM_BAND eBand,
+			IN uint8_t ucPrimaryChannel,
+		    IN uint8_t ucBandwidth,
+		    IN uint8_t ucS1);
+
 uint8_t nicGetVhtS1(IN uint8_t ucPrimaryChannel,
 		    IN uint8_t ucBandwidth);
 
 #if (CFG_SUPPORT_WIFI_6G == 1)
 uint8_t nicGetHe6gS1(IN uint8_t ucPrimaryChannel,
 		    IN uint8_t ucBandwidth);
+
+uint8_t nicGetHe6gS2(IN uint8_t ucPrimaryChannel,
+			IN uint8_t ucBandwidth,
+			IN uint8_t ucS1);
 #endif
 
 /* firmware command wrapper */
 /* NETWORK (WIFISYS) */
 uint32_t nicActivateNetwork(IN struct ADAPTER *prAdapter,
 			    IN uint8_t ucBssIndex);
+
+uint32_t nicActivateNetworkEx(IN struct ADAPTER *prAdapter,
+				IN uint8_t ucBssIndex,
+				IN uint8_t fgReset40mBw);
 
 uint32_t nicDeactivateNetwork(IN struct ADAPTER *prAdapter,
 			      IN uint8_t ucBssIndex);
@@ -350,6 +377,12 @@ uint32_t
 nicConfigPowerSaveProfile(IN struct ADAPTER *prAdapter,
 		IN uint8_t ucBssIndex, IN enum PARAM_POWER_MODE ePwrMode,
 		IN u_int8_t fgEnCmdEvent, IN enum POWER_SAVE_CALLER ucCaller);
+
+#if (CONFIG_WIFI_ULTRA_RADIO_OFF_CTRL == 1)
+uint32_t
+nicRadioStateCtrl(IN struct ADAPTER *prAdapter,
+			  IN u_int8_t uPwrState);
+#endif
 
 uint32_t
 nicConfigProcSetCamCfgWrite(IN struct ADAPTER *prAdapter,
@@ -486,5 +519,11 @@ void nicSerDeInit(IN struct ADAPTER *prAdapter);
 void nicUpdateWakeupStatistics(IN struct ADAPTER *prAdapter,
 	IN enum WAKEUP_TYPE intType);
 #endif /* fos_change end */
+
+#if CFG_SUPPORT_NAN
+/* for update dfs proxy config */
+uint32_t nicUpdateDfspConfig(struct ADAPTER *prAdapter,
+	struct CMD_DFSP_CONFIG *ptrDfspCfg);
+#endif
 
 #endif /* _NIC_H */

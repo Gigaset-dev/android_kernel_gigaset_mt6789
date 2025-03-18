@@ -9014,6 +9014,11 @@ wlanoidSet802dot11PowerSaveProfile(IN struct ADAPTER *
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter,
 					  prPowerMode->ucBssIdx);
+	if (prBssInfo == NULL) {
+		DBGLOG(REQ, WARN, "prBssInfo %d is NULL\n",
+		       prPowerMode->ucBssIdx);
+		return WLAN_STATUS_FAILURE;
+	}
 
 	if (prAdapter->fgEnCtiaPowerMode) {
 		if (prPowerMode->ePowerMode != Param_PowerModeCAM) {
@@ -11452,6 +11457,11 @@ wlanoidSetWiFiWmmPsTest(IN struct ADAPTER *prAdapter,
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter,
 					  rSetWmmPsTestParam.ucBssIndex);
+	if (prBssInfo == NULL) {
+		DBGLOG(REQ, ERROR, "prBssInfo %d is NULL\n",
+			rSetWmmPsTestParam.ucBssIndex);
+		return WLAN_STATUS_FAILURE;
+	}
 	prPmProfSetupInfo = &prBssInfo->rPmProfSetupInfo;
 	prPmProfSetupInfo->ucBmpDeliveryAC =
 		(rSetWmmPsTestParam.bmfgApsdEnAc >> 4) & BITS(0, 3);
@@ -15929,6 +15939,11 @@ uint32_t wlanoidUpdateFtIes(struct ADAPTER *prAdapter, void *pvSetBuffer,
 	prStaRec = aisGetTargetStaRec(prAdapter, ucBssIndex);
 	ftie = (struct cfg80211_update_ft_ies_params *)pvSetBuffer;
 	prFtIes = aisGetFtIe(prAdapter, ucBssIndex);
+	if (!prFtIes) {
+		DBGLOG(OID, ERROR, "FT: bss%d is not ais\n", ucBssIndex);
+		return WLAN_STATUS_INVALID_DATA;
+	}
+
 	if (ftie->ie_len == 0) {
 		DBGLOG(OID, WARN, "FT: FT Ies length is 0\n");
 		return WLAN_STATUS_SUCCESS;

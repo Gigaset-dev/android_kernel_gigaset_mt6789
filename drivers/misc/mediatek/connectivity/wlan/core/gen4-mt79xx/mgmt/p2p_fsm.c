@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/TRUNK/WiFi_P2P_Driver/mgmt/p2p_fsm.c#61
  */
@@ -94,11 +95,12 @@ static u_int8_t p2pFsmUseRoleIf(IN struct ADAPTER *prAdapter,
 		fgUseRoleInterface = FALSE;
 	}
 
-	DBGLOG(P2P, TRACE, "bss[%d %d], role: %d, use_role_if: %d\n",
+	DBGLOG(P2P, TRACE, "bss[%d %d], role: %d, use_role_if: %d dev: %u\n",
 			ucBssIdx,
 			IS_NET_ACTIVE(prAdapter, ucBssIdx),
 			prBssInfo->eIftype,
-			fgUseRoleInterface);
+			fgUseRoleInterface,
+			prAdapter->ucP2PDevBssIdx);
 
 	return fgUseRoleInterface;
 }

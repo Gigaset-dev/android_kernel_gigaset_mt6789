@@ -1438,6 +1438,25 @@ uint8_t aisNeedTargetScan(IN struct ADAPTER *prAdapter, IN uint8_t ucBssIndex)
 	       (postponing && trial < AIS_ROAMING_CONNECTION_TRIAL_LIMIT);
 }
 
+uint8_t aisGetAliveBssCount(struct ADAPTER *prAdapter)
+{
+	struct BSS_INFO *prBssInfo = NULL;
+	uint8_t ucBssIdx = 0, ucAliveBssCount = 0;
+
+	for (ucBssIdx = 0; ucBssIdx < prAdapter->ucHwBssIdNum; ucBssIdx++) {
+		prBssInfo = prAdapter->aprBssInfo[ucBssIdx];
+
+		if (IS_BSS_NOT_ALIVE(prAdapter, prBssInfo))
+			continue;
+
+		if (prBssInfo->eBand == BAND_NULL)
+			continue;
+
+		ucAliveBssCount++;
+	}
+	return ucAliveBssCount;
+}
+
 enum ENUM_AIS_STATE aisSearchHandleBssDesc(IN struct ADAPTER *prAdapter,
 	struct BSS_DESC *prBssDesc, IN uint8_t ucBssIndex)
 {
@@ -1601,15 +1620,20 @@ enum ENUM_AIS_STATE aisSearchHandleBssDesc(IN struct ADAPTER *prAdapter,
 		prAisFsmInfo->prTargetBssDesc = prBssDesc;
 		prAisFsmInfo->ucConnTrialCount++;
 		prAisFsmInfo->fgTargetChnlScanIssued = FALSE;
+		prAisFsmInfo->ucIsStaRoaming = TRUE;
 
 #if CFG_SUPPORT_DBDC
+#ifndef SOC3_0
 		/* DBDC decsion.may change OpNss */
-		cnmDbdcPreConnectionEnableDecision(
-			prAdapter,
-			prAisBssInfo->ucBssIndex,
-			prBssDesc->eBand,
-			prBssDesc->ucChannelNum,
-			prAisBssInfo->ucWmmQueSet);
+		if (prAdapter->rWifiVar.fgDbDcModeEn == FALSE &&
+		    aisGetAliveBssCount(prAdapter) > 1)
+			cnmDbdcPreConnectionEnableDecision(
+				prAdapter,
+				prAisBssInfo->ucBssIndex,
+				prBssDesc->eBand,
+				prBssDesc->ucChannelNum,
+				prAisBssInfo->ucWmmQueSet);
+#endif
 #endif /*CFG_SUPPORT_DBDC*/
 
 		if (wnmSendBTMResponse(prAdapter,
@@ -3120,7 +3144,6 @@ void aisFsmRunEventJoinComplete(IN struct ADAPTER *prAdapter,
 	cnmMemFree(prAdapter, prMsgHdr);
 }				/* end of aisFsmRunEventJoinComplete() */
 
-
 uint8_t aisHandleJoinFailure(IN struct ADAPTER *prAdapter,
 	struct STA_RECORD *prStaRec,
 	IN struct SW_RFB *prAssocRspSwRfb, uint8_t ucBssIndex)
@@ -3192,6 +3215,13 @@ uint8_t aisHandleJoinFailure(IN struct ADAPTER *prAdapter,
 	prBssDesc->u2JoinStatus = prStaRec->u2StatusCode;
 	prBssDesc->ucJoinFailureCount++;
 	GET_CURRENT_SYSTIME(&prBssDesc->rJoinFailTime);
+
+	if (prStaRec->u2StatusCode ==
+			STATUS_FINITE_CYCLIC_GROUP_NOT_SUPPORTED) {
+		DBGLOG(AIS, INFO,
+		       "DH GROUP AP NOT SUPPORT, no need retry in driver.\n");
+		return AIS_STATE_JOIN_FAILURE;
+	}
 
 	if (prBssDesc->ucJoinFailureCount >= SCN_BSS_JOIN_FAIL_THRESOLD) {
 		aisAddBlacklist(prAdapter, prBssDesc);
@@ -3284,6 +3314,10 @@ uint8_t aisHandleJoinFailure(IN struct ADAPTER *prAdapter,
 		if (!prAisFsmInfo->prTargetBssDesc)
 			DBGLOG(AIS, ERROR,
 			       "Can't retrieve target bss descriptor\n");
+
+		/* Restore rlmFillSync or nicBssUpdate if needed */
+		roamingFsmDoRecover(prAdapter, ucBssIndex);
+		prAisFsmInfo->ucIsStaRoaming = FALSE;
 	} else if (prAisFsmInfo->rJoinReqTime != 0 &&
 		CHECK_FOR_TIMEOUT(rCurrentTime, prAisFsmInfo->rJoinReqTime,
 		SEC_TO_SYSTIME(AIS_JOIN_TIMEOUT))) {
@@ -3343,6 +3377,7 @@ enum ENUM_AIS_STATE aisFsmJoinCompleteAction(IN struct ADAPTER *prAdapter,
 
 			/* 1. Reset retry count */
 			prAisFsmInfo->ucConnTrialCount = 0;
+			prAisFsmInfo->ucIsStaRoaming = FALSE;
 
 			/* Completion of roaming */
 			if (prAisBssInfo->eConnectionState ==
@@ -3836,6 +3871,7 @@ void aisFsmDisconnectedAction(IN struct ADAPTER *prAdapter, uint8_t ucBssIndex)
 	prRoamingFsmInfo->eReason = ROAMING_REASON_POOR_RCPI;
 
 	aisRemoveDeauthBlacklist(prAdapter);
+	prAisFsmInfo->ucIsStaRoaming = FALSE;
 
 #if CFG_SUPPORT_NCHO
 	wlanNchoInit(prAdapter, TRUE);
@@ -4231,6 +4267,12 @@ void aisUpdateBssInfoForJOIN(IN struct ADAPTER *prAdapter,
 		aisGetAisBssInfo(prAdapter, ucBssIndex));
 
 	/* 4 <4.3> Sync with firmware for BSS-INFO */
+	prAisBssInfo->ucBMCWlanIndex = secPrivacySeekForBcEntry(
+				prAdapter, prAisBssInfo->ucBssIndex,
+				prAisBssInfo->aucOwnMacAddr,
+				prStaRec->ucIndex,
+				CIPHER_SUITE_NONE, 0xFF);
+
 	nicUpdateBss(prAdapter, ucBssIndex);
 
 	/* 4 <4.4> *DEFER OPERATION* nicPmIndicateBssConnected()

@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   "cust_usb_id.h"
  *   \brief   Define USB vid/pid table for customers
  */
@@ -52,7 +53,9 @@
 /**
  * For chip reset pin number configureation
  */
+#ifndef WIFI_DONGLE_RESET_GPIO_PIN
 #define WIFI_DONGLE_RESET_GPIO_PIN	220
+#endif
 #endif
 
 /*!

@@ -625,7 +625,8 @@ void nic_txd_v1_compose_security_frame(
 			nicTxGetTxCountLimitByTc(ucTempTC));
 
 	/* Set lowest BSS basic rate */
-	HAL_MAC_TX_DESC_SET_FR_RATE(prTxDesc,
+	if (prBssInfo)
+		HAL_MAC_TX_DESC_SET_FR_RATE(prTxDesc,
 				    prBssInfo->u2HwDefaultFixedRateCode);
 	HAL_MAC_TX_DESC_SET_FIXED_RATE_MODE_TO_DESC(prTxDesc);
 	HAL_MAC_TX_DESC_SET_FIXED_RATE_ENABLE(prTxDesc);
@@ -635,7 +636,8 @@ void nic_txd_v1_compose_security_frame(
 				       TXD_PKT_FORMAT_COMMAND);
 
 	/* Own MAC */
-	HAL_MAC_TX_DESC_SET_OWN_MAC_INDEX(prTxDesc,
+	if (prBssInfo)
+		HAL_MAC_TX_DESC_SET_OWN_MAC_INDEX(prTxDesc,
 					  prBssInfo->ucOwnMacIndex);
 
 	/* PID */

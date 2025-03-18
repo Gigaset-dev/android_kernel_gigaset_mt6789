@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
  * Copyright (c) 2021 MediaTek Inc.
  */
@@ -63,7 +63,7 @@
 #define NAN_SOCIAL_CHANNEL_5GHZ_LOWER_BAND 44
 #define NAN_SOCIAL_CHANNEL_5GHZ_UPPER_BAND 149
 
-#define NDP_APP_INFO_LEN 255
+#define NDP_APP_INFO_LEN 1024
 #define NDP_PMK_LEN 32
 #define NDP_SCID_BUF_LEN 256
 #define NDP_NUM_INSTANCE_ID 255
@@ -87,7 +87,7 @@ struct NdiIfaceDelete {
 } PACKED;
 
 extern struct NanDataPathInitiatorNDPE g_ndpReqNDPE;
-extern uint8_t g_aucNanServiceName[NAN_MAX_SERVICE_NAME_LEN];
+extern uint8_t g_aucNanServiceName[NAN_MAX_SERVICE_NAME_LEN + 1];
 extern uint8_t g_aucNanServiceId[NAN_SERVICE_HASH_LENGTH];
 
 enum mtk_wlan_ndp_sub_cmd {
@@ -115,7 +115,11 @@ enum mtk_wlan_ndp_sub_cmd {
 	/* Command to indicate the peer about the end request being received */
 	MTK_WLAN_VENDOR_ATTR_NDP_END_IND = 11,
 	/* Command to indicate the peer of schedule update */
-	MTK_WLAN_VENDOR_ATTR_NDP_SCHEDULE_UPDATE_IND = 12
+	MTK_WLAN_VENDOR_ATTR_NDP_SCHEDULE_UPDATE_IND = 12,
+	/* Command to transmit Out-of-bound action frame for keep-alive */
+	MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_TX = 13,
+	/* Command to transmit Out-of-bound action frame was sent */
+	MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_TX_STATUS = 14
 };
 
 enum mtk_wlan_vendor_attr_ndp_params {
@@ -207,6 +211,27 @@ enum mtk_wlan_vendor_attr_ndp_params {
 	 * and ndp confirm.
 	 */
 	MTK_WLAN_VENDOR_ATTR_NDP_TRANSPORT_PROTOCOL = 29,
+
+	/* Out-of-bound Action frame */
+	/* Interface destination MAC address. An array of 6 Unsigned int8 */
+	MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_DEST_MAC_ADDR,
+	/* Interface source MAC address. An array of 6 Unsigned int8 */
+	MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_SRC_MAC_ADDR,
+	/* Interface BSSID. An array of 6 Unsigned int8 */
+	MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_BSSID,
+	/* Unsigned 8-bit value */
+	MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_MAP_ID,
+	/* Unsigned 16-bit value */
+	MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_TIMEOUT,
+	/* Unsigned 8-bit value */
+	MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_SECURITY,
+	/* Unsigned 16-bit value */
+	MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_TOKEN,
+	/* Action Frame payload. Array of u8 */
+	MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_PAYLOAD = 37,
+	/* Unsigned 16-bit value */
+	MTK_WLAN_VENDOR_ATTR_NDP_PUB_ID = 38,
+
 	/* keep last */
 	MTK_WLAN_VENDOR_ATTR_NDP_PARAMS_AFTER_LAST,
 	MTK_WLAN_VENDOR_ATTR_NDP_PARAMS_MAX =
@@ -244,6 +269,10 @@ uint32_t nanNdpEndRspEvent(struct ADAPTER *prAdapter,
 			   struct _NAN_NDP_INSTANCE_T *prNDP,
 			   uint32_t rTxDoneStatus);
 
+uint32_t nanNdpOOBActionTxDoneEvent(struct ADAPTER *prAdapter,
+				uint16_t ucTokenId,
+				uint32_t rTxDoneStatus);
+
 uint32_t nanNdiCreateHandler(struct GLUE_INFO *prGlueInfo, struct nlattr **tb);
 
 uint32_t nanNdiDeleteHandler(struct GLUE_INFO *prGlueInfo, struct nlattr **tb);
@@ -255,6 +284,9 @@ uint32_t nanNdpResponderReqHandler(struct GLUE_INFO *prGlueInfo,
 				   struct nlattr **tb);
 
 uint32_t nanNdpEndReqHandler(struct GLUE_INFO *prGlueInfo, struct nlattr **tb);
+
+uint32_t nanNdpOOBActionTxHandler(struct GLUE_INFO *prGlueInfo,
+				struct nlattr **tb);
 
 uint32_t nanNdpDataIndEvent(IN struct ADAPTER *prAdapter,
 			    struct _NAN_NDP_INSTANCE_T *prNDP,

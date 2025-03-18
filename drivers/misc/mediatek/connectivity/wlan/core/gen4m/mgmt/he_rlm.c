@@ -254,9 +254,14 @@ uint32_t heRlmCalculateHeCapIELen(
 	struct BSS_INFO *prBssInfo = (struct BSS_INFO *) NULL;
 	uint32_t u4OverallLen = OFFSET_OF(struct _IE_HE_CAP_T, aucVarInfo[0]);
 
-	if (fgEfuseCtrlAxOn == 1) {
+	if (fgEfuseCtrlAxOn != 1)
+		return 0;
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIndex);
+	if (!prBssInfo) {
+		DBGLOG(RLM, ERROR, "prBssInfo is null\n");
+		return 0;
+	}
 	ucMaxBw = cnmGetBssMaxBw(prAdapter, prBssInfo->ucBssIndex);
 
 	u4OverallLen += 4;
@@ -270,10 +275,6 @@ uint32_t heRlmCalculateHeCapIELen(
 #if (CFG_RX_PPE_THRESHOLD == 1)
 	u4OverallLen += sizeof(struct _PPE_THRESHOLD_FIELD);
 #endif
-	} else {
-		u4OverallLen = 0;
-	}
-
 	return u4OverallLen;
 }
 
@@ -626,6 +627,9 @@ static void heRlmFillHeCapIE(
 	}
 #endif
 
+	HE_SET_PHY_CAP_TX_1KQAM_242_TONE_RU(prHeCap->ucHePhyCap);
+	HE_SET_PHY_CAP_RX_1KQAM_242_TONE_RU(prHeCap->ucHePhyCap);
+
 	/* Set MCS map */
 	prHeSupportedMcsSet = (struct _HE_SUPPORTED_MCS_FIELD *)
 		(((uint8_t *) prHeCap) + u4OverallLen);
@@ -889,6 +893,10 @@ static uint32_t heRlmRecHeMcsMap(
 	uint8_t ucHeCapMcsOwnNotSupportOffset = 0, ucMaxBw;
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, prStaRec->ucBssIndex);
+	if (!prBssInfo) {
+		DBGLOG(RLM, ERROR, "prBssInfo is null\n");
+		return 0;
+	}
 	ucMaxBw = cnmGetBssMaxBw(prAdapter, prBssInfo->ucBssIndex);
 
 	/* BW 80Mhz */

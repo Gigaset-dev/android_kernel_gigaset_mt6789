@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/os/linux/include
  *      /gl_cfg80211.h#1
@@ -479,7 +480,8 @@ int mtk_cfg_change_iface(struct wiphy *wiphy,
 			 enum nl80211_iftype type, u32 *flags,
 			 struct vif_params *params);
 #endif
-#if (CFG_ADVANCED_80211_MLO == 1)
+#if (CFG_ADVANCED_80211_MLO == 1) || \
+	KERNEL_VERSION(6, 1, 0) <= CFG80211_VERSION_CODE
 int mtk_cfg_add_key(struct wiphy *wiphy,
 		    struct net_device *ndev, int link_id, u8 key_index,
 		    bool pairwise, const u8 *mac_addr,
@@ -490,7 +492,8 @@ int mtk_cfg_add_key(struct wiphy *wiphy,
 		    bool pairwise, const u8 *mac_addr,
 		    struct key_params *params);
 #endif
-#if (CFG_ADVANCED_80211_MLO == 1)
+#if (CFG_ADVANCED_80211_MLO == 1) || \
+	KERNEL_VERSION(6, 1, 0) <= CFG80211_VERSION_CODE
 int mtk_cfg_get_key(struct wiphy *wiphy,
 		    struct net_device *ndev, int link_id, u8 key_index,
 		    bool pairwise, const u8 *mac_addr, void *cookie,
@@ -501,7 +504,8 @@ int mtk_cfg_get_key(struct wiphy *wiphy,
 		    bool pairwise, const u8 *mac_addr, void *cookie,
 		    void (*callback)(void *cookie, struct key_params *));
 #endif
-#if (CFG_ADVANCED_80211_MLO == 1)
+#if (CFG_ADVANCED_80211_MLO == 1) || \
+	KERNEL_VERSION(6, 1, 0) <= CFG80211_VERSION_CODE
 int mtk_cfg_del_key(struct wiphy *wiphy,
 		    struct net_device *ndev, int link_id, u8 key_index,
 		    bool pairwise, const u8 *mac_addr);
@@ -510,7 +514,8 @@ int mtk_cfg_del_key(struct wiphy *wiphy,
 		    struct net_device *ndev, u8 key_index,
 		    bool pairwise, const u8 *mac_addr);
 #endif
-#if (CFG_ADVANCED_80211_MLO == 1)
+#if (CFG_ADVANCED_80211_MLO == 1) || \
+	KERNEL_VERSION(6, 1, 0) <= CFG80211_VERSION_CODE
 int mtk_cfg_set_default_key(struct wiphy *wiphy,
 			    struct net_device *ndev, int link_id,
 			    u8 key_index, bool unicast, bool multicast);
@@ -519,7 +524,8 @@ int mtk_cfg_set_default_key(struct wiphy *wiphy,
 			    struct net_device *ndev,
 			    u8 key_index, bool unicast, bool multicast);
 #endif
-#if (CFG_ADVANCED_80211_MLO == 1)
+#if (CFG_ADVANCED_80211_MLO == 1) || \
+	KERNEL_VERSION(6, 1, 0) <= CFG80211_VERSION_CODE
 int mtk_cfg_set_default_mgmt_key(struct wiphy *wiphy,
 		struct net_device *ndev, int link_id, u8 key_index);
 #else
@@ -738,7 +744,8 @@ int mtk_cfg_start_ap(struct wiphy *wiphy,
 int mtk_cfg_change_beacon(struct wiphy *wiphy,
 			  struct net_device *dev,
 			  struct cfg80211_beacon_data *info);
-#if (CFG_ADVANCED_80211_MLO == 1)
+#if (CFG_ADVANCED_80211_MLO == 1) || \
+	KERNEL_VERSION(6, 0, 0) <= CFG80211_VERSION_CODE
 int mtk_cfg_stop_ap(struct wiphy *wiphy,
 		    struct net_device *dev,
 		    unsigned int link_id);
@@ -751,7 +758,8 @@ int mtk_cfg_set_wiphy_params(struct wiphy *wiphy,
 			     u32 changed);
 int mtk_cfg_set_bitrate_mask(struct wiphy *wiphy,
 			     struct net_device *dev,
-#if (CFG_ADVANCED_80211_MLO == 1)
+#if (CFG_ADVANCED_80211_MLO == 1) || \
+	KERNEL_VERSION(6, 0, 0) <= CFG80211_VERSION_CODE
 			     unsigned int link_id,
 #endif
 			     const u8 *peer,

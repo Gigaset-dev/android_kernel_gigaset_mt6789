@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 #include "precomp.h"
 
 void
@@ -9,9 +10,42 @@ p2pRoleStateInit_IDLE(IN struct ADAPTER *prAdapter,
 		IN struct P2P_ROLE_FSM_INFO *prP2pRoleFsmInfo,
 		IN struct BSS_INFO *prP2pBssInfo)
 {
+	struct MSG_HDR *prMsgHdr;
+	struct MSG_P2P_START_AP *prP2pStartAPMsg = NULL;
+	struct BSS_INFO *prP2pBssInfoOther = NULL;
+	uint8_t ucBssIdx = 0;
+
+	GLUE_SPIN_LOCK_DECLARATION();
 	cnmTimerStartTimer(prAdapter,
 		&(prP2pRoleFsmInfo->rP2pRoleFsmTimeoutTimer),
 		P2P_AP_CHNL_HOLD_TIME_MS);
+
+	if (prP2pBssInfo->fgIsApStaring == TRUE) {
+		prP2pBssInfo->fgIsApStaring = FALSE;
+		if (QUEUE_IS_NOT_EMPTY(&prAdapter->rStartApPendingMsgList)) {
+			GLUE_ACQUIRE_SPIN_LOCK(prAdapter->prGlueInfo,
+				SPIN_LOCK_START_AP_QUE);
+			LINK_REMOVE_HEAD(&prAdapter->rStartApPendingMsgList,
+				prMsgHdr, struct MSG_HDR *);
+			GLUE_RELEASE_SPIN_LOCK(prAdapter->prGlueInfo,
+				SPIN_LOCK_START_AP_QUE);
+			if (!prMsgHdr)
+				return;
+			prP2pStartAPMsg = (struct MSG_P2P_START_AP *)prMsgHdr;
+			if (p2pFuncRoleToBssIdx(prAdapter,
+				prP2pStartAPMsg->ucRoleIdx,
+				&ucBssIdx) != WLAN_STATUS_SUCCESS) {
+				DBGLOG(P2P, WARN, "Msg invalid param.\n");
+				return;
+			}
+			prP2pBssInfoOther = prAdapter->aprBssInfo[ucBssIdx];
+			prP2pBssInfoOther->fgIsApStaring = TRUE;
+			mboxSendMsg(prAdapter,
+				MBOX_ID_0,
+				(struct MSG_HDR *) prP2pStartAPMsg,
+				MSG_SEND_METHOD_BUF);
+		}
+	}
 }				/* p2pRoleStateInit_IDLE */
 
 void
@@ -481,15 +515,15 @@ p2pRoleStatePrepare_To_REQING_CHANNEL_STATE(IN struct ADAPTER *prAdapter,
 		prChnlReqInfo->u4MaxInterval = P2P_AP_CHNL_HOLD_TIME_MS;
 		prChnlReqInfo->eChnlReqType = CH_REQ_TYPE_GO_START_BSS;
 
-		if (prBssInfo->eBand == BAND_5G) {
-			/* Decide RF BW by own OP BW */
-#if CFG_SUPPORT_DBDC
-			ucRfBw = cnmGetDbdcBwCapability(prAdapter,
-				prBssInfo->ucBssIndex);
-#else
-			ucRfBw = cnmGetBssMaxBw(prAdapter,
-				prBssInfo->ucBssIndex);
+		if (prBssInfo->eBand == BAND_5G
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			|| prBssInfo->eBand == BAND_6G
 #endif
+		) {
+			/* Decide RF BW by own OP BW */
+			ucRfBw = cnmOpModeGetApMaxBw(
+				prAdapter, prBssInfo);
+
 			/* Revise to VHT OP BW */
 			ucRfBw = rlmGetVhtOpBwByBssOpBw(ucRfBw);
 			prChnlReqInfo->eChannelWidth = ucRfBw;
@@ -497,14 +531,18 @@ p2pRoleStatePrepare_To_REQING_CHANNEL_STATE(IN struct ADAPTER *prAdapter,
 			prChnlReqInfo->eChannelWidth = CW_20_40MHZ;
 
 		/* TODO: BW80+80 support */
-		prChnlReqInfo->ucCenterFreqS1 =
-			nicGetVhtS1(prBssInfo->ucPrimaryChannel,
-				prChnlReqInfo->eChannelWidth);
+		prChnlReqInfo->ucCenterFreqS1 =	nicGetS1(
+			prBssInfo->eBand,
+			prBssInfo->ucPrimaryChannel,
+			prChnlReqInfo->eChannelWidth);
 		prChnlReqInfo->ucCenterFreqS2 = 0;
 
 		/* If the S1 is invalid, force to change bandwidth */
-		if ((prBssInfo->eBand == BAND_5G) &&
-			(prChnlReqInfo->ucCenterFreqS1 == 0))
+		if ((prBssInfo->eBand == BAND_5G
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			|| prBssInfo->eBand == BAND_6G
+#endif
+		) && (prChnlReqInfo->ucCenterFreqS1 == 0))
 			prChnlReqInfo->eChannelWidth =
 				VHT_OP_CHANNEL_WIDTH_20_40;
 

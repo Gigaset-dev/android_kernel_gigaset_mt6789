@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/mgmt/aaa_fsm.c#3 $
  */
@@ -257,7 +258,7 @@ void aaaFsmRunEventRxAuth(IN struct ADAPTER *prAdapter,
 	uint16_t u2StatusCode;
 	u_int8_t fgReplyAuth = FALSE;
 	struct WLAN_AUTH_FRAME *prAuthFrame = (struct WLAN_AUTH_FRAME *) NULL;
-	uint32_t rStatus = WLAN_STATUS_FAILURE;
+	uint32_t rStatus;
 
 	ASSERT(prAdapter);
 
@@ -299,7 +300,14 @@ void aaaFsmRunEventRxAuth(IN struct ADAPTER *prAdapter,
 					prBssInfo,
 					&u2StatusCode)) {
 
+#if CFG_SAP_SUPPORT_WPA3_H2E
+				if ((u2StatusCode
+					== STATUS_CODE_SUCCESSFUL) ||
+					(u2StatusCode
+					== STATUS_CODE_SAE_HASH_TO_ELEMENT)) {
+#else
 				if (u2StatusCode == STATUS_CODE_SUCCESSFUL) {
+#endif
 					DBGLOG(AAA, TRACE,
 						"process RxAuth status success\n");
 					/* 4 <1.2> Validate Auth Frame
@@ -313,11 +321,26 @@ void aaaFsmRunEventRxAuth(IN struct ADAPTER *prAdapter,
 						&u2StatusCode);
 
 #if CFG_SUPPORT_802_11W
+					if (prBssInfo->u4RsnSelectedAKMSuite ==
+							RSN_AKM_SUITE_SAE)
+						break;
+#if CFG_SUPPORT_SOFTAP_OWE
+					if (prBssInfo->u4RsnSelectedAKMSuite ==
+						RSN_AKM_SUITE_OWE)
+						break;
+#endif
+
 					/* AP PMF, if PMF connection,
 					 * ignore Rx auth
 					 */
 					/* Certification 4.3.3.4 */
-					if (rsnCheckBipKeyInstalled(prAdapter,
+					if (prAdapter->rWifiVar
+						.fgSapAuthPolicy ==
+						P2P_AUTH_POLICY_RESET)
+						DBGLOG(P2P, INFO,
+							"Ignore PMF check\n");
+					else if (rsnCheckBipKeyInstalled(
+						prAdapter,
 						prStaRec)) {
 						DBGLOG(AAA, INFO,
 							"Drop RxAuth\n");
@@ -366,7 +389,6 @@ bow_proc:
 
 					if (u2StatusCode
 						== STATUS_CODE_SUCCESSFUL) {
-
 						/* 4 <2.2> Validate Auth Frame
 						 * for Network Specific
 						 * Conditions
@@ -408,7 +430,12 @@ bow_proc:
 
 		if (prStaRec) {
 
+#if CFG_SAP_SUPPORT_WPA3_H2E
+			if ((u2StatusCode == STATUS_CODE_SUCCESSFUL) ||
+			(u2StatusCode == STATUS_CODE_SAE_HASH_TO_ELEMENT)) {
+#else
 			if (u2StatusCode == STATUS_CODE_SUCCESSFUL) {
+#endif
 				if (prStaRec->eAuthAssocState
 					!= AA_STATE_IDLE) {
 
@@ -451,7 +478,10 @@ bow_proc:
 				FALSE,
 				(uint8_t)prBssInfo->u4PrivateData);
 			DBGLOG(AAA, INFO, "Forward RxAuth\n");
-			if (prStaRec && prStaRec->fgIsInUse) {
+			if (prStaRec && prStaRec->fgIsInUse &&
+				p2pFuncIsAPMode(prAdapter->rWifiVar.
+				prP2PConnSettings[prBssInfo->u4PrivateData])) {
+				/* only check in SAP */
 				cnmTimerStopTimer(prAdapter,
 					&prStaRec->rTxReqDoneOrRxRespTimer);
 				/*ToDo:Init Timer to check get
@@ -461,7 +491,8 @@ bow_proc:
 					&prStaRec->rTxReqDoneOrRxRespTimer,
 					(PFN_MGMT_TIMEOUT_FUNC)
 					aaaFsmRunEventTxReqTimeOut,
-					(unsigned long) prStaRec);
+					(unsigned long) prStaRec,
+					TIMER_WAKELOCK_AUTO);
 
 				cnmTimerStartTimer(prAdapter,
 					&prStaRec->rTxReqDoneOrRxRespTimer,
@@ -469,6 +500,17 @@ bow_proc:
 					DOT11_RSNA_SAE_RETRANS_PERIOD_TU));
 			}
 			return;
+#if CFG_SUPPORT_SOFTAP_OWE
+		} else if (prBssInfo->u4RsnSelectedAKMSuite ==
+			RSN_AKM_SUITE_OWE) {
+			kalP2PIndicateRxMgmtFrame(prAdapter,
+				prAdapter->prGlueInfo,
+				prSwRfb,
+				FALSE,
+				(uint8_t)prBssInfo->u4PrivateData);
+			DBGLOG(AAA, INFO, "[OWE] Forward RxAuth\n");
+			return;
+#endif
 		}
 
 		/* NOTE: Ignore the return status for AAA */
@@ -502,15 +544,14 @@ bow_proc:
 				&prStaRec->rTxReqDoneOrRxRespTimer,
 				(PFN_MGMT_TIMEOUT_FUNC)
 				aaaFsmRunEventTxReqTimeOut,
-				(unsigned long) prStaRec);
+				(unsigned long) prStaRec,
+				TIMER_WAKELOCK_AUTO);
 
 			cnmTimerStartTimer(prAdapter,
 				&prStaRec->rTxReqDoneOrRxRespTimer,
 				TU_TO_MSEC(
 					TX_AUTHENTICATION_RESPONSE_TIMEOUT_TU));
 		}
-
-
 
 	} else if (prStaRec)
 		cnmStaRecFree(prAdapter, prStaRec);
@@ -531,7 +572,7 @@ bow_proc:
 uint32_t aaaFsmRunEventRxAssoc(IN struct ADAPTER *prAdapter,
 		IN struct SW_RFB *prSwRfb)
 {
-	struct BSS_INFO *prBssInfo;
+	struct BSS_INFO *prBssInfo = NULL;
 	struct STA_RECORD *prStaRec = (struct STA_RECORD *) NULL;
 	uint16_t u2StatusCode = STATUS_CODE_RESERVED;
 	u_int8_t fgReplyAssocResp = FALSE;
@@ -617,8 +658,9 @@ uint32_t aaaFsmRunEventRxAssoc(IN struct ADAPTER *prAdapter,
 				GET_BSS_INFO_BY_INDEX(prAdapter,
 					prStaRec->ucBssIndex);
 
+			if (!prBssInfo)
+				break;
 			if (prBssInfo->fgIsNetActive) {
-
 				/* 4 <2.1> Validate Assoc Req Frame and
 				 * get Status Code
 				 */
@@ -627,8 +669,15 @@ uint32_t aaaFsmRunEventRxAssoc(IN struct ADAPTER *prAdapter,
 				    assocProcessRxAssocReqFrame(prAdapter,
 						prSwRfb, &u2StatusCode)) {
 
-					if (u2StatusCode
-						== STATUS_CODE_SUCCESSFUL) {
+#if CFG_SAP_SUPPORT_WPA3_H2E
+					if ((u2StatusCode ==
+					    STATUS_CODE_SUCCESSFUL) ||
+					    (u2StatusCode ==
+					    STATUS_CODE_SAE_HASH_TO_ELEMENT)) {
+#else
+					if (u2StatusCode ==
+					    STATUS_CODE_SUCCESSFUL) {
+#endif
 						/* 4 <2.2>
 						 * Validate Assoc Req Frame
 						 * for Network Specific
@@ -658,6 +707,8 @@ uint32_t aaaFsmRunEventRxAssoc(IN struct ADAPTER *prAdapter,
 				GET_BSS_INFO_BY_INDEX(prAdapter,
 					prStaRec->ucBssIndex);
 
+			if (!prBssInfo)
+				break;
 			if ((prBssInfo->fgIsNetActive)
 				&& (prBssInfo->eCurrentOPMode == OP_MODE_BOW)) {
 
@@ -863,7 +914,18 @@ uint32_t aaaFsmRunEventRxAssoc(IN struct ADAPTER *prAdapter,
 
 		/* NOTE: Ignore the return status for AAA */
 		/* 4 <4.2> Reply  Assoc Resp */
-		assocSendReAssocRespFrame(prAdapter, prStaRec);
+#if CFG_SUPPORT_SOFTAP_OWE
+		if (prBssInfo->u4RsnSelectedAKMSuite ==
+			RSN_AKM_SUITE_OWE) {
+			kalP2PIndicateRxMgmtFrame(prAdapter,
+				prAdapter->prGlueInfo,
+				prSwRfb,
+				FALSE,
+				(uint8_t)prBssInfo->u4PrivateData);
+			DBGLOG(AAA, INFO, "[OWE] Forward RxAssoc\n");
+		} else
+#endif
+			assocSendReAssocRespFrame(prAdapter, prStaRec);
 
 #if CFG_SUPPORT_802_11W
 		/* AP PMF */

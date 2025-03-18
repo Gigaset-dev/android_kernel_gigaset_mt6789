@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/TRUNK/WiFi_P2P_Driver/
  *        os/linux/include/gl_p2p_ioctl.h#9
@@ -498,6 +499,19 @@ int mtk_p2p_cfg80211_mgmt_tx(struct wiphy *wiphy,
 		bool dont_wait_for_ack,
 		u64 *cookie);
 #endif
+
+#if CFG_SUPPORT_SOFTAP_OWE
+int mtk_p2p_cfg80211_add_station(
+	struct wiphy *wiphy,
+	struct net_device *ndev,
+	const u8 *mac);
+
+int mtk_p2p_cfg80211_change_station(
+	struct wiphy *wiphy,
+	struct net_device *ndev,
+	const u8 *mac,
+	struct station_parameters *params);
+#endif /* CFG_SUPPORT_SOFTAP_OWE */
 
 #if KERNEL_VERSION(3, 19, 0) <= CFG80211_VERSION_CODE
 int mtk_p2p_cfg80211_del_station(struct wiphy *wiphy,

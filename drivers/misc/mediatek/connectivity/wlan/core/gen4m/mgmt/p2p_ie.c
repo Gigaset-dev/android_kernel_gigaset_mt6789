@@ -159,7 +159,8 @@ void p2pGenerate_IEForAssocReq(IN struct ADAPTER *prAdapter,
 		prP2pRoleFsmInfo =
 			P2P_ROLE_INDEX_2_ROLE_FSM_INFO(prAdapter,
 				(uint8_t) prBssInfo->u4PrivateData);
-
+		if (!prP2pRoleFsmInfo)
+			break;
 		prConnReqInfo = &(prP2pRoleFsmInfo->rConnReqInfo);
 
 		pucIEBuf = (uint8_t *) ((unsigned long) prMsduInfo->prPacket

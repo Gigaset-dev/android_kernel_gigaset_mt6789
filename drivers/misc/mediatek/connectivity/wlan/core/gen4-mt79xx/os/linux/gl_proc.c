@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: /os/linux/gl_proc.c
  */
@@ -64,6 +65,7 @@
 #endif
 #if CFG_SUPPORT_CSI
 #define PROC_CSI_DATA_NAME                     "csi_data"
+#define CSI_MAX_BUFFER_SIZE 4300
 #endif
 #if CFG_SUPPORT_PROC_GET_WAKEUP_REASON
 #define PROC_WAKEUP_REASON			"wakeup_reason"
@@ -105,7 +107,14 @@ static uint8_t aucDbModuleName[][PROC_DBG_LEVEL_MAX_DISPLAY_STR_LEN] = {
 	"INIT", "HAL", "INTR", "REQ", "TX", "RX", "RFTEST", "EMU", "SW1", "SW2",
 	"SW3", "SW4", "HEM", "AIS", "RLM", "MEM", "CNM", "RSN", "BSS", "SCN",
 	"SAA", "AAA", "P2P", "QM", "SEC", "BOW", "WAPI", "ROAMING", "TDLS",
-	"PF", "OID", "NIC", "NAN"
+	"PF", "OID", "NIC", "WNM", "WMM", "TWT_REQUESTER", "TWT_PLANNER",
+	"TWT_RESPONDER", "RRM",
+#if (CFG_TX_RSRC_WMM_ENHANCE == 1)
+	"HIF_WMM_ENHANCE",
+#endif
+#if CFG_SUPPORT_NAN
+	"NAN",
+#endif
 };
 
 /* This buffer could be overwrite by any proc commands */
@@ -115,6 +124,10 @@ static uint8_t g_aucProcBuf[3000];
  * should not be used by other function
  */
 static int32_t g_i4NextDriverReadLen;
+
+#if CFG_SUPPORT_CSI
+static uint8_t aucCSIBuf[CSI_MAX_BUFFER_SIZE];
+#endif
 /*******************************************************************************
  *                                 M A C R O S
  *******************************************************************************
@@ -147,6 +160,11 @@ static int procCSIDataRelease(struct inode *n, struct file *f)
 	}
 
 	return 0;
+}
+
+static uint8_t *glCsiGetCSIBuf(void)
+{
+	return aucCSIBuf;
 }
 
 static ssize_t procCSIDataPrepare(
@@ -343,7 +361,6 @@ struct CSI_DATA_T rTmpCSIData;
 static ssize_t procCSIDataRead(struct file *filp,
 	char __user *buf, size_t count, loff_t *f_pos)
 {
-	uint8_t *pucProcBuf = kalMemAlloc(PROC_MAX_BUF_SIZE, VIR_MEM_TYPE);
 	uint8_t *temp = NULL;
 	uint32_t u4CopySize = 0;
 	uint32_t u4StartIdx = 0;
@@ -351,21 +368,29 @@ static ssize_t procCSIDataRead(struct file *filp,
 	int32_t i4Ret = 0;
 	struct CSI_INFO_T *prCSIInfo = NULL;
 
-	if (*f_pos > 0 || buf == NULL || pucProcBuf == NULL)
-		goto freeBuf;
+	if (buf == NULL) {
+		DBGLOG(INIT, ERROR, "[CSI] buf == NULL\n");
+		return -EFAULT;
+	}
 
-	if (g_prGlueInfo_proc && g_prGlueInfo_proc->prAdapter)
+	if (g_prGlueInfo_proc && g_prGlueInfo_proc->prAdapter) {
 		prCSIInfo = &(g_prGlueInfo_proc->prAdapter->rCSIInfo);
-	else
-		goto freeBuf;
-
-	kalMemZero(pucProcBuf, PROC_MAX_BUF_SIZE);
-	temp = pucProcBuf;
+		temp = glCsiGetCSIBuf();
+	} else {
+		DBGLOG(REQ, WARN, "[CSI] driver is not ready.\n");
+		return -EFAULT;
+	}
 
 	if (prCSIInfo->bIncomplete == FALSE) {
-
 		wait_event_interruptible(prCSIInfo->waitq,
 			prCSIInfo->u4CSIBufferUsed != 0);
+
+		if (kalIsHalted() || kalIsResetting()) {
+			DBGLOG(INIT, WARN,
+				"[CSI] kalIsHalted=%u kalIsResetting=%u\n",
+				kalIsHalted(), kalIsResetting());
+			return -EFAULT;
+		}
 
 		/*
 		 * No older CSI data in buffer waiting for reading out,
@@ -392,7 +417,6 @@ static ssize_t procCSIDataRead(struct file *filp,
 		}
 	} else {
 		/* Reading the remaining CSI data in the buffer */
-
 		u4StartIdx = prCSIInfo->u4CopiedDataSize;
 		if (prCSIInfo->u4RemainingDataSize > count) {
 #ifdef CFG_SSVD_SVACE64
@@ -412,17 +436,14 @@ static ssize_t procCSIDataRead(struct file *filp,
 		(u4StartIdx + u4CopySize) > PROC_MAX_BUF_SIZE ||
 		copy_to_user(buf, temp + u4StartIdx, u4CopySize)) {
 		DBGLOG(INIT, ERROR, "[CSI] copy to user failed\n");
-		i4Ret = -EFAULT;
-		goto freeBuf;
+		return -EFAULT;
 	}
 
 	*f_pos += u4CopySize;
-
-	DBGLOG(INIT, INFO, "[CSI] u4CopySize=%d\n", u4CopySize);
 	i4Ret = u4CopySize;
-freeBuf:
-	if (pucProcBuf)
-		kalMemFree(pucProcBuf, VIR_MEM_TYPE, PROC_MAX_BUF_SIZE);
+#if CFG_CSI_DEBUG
+	DBGLOG(INIT, ERROR, "[CSI] u4CopySize=%d\n", u4CopySize);
+#endif
 	return i4Ret;
 }
 #endif
@@ -891,8 +912,9 @@ static ssize_t procDriverCmdRead(struct file *filp, char __user *buf,
 		u4CopySize = g_i4NextDriverReadLen;
 
 	if (u4CopySize > count) {
-		DBGLOG(INIT, ERROR, "count is too small: u4CopySize=%u, count=%u\n",
-		       u4CopySize, (uint32_t)count);
+		DBGLOG(INIT, ERROR,
+			"count is too small: u4CopySize=%u, count=%u\n",
+		    u4CopySize, (uint32_t)count);
 		return -EFAULT;
 	}
 
@@ -916,7 +938,7 @@ static ssize_t procDriverCmdWrite(struct file *file, const char __user *buffer,
 	u4CopySize = (count < u4CopySize) ? count : (u4CopySize - 1);
 
 	if (copy_from_user(g_aucProcBuf, buffer, u4CopySize)) {
-		DBGLOG(INIT, ERROR,"error of copy from user\n");
+		DBGLOG(INIT, ERROR, "error of copy from user\n");
 		return -EFAULT;
 	}
 	g_aucProcBuf[u4CopySize] = '\0';
@@ -973,6 +995,18 @@ static ssize_t procDbgLevelWrite(struct file *file, const char __user *buffer,
 		GL_USER_DEFINE_RESET_TRIGGER(g_prGlueInfo_proc->prAdapter,
 			RST_CMD_TRIGGER, RST_FLAG_DO_WHOLE_RESET);
 		temp[0] = 'X';
+#if CFG_CHIP_RESET_KO_SUPPORT
+	} else if (temp[0] == 'D') {
+		DBGLOG(INIT, INFO, "WIFI trigger power off!!\n");
+		send_reset_event(RESET_MODULE_TYPE_WIFI,
+				 RFSM_EVENT_TRIGGER_POWER_OFF);
+		temp[0] = 'X';
+	} else if (temp[0] == 'U') {
+		DBGLOG(INIT, INFO, "WIFI trigger power on!!\n");
+		send_reset_event(RESET_MODULE_TYPE_WIFI,
+				 RFSM_EVENT_TRIGGER_POWER_ON);
+		temp[0] = 'X';
+#endif
 	}
 #endif
 
@@ -2350,9 +2384,10 @@ int32_t procInitFs(void)
 		      KGIDT_INIT(PROC_GID_WIFI));
 
 	prEntry =
-	    proc_create(PROC_DBG_LEVEL_NAME, 0664, gprProcRoot, &dbglevel_ops);
+	    proc_create(PROC_DBG_LEVEL_NAME, 0660, gprProcRoot, &dbglevel_ops);
 	if (prEntry == NULL) {
-		DBGLOG(INIT, ERROR, "Unable to create /proc entry dbgLevel\n\r");
+		DBGLOG(INIT, ERROR,
+			"Unable to create /proc entry dbgLevel\n");
 		return -1;
 	}
 	proc_set_user(prEntry, KUIDT_INIT(PROC_UID_SHELL),
@@ -2360,7 +2395,7 @@ int32_t procInitFs(void)
 
 #if (CFG_SUPPORT_PERMON == 1)
 	prEntry =
-	    proc_create(PROC_AUTO_PERF_CFG, 0664, gprProcRoot, &auto_perf_ops);
+	    proc_create(PROC_AUTO_PERF_CFG, 0660, gprProcRoot, &auto_perf_ops);
 	if (prEntry == NULL) {
 		DBGLOG(INIT, ERROR, "Unable to create /proc entry %s/n",
 		       PROC_AUTO_PERF_CFG);
@@ -2372,7 +2407,7 @@ int32_t procInitFs(void)
 
 #if CFG_SUPPORT_DYNAMIC_PWR_LIMIT
 	prEntry =
-	    proc_create(PROC_SAR_CFG_DEBUG, 0664, gprProcRoot, &sardebug_ops);
+	    proc_create(PROC_SAR_CFG_DEBUG, 0660, gprProcRoot, &sardebug_ops);
 	if (prEntry == NULL) {
 		DBGLOG(INIT, ERROR, "Unable to create /proc entry %s/n",
 		       PROC_SAR_CFG_DEBUG);
@@ -2447,6 +2482,8 @@ int32_t procRemoveProcfs(void)
 	remove_proc_entry(PROC_ROAM_PARAM, gprProcRoot);
 #endif
 #if CFG_SUPPORT_CSI
+	g_prGlueInfo_proc->prAdapter->rCSIInfo.u4CSIBufferUsed = 1;
+	wake_up_interruptible(&(g_prGlueInfo_proc->prAdapter->rCSIInfo.waitq));
 	remove_proc_entry(PROC_CSI_DATA_NAME, gprProcRoot);
 #endif
 #if CFG_SUPPORT_PROC_GET_WAKEUP_REASON
@@ -2464,14 +2501,14 @@ int32_t procCreateFsEntry(struct GLUE_INFO *prGlueInfo)
 	DBGLOG(INIT, INFO, "[%s]\n", __func__);
 	g_prGlueInfo_proc = prGlueInfo;
 
-	prEntry = proc_create(PROC_MCR_ACCESS, 0664, gprProcRoot, &mcr_ops);
+	prEntry = proc_create(PROC_MCR_ACCESS, 0660, gprProcRoot, &mcr_ops);
 	if (prEntry == NULL) {
 		DBGLOG(INIT, ERROR, "Unable to create /proc entry mcr\n");
 		return -1;
 	}
 
 	prEntry =
-	    proc_create(PROC_PKT_DELAY_DBG, 0664, gprProcRoot,
+	    proc_create(PROC_PKT_DELAY_DBG, 0660, gprProcRoot,
 			&proc_pkt_delay_dbg_ops);
 	if (prEntry == NULL) {
 		DBGLOG(INIT, ERROR,
@@ -2483,7 +2520,7 @@ int32_t procCreateFsEntry(struct GLUE_INFO *prGlueInfo)
 
 #if CFG_SUPPORT_SET_CAM_BY_PROC
 	prEntry =
-	    proc_create(PROC_SET_CAM, 0664, gprProcRoot, &proc_set_cam_ops);
+	    proc_create(PROC_SET_CAM, 0660, gprProcRoot, &proc_set_cam_ops);
 	if (prEntry == NULL) {
 		DBGLOG(INIT, ERROR, "Unable to create /proc entry SetCAM\n");
 		return -1;
@@ -2492,14 +2529,14 @@ int32_t procCreateFsEntry(struct GLUE_INFO *prGlueInfo)
 		      KGIDT_INIT(PROC_GID_WIFI));
 #endif
 #if CFG_SUPPORT_DEBUG_FS
-	prEntry = proc_create(PROC_ROAM_PARAM, 0664, gprProcRoot, &roam_ops);
+	prEntry = proc_create(PROC_ROAM_PARAM, 0660, gprProcRoot, &roam_ops);
 	if (prEntry == NULL) {
 		DBGLOG(INIT, ERROR,
 		       "Unable to create /proc entry roam_param\n");
 		return -1;
 	}
 #endif
-	prEntry = proc_create(PROC_COUNTRY, 0664, gprProcRoot, &country_ops);
+	prEntry = proc_create(PROC_COUNTRY, 0660, gprProcRoot, &country_ops);
 	if (prEntry == NULL) {
 		DBGLOG(INIT, ERROR, "Unable to create /proc entry country\n");
 		return -1;
@@ -2508,27 +2545,29 @@ int32_t procCreateFsEntry(struct GLUE_INFO *prGlueInfo)
 #if	CFG_SUPPORT_EASY_DEBUG
 
 	prEntry =
-		proc_create(PROC_DRIVER_CMD, 0664, gprProcRoot, &drivercmd_ops);
+		proc_create(PROC_DRIVER_CMD, 0660, gprProcRoot, &drivercmd_ops);
 	if (prEntry == NULL) {
-		DBGLOG(INIT, ERROR, "Unable to create /proc entry for driver command\n");
+		DBGLOG(INIT, ERROR,
+			"Unable to create /proc entry for driver command\n");
 		return -1;
 	}
 #if CFG_SUPPORT_CFG_FILE
-	prEntry = proc_create(PROC_CFG, 0664, gprProcRoot, &cfg_ops);
+	prEntry = proc_create(PROC_CFG, 0660, gprProcRoot, &cfg_ops);
 	if (prEntry == NULL) {
-		DBGLOG(INIT, ERROR, "Unable to create /proc entry for driver cfg\n");
+		DBGLOG(INIT, ERROR,
+			"Unable to create /proc entry for driver cfg\n");
 		return -1;
 	}
 #endif
 	prEntry =
-		proc_create(PROC_EFUSE_DUMP, 0664, gprProcRoot, &efusedump_ops);
+		proc_create(PROC_EFUSE_DUMP, 0660, gprProcRoot, &efusedump_ops);
 	if (prEntry == NULL) {
 		DBGLOG(INIT, ERROR, "Unable to create /proc entry efuse\n");
 		return -1;
 	}
 #endif
 #if CFG_WIFI_TXPWR_TBL_DUMP
-	prEntry = proc_create(PROC_GET_TXPWR_TBL, 0664, gprProcRoot,
+	prEntry = proc_create(PROC_GET_TXPWR_TBL, 0660, gprProcRoot,
 			      &get_txpwr_tbl_ops);
 	if (prEntry == NULL) {
 		DBGLOG(INIT, ERROR,
@@ -2539,7 +2578,7 @@ int32_t procCreateFsEntry(struct GLUE_INFO *prGlueInfo)
 
 #if CFG_ASSERT_DUMP
 	prEntry =
-		proc_create(PROC_CORE_DUMP, 0664, gprProcRoot, &coredump_ops);
+		proc_create(PROC_CORE_DUMP, 0660, gprProcRoot, &coredump_ops);
 	if (prEntry == NULL) {
 		DBGLOG(INIT, ERROR, "Unable to create /proc entry core_dump\n");
 		return -1;
@@ -2548,7 +2587,7 @@ int32_t procCreateFsEntry(struct GLUE_INFO *prGlueInfo)
 
 #if CFG_SUPPORT_CSI
 	prEntry =
-		proc_create(PROC_CSI_DATA_NAME, 0664,
+		proc_create(PROC_CSI_DATA_NAME, 0660,
 					gprProcRoot, &csidata_ops);
 	if (prEntry == NULL) {
 		DBGLOG(INIT, ERROR,
@@ -2558,7 +2597,7 @@ int32_t procCreateFsEntry(struct GLUE_INFO *prGlueInfo)
 #endif
 
 #if CFG_SUPPORT_PROC_GET_WAKEUP_REASON
-	prEntry = proc_create(PROC_WAKEUP_REASON, 0664, gprProcRoot,
+	prEntry = proc_create(PROC_WAKEUP_REASON, 0660, gprProcRoot,
 			&wakeup_reason_ops);
 	if (prEntry == NULL) {
 		DBGLOG(INIT, ERROR,
@@ -2938,7 +2977,7 @@ int32_t cfgCreateProcEntry(struct GLUE_INFO *prGlueInfo)
 	prGlueInfo->pProcRoot = gprProcRoot;
 	gprGlueInfo = prGlueInfo;
 
-	prEntry = proc_create(PROC_CFG_NAME, 0664, gprProcRoot, &fwcfg_ops);
+	prEntry = proc_create(PROC_CFG_NAME, 0660, gprProcRoot, &fwcfg_ops);
 	if (prEntry == NULL) {
 		DBGLOG(INIT, ERROR, "Unable to create /proc entry cfg\n");
 		return -1;

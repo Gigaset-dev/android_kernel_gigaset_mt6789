@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id:
  */
@@ -110,7 +111,8 @@ void roamingFsmInit(IN struct ADAPTER *prAdapter, IN uint8_t ucBssIndex)
 	prRoamingFsmInfo->fgDrvRoamingAllow = TRUE;
 	cnmTimerInitTimer(prAdapter, &prRoamingFsmInfo->rWaitCandidateTimer,
 			  (PFN_MGMT_TIMEOUT_FUNC) roamingWaitCandidateTimeout,
-			  (unsigned long) ucBssIndex);
+			  (unsigned long) ucBssIndex,
+			  TIMER_WAKELOCK_AUTO);
 }				/* end of roamingFsmInit() */
 
 /*----------------------------------------------------------------------------*/

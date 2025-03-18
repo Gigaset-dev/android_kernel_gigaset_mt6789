@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/os/linux/include
        /gl_wext_priv.h#3
@@ -102,6 +103,7 @@
 #define PRIV_CMD_P2P_VERSION                   23
 
 #define PRIV_CMD_GET_CH_LIST            24
+#define MAX_CH_LIST_NUM			100
 
 #define PRIV_CMD_SET_TX_POWER_NO_USED           25
 
@@ -479,6 +481,11 @@ int priv_support_driver_cmd(IN struct net_device *prDev,
 int android_private_support_driver_cmd(IN struct net_device *prDev,
 IN OUT struct ifreq *prReq, IN int i4Cmd);
 #endif /* CFG_ANDROID_AOSP_PRIV_CMD */
+
+#if CFG_SUPPORT_MDNS_OFFLOAD
+int priv_support_mdns_offload(struct net_device *prDev,
+				struct ifreq *prReq, int i4Cmd);
+#endif
 
 int32_t priv_driver_cmds(IN struct net_device *prNetDev,
 			 IN int8_t *pcCommand, IN int32_t i4TotalLen);

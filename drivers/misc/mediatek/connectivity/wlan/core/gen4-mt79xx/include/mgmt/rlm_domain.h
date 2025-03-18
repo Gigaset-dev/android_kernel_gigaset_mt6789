@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/
  *	 include/mgmt/rlm_domain.h#1
@@ -1000,6 +1001,7 @@ struct COUNTRY_POWER_LIMIT_TABLE_CONFIGURATION {
 };
 
 struct SUBBAND_CHANNEL {
+	enum ENUM_BAND eBand;
 	uint8_t ucStartCh;
 	uint8_t ucEndCh;
 	uint8_t ucInterval;
@@ -1105,7 +1107,7 @@ void rlmDomainSendPassiveScanInfoCmd(struct ADAPTER
 uint32_t rlmDomainSupOperatingClassIeFill(uint8_t *pBuf);
 
 u_int8_t rlmDomainCheckChannelEntryValid(struct ADAPTER
-		*prAdapter, uint8_t ucCentralCh);
+		*prAdapter, enum ENUM_BAND eBand, uint8_t ucCentralCh);
 
 uint8_t rlmDomainGetCenterChannel(enum ENUM_BAND eBand,
 				  uint8_t ucPriChannel,
@@ -1116,6 +1118,11 @@ u_int8_t rlmDomainIsValidRfSetting(struct ADAPTER *prAdapter,
 				   enum ENUM_CHNL_EXT eExtend,
 				   enum ENUM_CHANNEL_WIDTH eChannelWidth,
 				   uint8_t ucChannelS1, uint8_t ucChannelS2);
+
+u_int8_t
+rlmDomainCheckChannelValidForP2pCsa(struct ADAPTER *prAdapter,
+				   enum ENUM_BAND eBand,
+				   u_int8_t ucChl);
 
 #if CFG_SUPPORT_PWR_LIMIT_COUNTRY
 
@@ -1196,7 +1203,8 @@ void rlmDomainCountryCodeUpdate(struct ADAPTER *prAdapter,
 void rlmDomainSetCountry(struct ADAPTER *prAdapter);
 u_int32_t rlmDomainUpdateRegdomainFromaLocalDataBaseByCountryCode(
 	struct wiphy *pWiphy, u_int32_t u4CountryCode);
-
+void rlmDomainRegSetAddToQueue(struct wiphy *pWiphy,
+				u_int32_t u4CountryCode);
 #if CFG_SUPPORT_DYNAMIC_PWR_LIMIT
 /* dynamic tx power control */
 void txPwrCtrlInit(struct ADAPTER *prAdapter);

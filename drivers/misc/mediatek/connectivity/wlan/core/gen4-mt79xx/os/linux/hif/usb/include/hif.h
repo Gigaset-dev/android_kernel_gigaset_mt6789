@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   "hif.h"
 *    \brief  Functions for the driver to register bus and setup the IRQ
 *
@@ -123,7 +124,11 @@ enum ENUM_USB_END_POINT {
 #endif
 #define USB_RX_EVENT_BUF_SIZE           (CFG_RX_MAX_PKT_SIZE + 3 + LEN_USB_RX_PADDING_CSO + 4)
 #define USB_RX_WDT_BUF_SIZE             (1)
-#define USB_RX_DATA_BUF_SIZE            (CFG_RX_MAX_MPDU_SIZE + \
+#define MDP_MAX_MSDU_SIZE               (8192)
+#define MAX_RXD_SIZE                    (72)
+#define HIF_RX_HEADER_SIZE              (12)
+#define USB_RX_DATA_BUF_SIZE            ((MDP_MAX_MSDU_SIZE + MAX_RXD_SIZE +\
+		HIF_RX_HEADER_SIZE + LEN_USB_RX_PADDING_CSO + 4)+ \
 		 min(USB_RX_AGGREGTAION_LIMIT * 1024, \
 		     (USB_RX_AGGREGTAION_PKT_LIMIT * \
 		      (CFG_RX_MAX_MPDU_SIZE + 3 + LEN_USB_RX_PADDING_CSO) + 4)))
@@ -139,9 +144,15 @@ enum ENUM_USB_END_POINT {
 #define DEVICE_VENDOR_REQUEST_IN_CONNAC2       (0xdF)
 #define DEVICE_VENDOR_REQUEST_OUT       (0x40)
 #define DEVICE_VENDOR_REQUEST_OUT_CONNAC2       (0x5F)
+#ifndef VENDOR_TIMEOUT_MS
 #define VENDOR_TIMEOUT_MS               (1000)
+#endif
+#ifndef BULK_TIMEOUT_MS
 #define BULK_TIMEOUT_MS                 (1500)
+#endif
+#ifndef INTERRUPT_TIMEOUT_MS
 #define INTERRUPT_TIMEOUT_MS            (1000)
+#endif
 #define SW_RFB_RECHECK_MS               (10)
 #define SW_RFB_LOG_LIMIT_MS             (5000)
 #define DEVICE_VENDOR_REQUEST_UHW_IN    (0xDE)
@@ -153,11 +164,15 @@ enum ENUM_USB_END_POINT {
 #define VND_REQ_REG_WRITE               (0x66)
 #define VND_REQ_EP5_IN_INFO             (0x67)
 #define VND_REQ_FEATURE_SET             (0x91)
+#define VND_REQ_USB_SUSPEND_RESUME      (0xAA)
 #define FEATURE_SET_WVALUE_RESUME       (0x5)
 #define FEATURE_SET_WVALUE_SUSPEND      (0x6)
 #define VND_REQ_BUF_SIZE                (16)
 #define VND_REQ_UHW_READ                (0x01)
 #define VND_REQ_UHW_WRITE               (0x02)
+#if CFG_DC_USB_WOW_CALLBACK
+#define VND_REQ_USB_SHUTDOWN            (0x55)
+#endif
 /* When vendor requests keep fail over this TH, bypass subsequent vendor
  * requests since chip may not work and reset is required.
  */
@@ -173,6 +188,9 @@ enum ENUM_USB_END_POINT {
 
 #define HIF_TX_COALESCING_BUFFER_SIZE   (USB_TX_CMD_BUF_SIZE)
 #define HIF_RX_COALESCING_BUFFER_SIZE   (USB_RX_EVENT_BUF_SIZE)
+
+#define MAX_POLLING_TX_DONE_LOOP        (50)
+#define POLLING_TX_DONE_TIME_IN_MS      (100)
 
 /*******************************************************************************
 *                             D A T A   T Y P E S
@@ -306,6 +324,9 @@ struct GL_HIF_INFO {
 	u_int8_t fgIntReadClear;
 	u_int8_t fgMbxReadClear;
 	u_int8_t fgEventEpDetected;
+#if CFG_DC_USB_WOW_CALLBACK
+	u_int8_t fgUsbShutdown;
+#endif
 	enum EVENT_EP_TYPE eEventEpType;
 
 	struct ERR_RECOVERY_CTRL_T rErrRecoveryCtl;
@@ -432,7 +453,9 @@ int32_t mtk_usb_vendor_request(IN struct GLUE_INFO *prGlueInfo,
 		IN uint8_t uEndpointAddress, IN uint8_t RequestType,
 	    IN uint8_t Request, IN uint16_t Value, IN uint16_t Index,
 	    IN void *TransferBuffer, IN uint32_t TransferBufferLength);
-
+#if CFG_DC_USB_WOW_CALLBACK
+void mtk_usb_shutdown_vnd_cmd(struct GLUE_INFO *prGlueInfo);
+#endif
 void glUsbEnqueueReq(struct GL_HIF_INFO *prHifInfo, struct list_head *prHead, struct USB_REQ *prUsbReq,
 		     spinlock_t *prLock, u_int8_t fgHead);
 struct USB_REQ *glUsbDequeueReq(struct GL_HIF_INFO *prHifInfo, struct list_head *prHead, spinlock_t *prLock);

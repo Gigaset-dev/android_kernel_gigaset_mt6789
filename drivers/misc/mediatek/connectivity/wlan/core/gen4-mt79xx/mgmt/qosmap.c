@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   "qosmap.c"
  *    \brief  This file including the qosmap related function.
  *
@@ -255,7 +256,7 @@ uint8_t getUpFromDscp(IN struct GLUE_INFO *prGlueInfo, IN int type, IN int dscp)
 				prStaRec->qosMapSet->dscpRange[j].hDscp == 255)
 				continue;
 			if (dscp >= prStaRec->qosMapSet->dscpRange[j].lDscp &&
-				dscp >= prStaRec->qosMapSet->dscpRange[j].hDscp)
+				dscp <= prStaRec->qosMapSet->dscpRange[j].hDscp)
 				return j;
 		}
 		/* qosMapSet info error */

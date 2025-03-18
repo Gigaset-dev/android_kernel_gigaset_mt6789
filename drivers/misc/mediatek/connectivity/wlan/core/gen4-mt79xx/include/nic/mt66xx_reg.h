@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   "mt66xx_reg.h"
  *   \brief  The common register definition of MT6630
  *
@@ -57,7 +58,10 @@ extern struct mt66xx_hif_driver_data mt66xx_driver_data_mt7922;
 #endif /* MT7922 */
 #ifdef MT7902
 extern struct mt66xx_hif_driver_data mt66xx_driver_data_mt7902;
-#endif /* MT7922 */
+#endif /* MT7902 */
+#ifdef MT7926
+extern struct mt66xx_hif_driver_data mt66xx_driver_data_mt7926;
+#endif /* MT7926 */
 #ifdef SOC5_0
 extern struct mt66xx_hif_driver_data mt66xx_driver_data_soc5_0;
 #endif /* SOC5_0 */

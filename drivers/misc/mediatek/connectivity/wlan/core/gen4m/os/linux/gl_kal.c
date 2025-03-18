@@ -1745,7 +1745,7 @@ kalIndicateStatusAndComplete(IN struct GLUE_INFO
 			0, /* TSF */
 			prBssDesc->u2CapInfo,
 			prBssDesc->u2BeaconInterval, /* beacon interval */
-			prBssDesc->aucIEBuf, /* IE */
+			prBssDesc->pucIeBuf, /* IE */
 			prBssDesc->u2IELength, /* IE Length */
 			RCPI_TO_dBm(prBssDesc->ucRCPI) * 100, /* MBM */
 			GFP_KERNEL);
@@ -1757,7 +1757,7 @@ kalIndicateStatusAndComplete(IN struct GLUE_INFO
 			0, /* TSF */
 			prBssDesc->u2CapInfo,
 			prBssDesc->u2BeaconInterval, /* beacon interval */
-			prBssDesc->aucIEBuf, /* IE */
+			prBssDesc->pucIeBuf, /* IE */
 			prBssDesc->u2IELength, /* IE Length */
 			RCPI_TO_dBm(prBssDesc->ucRCPI) * 100, /* MBM */
 			GFP_KERNEL);
@@ -2499,6 +2499,12 @@ kalHardStartXmit(struct sk_buff *prOrgSkb,
 		DBGLOG(INIT, INFO, "GLUE_FLAG_HALT skip tx\n");
 		dev_kfree_skb(prOrgSkb);
 		return WLAN_STATUS_ADAPTER_NOT_READY;
+	}
+
+	if (unlikely(ucBssIndex >= MAX_BSSID_NUM)) {
+		DBGLOG(INIT, INFO, "Invalid ucBssIndex:%u\n", ucBssIndex);
+		dev_kfree_skb(prOrgSkb);
+		return WLAN_STATUS_NOT_ACCEPTED;
 	}
 
 	if (prGlueInfo->prAdapter->fgIsEnableLpdvt) {
@@ -3589,6 +3595,7 @@ kalIoctlByBssIdx(IN struct GLUE_INFO *prGlueInfo,
 
 	if (down_interruptible(&prGlueInfo->ioctl_sem)) {
 		up(&g_halt_sem);
+		DBGLOG(OID, WARN, "down_interrupt failed\n");
 		return WLAN_STATUS_FAILURE;
 	}
 
@@ -8768,13 +8775,7 @@ static int wlan_fb_notifier_callback(struct notifier_block
 	struct GLUE_INFO *prGlueInfo = (struct GLUE_INFO *)
 				       wlan_fb_notifier_priv_data;
 
-#if KERNEL_VERSION(5, 4, 0) <= CFG80211_VERSION_CODE
-	blank = *pData;
-#else
-	blank = *(int32_t *)evdata->data;
-#endif
-
-	/* If we aren't interested in this event, skip it immediately ... */
+	/* If we aren't interested in this event, skip it immediately */
 	if ((event !=
 #if KERNEL_VERSION(5, 4, 0) <= CFG80211_VERSION_CODE
 		MTK_DISP_EARLY_EVENT_BLANK
@@ -8783,6 +8784,18 @@ static int wlan_fb_notifier_callback(struct notifier_block
 #endif
 		) || !prGlueInfo)
 		goto end;
+
+	if (!wlanIsDriverReady(prGlueInfo)) {
+		DBGLOG(REQ, WARN, "driver is not ready\n");
+		return 0;
+	}
+
+
+#if KERNEL_VERSION(5, 4, 0) <= CFG80211_VERSION_CODE
+	blank = *pData;
+#else
+	blank = *(int32_t *)evdata->data;
+#endif
 
 	DBGLOG(SW4, INFO, "%s: event[%ld], blank[%d]\n", __func__,
 			event, blank);

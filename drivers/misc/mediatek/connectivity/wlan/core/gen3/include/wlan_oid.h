@@ -244,6 +244,7 @@ typedef struct _PARAM_CONNECT_T {
 	UINT_32 u4SsidLen;	/*!< SSID length in bytes. Zero length is broadcast(any) SSID */
 	UINT_8 *pucSsid;
 	UINT_8 *pucBssid;
+	UINT_8 *pucBssidHint;
 	UINT_32 u4CenterFreq;
 } PARAM_CONNECT_T, *P_PARAM_CONNECT_T;
 
@@ -1897,6 +1898,9 @@ wlanoidQueryPmkid(IN P_ADAPTER_T prAdapter,
 
 WLAN_STATUS
 wlanoidSetPmkid(IN P_ADAPTER_T prAdapter, IN PVOID pvSetBuffer, IN UINT_32 u4SetBufferLen, OUT PUINT_32 pu4SetInfoLen);
+
+WLAN_STATUS
+wlanoidDelPmkid(IN P_ADAPTER_T prAdapter, IN PVOID pvSetBuffer, IN UINT_32 u4SetBufferLen, OUT PUINT_32 pu4SetInfoLen);
 
 WLAN_STATUS
 wlanoidQuerySupportedRates(IN P_ADAPTER_T prAdapter,

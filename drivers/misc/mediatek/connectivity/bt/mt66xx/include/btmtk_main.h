@@ -285,9 +285,10 @@ enum bt_state {
 	FUNC_OFF = 0,
 	TURNING_ON = 1,
 	PRE_ON_AFTER_CAL = 2,
-	FUNC_ON = 3,
-	RESET_START = 4,
-	RESET_END = 5
+	TURNING_OFF = 3,
+	FUNC_ON = 4,
+	RESET_START = 5,
+	RESET_END = 6
 };
 
 struct bt_power_setting {

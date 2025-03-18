@@ -200,7 +200,7 @@ int32_t kalBoostCpu(IN struct ADAPTER *prAdapter,
 	int32_t i4Freq = -1;
 	static u_int8_t fgRequested = ENUM_CPU_BOOST_STATUS_INIT;
 
-	prGlueInfo = (struct GLUE_INFO *)wiphy_priv(wlanGetWiphy());
+	WIPHY_PRIV(wlanGetWiphy(), prGlueInfo);
 	i4Freq = (u4TarPerfLevel >= u4BoostCpuTh) ? MAX_CPU_FREQ : -1;
 
 	if (fgRequested == ENUM_CPU_BOOST_STATUS_INIT) {

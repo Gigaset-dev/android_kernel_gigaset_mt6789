@@ -525,7 +525,7 @@ ssize_t BT_write_iter(struct kiocb *iocb, struct iov_iter *from)
 			goto OUT;
 		}
 
-		BT_LOG_PRT_DBG_RAW(o_buf, count, "%s: len[%d], TX: ", __func__, count);
+		BT_LOG_PRT_DBG_RAW(o_buf, (int)count, "%s: len[%d], TX: ", __func__, (int)count);
 		retval = __bt_write(o_buf, count);
 	}
 
@@ -561,7 +561,7 @@ ssize_t BT_write(struct file *filp, const char __user *buf, size_t count, loff_t
 			goto OUT;
 		}
 
-		BT_LOG_PRT_DBG_RAW(o_buf, count, "%s: len[%d], TX: ", __func__, count);
+		BT_LOG_PRT_DBG_RAW(o_buf, (int)count, "%s: len[%d], TX: ", __func__, (int)count);
 		retval = __bt_write(o_buf, count);
 	}
 
@@ -654,7 +654,8 @@ ssize_t BT_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos
 
 	if (retval == 0) {
 		if (rstflag != 2) {	/* Should never happen */
-			WARN(1, "Blocking read is waken up with no data but rstflag=%d\n", rstflag);
+			// WARN(1, "Blocking read is waken up with no data but rstflag=%d\n", rstflag);
+			BT_LOG_PRT_WARN("Blocking read is waken up with no data but rstflag = %d\n", rstflag);
 			retval = -EIO;
 			goto OUT;
 		} else {	/* Reset end, send Hardware Error event only once */
@@ -685,6 +686,11 @@ long BT_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	UINT32 ver = 0;
 	uint8_t host_dbg_buff[32]; //arg: id[0:3], value[4:7], desc[8:31]
 	BT_LOG_PRT_DBG("cmd: 0x%08x\n", cmd);
+
+	if (_IOC_TYPE(cmd) != COMBO_IOC_MAGIC) {
+		BT_LOG_PRT_ERR("Bad magic num: 0x%02x\n", cmd);
+		return -ENOTTY;
+	}
 
 	switch (cmd) {
 	case COMBO_IOCTL_FW_ASSERT:
@@ -946,7 +952,11 @@ static int BT_init(void)
 		goto error;
 
 #if CREATE_NODE_DYNAMIC /* mknod replace */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0))
+	stpbt_class = class_create("stpbt");
+#else
 	stpbt_class = class_create(THIS_MODULE, "stpbt");
+#endif
 	if (IS_ERR(stpbt_class))
 		goto error;
 	stpbt_dev = device_create(stpbt_class, NULL, dev, NULL, "stpbt");

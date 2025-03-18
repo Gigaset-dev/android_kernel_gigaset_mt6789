@@ -8,8 +8,13 @@ ifeq ($(AUTOCONF_H),)
     $(error AUTOCONF_H is not defined)
 endif
 
-CONFIG_CHIP_RESET_KO_SUPPORT=n
+ifeq ($(BT_CHIP_ID), MT7663)
+CONFIG_CHIP_RESET_KO_SUPPORT=y
+endif
 
+ifeq ($(BT_CHIP_ID), MT7668)
+CONFIG_CHIP_RESET_KO_SUPPORT=n
+endif
 #
 # mtreset
 #

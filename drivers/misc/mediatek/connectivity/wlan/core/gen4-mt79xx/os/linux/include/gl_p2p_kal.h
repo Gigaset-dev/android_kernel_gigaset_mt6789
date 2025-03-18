@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/TRUNK/WiFi_P2P_Driver/
  *        os/linux/include/gl_p2p_kal.h#2
@@ -332,11 +333,13 @@ void kalP2pIndicateQueuedMgmtFrame(IN struct GLUE_INFO *prGlueInfo,
 
 void kalP2pIndicateAcsResult(IN struct GLUE_INFO *prGlueInfo,
 		IN uint8_t ucRoleIndex,
+		IN enum ENUM_BAND eBand,
 		IN uint8_t ucPrimaryCh,
 		IN uint8_t ucSecondCh,
 		IN uint8_t ucSeg0Ch,
 		IN uint8_t ucSeg1Ch,
-		IN enum ENUM_MAX_BANDWIDTH_SETTING eChnlBw);
+		IN enum ENUM_MAX_BANDWIDTH_SETTING eChnlBw,
+		IN enum P2P_VENDOR_ACS_HW_MODE eHwMode);
 
 void kalP2pNotifyStopApComplete(IN struct ADAPTER *prAdapter,
 		IN uint8_t ucRoleIndex);

@@ -1,6 +1,6 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
 
 /*! \file   "rlm.h"
@@ -144,6 +144,10 @@ void heRlmRecHeOperation(
 	struct ADAPTER *prAdapter,
 	struct BSS_INFO *prBssInfo,
 	u_int8_t *pucIE);
+void heRlmRecBssColorChangeAnnouncement(
+	struct ADAPTER *prAdapter,
+	struct BSS_INFO *prBssInfo,
+	uint8_t *pucIE);
 u_int8_t heRlmRecHeSRParams(
 	struct ADAPTER *prAdapter,
 	struct BSS_INFO *prBssInfo,
@@ -160,5 +164,6 @@ uint32_t heRlmSendHtcNullFrame(
 	IN struct STA_RECORD *prStaRec,
 	IN uint8_t ucUP,
 	IN PFN_TX_DONE_HANDLER pfTxDoneHandler);
+uint8_t heRlmMaxBwToHeBw(uint8_t ucMaxBw);
 #endif /* CFG_SUPPORT_802_11AX == 1 */
 #endif /* !_HE_RLM_H */

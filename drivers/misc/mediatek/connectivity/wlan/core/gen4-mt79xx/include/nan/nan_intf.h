@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
  * Copyright (c) 2021 MediaTek Inc.
  */
@@ -36,6 +36,7 @@
 #define NAN_MAX_MATCH_FILTER_LEN 255
 #define NAN_MAX_SERVICE_SPECIFIC_INFO_LEN 255
 #define NAN_MAX_SDEA_SERVICE_SPECIFIC_INFO_LEN 1024
+#define NAN_MAX_BLOOM_FILTER_LENGTH 64
 
 #define NAN_FW_MAX_SERVICE_NAME_LEN 32
 #define NAN_FW_MAX_MATCH_FILTER_LEN 64
@@ -52,7 +53,7 @@
 #define NAN_MAX_POSTDISCOVERY_LEN 5
 #define NAN_MAX_FRAME_DATA_LEN 504
 #define NAN_MAX_DEBUG_MESSAGE_DATA_LEN 100
-#define NAN_DP_MAX_APP_INFO_LEN 512
+#define NAN_DP_MAX_APP_INFO_LEN 1024
 #define NAN_ERROR_STR_LEN 255
 #define NAN_PMK_INFO_LEN 32
 #define NAN_MAX_SCID_BUF_LEN 1024
@@ -61,7 +62,17 @@
 #define NAN_FW_SDEA_SPECIFIC_INFO_LEN 255
 #define NAN_SECURITY_MIN_PASSPHRASE_LEN 8
 #define NAN_SECURITY_MAX_PASSPHRASE_LEN 63
+#define NAN_MAX_MAP_IDS 2
+#define NAN_MAX_BAND_IDS 6
+#define NAN_MAX_AVAILABILITY_CHANNEL_ENTRIES 16
+#define NAN_MAX_AVAILABILITY_BITMAP_LENGTH 64
 /*Max publish + subscribe numbers 4*/
+#define NUM_OF_NAN_INSTANCE 4
+/* should align FW definition
+ * NUM_OF_NAN_INSTANCE =
+ * NAN_MAX_PUBLISH_NUM +
+ * NAN_MAX_SUBSCRIBE_NUM
+ */
 #define NAN_MAX_PUBLISH_NUM 2
 #define NAN_MAX_SUBSCRIBE_NUM 2
 #define NAN_MAX_NDP_SESSIONS 8
@@ -150,6 +161,11 @@ enum NdpType { NAN_DATA_PATH_UNICAST_MSG = 0, NAN_DATA_PATH_MULTICAST_MSG };
 
 /* NAN Ranging Configuration */
 enum NanRangingState { NAN_RANGING_DISABLE = 0, NAN_RANGING_ENABLE };
+
+/* NAN Service Update Indicator */
+enum NanServiceUpdateIndicatorState {
+	NAN_SERV_UPDATE_IND_ABSENT = 0,
+	NAN_SERV_UPDATE_IND_PRESENT };
 
 /* Various NAN Protocol Response code */
 enum NanStatusType {
@@ -372,10 +388,7 @@ struct NanSdeaCtrlParams {
 	 */
 	enum NanRangingState ranging_state;
 
-	/* Enable/Disable Ranging report,
-	 * when configured NanRangeReportInd received
-	 */
-	enum NanRangeReport range_report;
+	enum NanServiceUpdateIndicatorState eServUpdateInd;
 
 	/* FSD require */
 	unsigned char fgFSDRequire;
@@ -1131,6 +1144,22 @@ struct NanPublishRequest {
 	/* Sequence of values indicating the service specific info in SDEA */
 	uint16_t sdea_service_specific_info_len;
 	uint8_t sdea_service_specific_info[NAN_SDEA_SERVICE_SPECIFIC_INFO_LEN];
+
+	/* OS parameter extension must be put in the
+	 *	last section of struct definition in order to be
+	 *	backward compatible with legacy iwpriv ioctl path
+	 */
+	uint8_t fgNeedExtCmd;
+	uint8_t fgServiceHashValid;
+	uint8_t aucServiceHash[NAN_SERVICE_HASH_LENGTH];
+	uint8_t fgDiscoveryRangeValid;	/* NanFWPublishRequestExt */
+	int32_t i4DiscoveryRange;
+	uint8_t fgAnnouncePeriodValid;	/* NanFWPublishRequestExt */
+	uint32_t u4AnnouncePeriod;
+	uint8_t fgSrvUpdateIndicatorValid;	/* NanFWPublishRequestExt */
+	uint8_t ucSrvUpdateIndicator;
+	uint8_t fgMatchFilterTypeValid;		/* NanFWPublishRequestExt */
+	uint8_t ucMatchFilterType;	/* 0: match by equal (default) */
 } __KAL_ATTRIB_PACKED__;
 
 /* Publish Cancel Msg Structure
@@ -1302,6 +1331,23 @@ struct NanSubscribeRequest {
 	/* Sequence of values indicating the service specific info in SDEA */
 	uint16_t sdea_service_specific_info_len;
 	uint8_t sdea_service_specific_info[NAN_SDEA_SERVICE_SPECIFIC_INFO_LEN];
+
+	/* OS parameter extension must be put in the
+	 * last section of struct definition in order to be
+	 * backward compatible with legacy iwpriv ioctl path
+	 */
+	uint8_t fgNeedExtCmd;
+	uint8_t fgServiceHashValid;
+	uint8_t aucServiceHash[NAN_SERVICE_HASH_LENGTH];
+	uint8_t fgDiscoveryRangeValid;	/* NanFWSubscribeRequestExt */
+	int32_t i4DiscoveryRange;
+	uint8_t fgQueryPeriodValid;	/* NanFWSubscribeRequestExt */
+	uint32_t u4QueryPeriod;
+	uint8_t fgMatchFilterTypeValid;		/* NanFWSubscribeRequestExt */
+	uint8_t ucMatchFilterType;	/* 0: match by equal (default) */
+	uint32_t u4BloomFilterLength;	/* NanFWSubscribeRequestExt */
+	uint8_t ucBloomIdx;
+	uint8_t aucBloomFilter[NAN_MAX_BLOOM_FILTER_LENGTH];
 } __KAL_ATTRIB_PACKED__;
 
 /* NAN Subscribe Cancel Structure
@@ -1345,6 +1391,14 @@ struct NanTransmitFollowupRequest {
 	/* Sequence of values indicating the service specific info in SDEA */
 	uint16_t sdea_service_specific_info_len;
 	uint8_t sdea_service_specific_info[NAN_SDEA_SERVICE_SPECIFIC_INFO_LEN];
+
+	/* OS parameter extension must be put in the
+	 * last section of struct definition in order to be
+	 * backward compatible with legacy iwpriv ioctl path
+	 */
+	uint8_t fgNeedExtCmd;
+	uint8_t fgFollowUpTokenValid;	/* NanFWTransmitFollowupRequestExt */
+	uint16_t u2FollowUpToken;
 } __KAL_ATTRIB_PACKED__;
 
 /* Stats Request structure

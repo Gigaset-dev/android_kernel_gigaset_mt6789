@@ -3599,7 +3599,7 @@ static void nicRxProcessIcsLog(IN struct ADAPTER *prAdapter,
 		/* write to ring, ret: written */
 		ret = wifi_ics_fwlog_write(pucRecvBuff, u4Size);
 		if (ret != u4Size)
-			DBGLOG_LIMITED(NIC, INFO,
+			DBGLOG_LIMITED(NIC, TRACE,
 				"dropped written:%d rxByteCount:%d\n",
 				ret, prIcsAggHeader->rxByteCount);
 

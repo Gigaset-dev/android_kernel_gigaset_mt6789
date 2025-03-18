@@ -2051,6 +2051,8 @@ netdev_tx_t p2pHardStartXmit(IN struct sk_buff *prSkb,
 
 	kalHardStartXmit(prSkb, prDev, prGlueInfo, ucBssIndex);
 	prP2pBssInfo = GET_BSS_INFO_BY_INDEX(prGlueInfo->prAdapter, ucBssIndex);
+	if (!prP2pBssInfo)
+		return NETDEV_TX_BUSY;
 	if ((prP2pBssInfo->eConnectionState == MEDIA_STATE_CONNECTED) ||
 		(prP2pBssInfo->rStaRecOfClientList.u4NumElem > 0))
 		kalPerMonStart(prGlueInfo);

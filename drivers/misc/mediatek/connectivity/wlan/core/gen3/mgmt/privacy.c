@@ -506,6 +506,35 @@ VOID secClearPmkid(IN P_ADAPTER_T prAdapter)
 
 /*----------------------------------------------------------------------------*/
 /*!
+* \brief This routine is called to deltel the pmkid parameters.
+*
+* \param[in] prAdapter Pointer to the Adapter structure
+*
+* \param[in] prPmkid Pointer to the PMKID
+*
+* \retval NONE
+*/
+/*----------------------------------------------------------------------------*/
+uint32_t secDelPmkid(IN P_ADAPTER_T prAdapter, IN P_PARAM_PMKID_T prPmkid)
+{
+	P_AIS_SPECIFIC_BSS_INFO_T prAisSpecBssInfo;
+	UINT_32 i, j = 0;
+
+	DEBUGFUNC("secDelPmkid");
+
+	prAisSpecBssInfo = &prAdapter->rWifiVar.rAisSpecificBssInfo;
+	DBGLOG(RSN, TRACE, "secDelPmkid\n");
+	for (i = 0; i < prPmkid->u4BSSIDInfoCount; i++) {
+		if (rsnSearchPmkidEntry(prAdapter, (PUINT_8) prPmkid->arBSSIDInfo[i].arBSSID, &j)) {
+			kalMemZero(&prAisSpecBssInfo->arPmkidCache[j], sizeof(PMKID_ENTRY_T));
+			prAisSpecBssInfo->u4PmkidCacheCount--;
+		}
+	}
+	return WLAN_STATUS_SUCCESS;
+}
+
+/*----------------------------------------------------------------------------*/
+/*!
 * \brief Whether 802.11 privacy is enabled.
 *
 * \param[in] prAdapter Pointer to the Adapter structure

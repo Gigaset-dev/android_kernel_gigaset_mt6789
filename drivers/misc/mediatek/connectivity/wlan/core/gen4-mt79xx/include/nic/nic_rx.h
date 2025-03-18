@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   "nic_rx.h"
  *    \brief  The declaration of the nic rx functions
  *
@@ -519,6 +520,16 @@ enum ENUM_RX_STATISTIC_COUNTER {
 	RX_CSUM_UNKNOWN_L3_PKT_COUNT,
 	RX_IP_V6_PKT_CCOUNT,
 #endif
+	RX_INTR_COUNT,
+	RX_TASKLET_COUNT,
+	RX_WORK_COUNT,
+	RX_NAPI_SCHEDULE_COUNT,
+	RX_NAPI_WORK_COUNT,
+	RX_NAPI_FIFO_IN_COUNT,
+	RX_NAPI_FIFO_OUT_COUNT,
+	RX_NAPI_FIFO_FULL_COUNT,
+	RX_NAPI_FIFO_ABNORMAL_COUNT,
+	RX_NAPI_FIFO_ABN_FULL_COUNT,
 	RX_STATISTIC_COUNTER_NUM
 };
 
@@ -712,7 +723,8 @@ struct HW_MAC_RX_STS_GROUP_5 {
 	/*  CRXVector Info */
 	/* FALCON: DW 18~33 for harrier E1,  DW 18~35 for harrier E2
 	 * Other project: give group5_size in chip info,
-	 * e.g Soc3_0.c,	 * or modify prChipInfo->group5_size when doing wlanCheckAsicCap,
+	 * e.g Soc3_0.c,
+	 * or modify prChipInfo->group5_size when doing wlanCheckAsicCap,
 	 * e.g. Harrier E1
 	 */
 	uint32_t u4RxVector[18];
@@ -965,8 +977,8 @@ struct RX_CTRL {
 	void *apvIndPacket[CFG_RX_MAX_PKT_NUM];
 	void *apvRetainedPacket[CFG_RX_MAX_PKT_NUM];
 
-	uint8_t ucNumIndPacket;
-	uint8_t ucNumRetainedPacket;
+	uint16_t u2NumIndPacket;
+	uint16_t u2NumRetainedPacket;
 	/*!< RX Counters */
 	uint64_t au8Statistics[RX_STATISTIC_COUNTER_NUM];
 
@@ -985,7 +997,7 @@ struct RX_CTRL {
 #endif
 
 	/* Store SysTime of Last Rx */
-	uint32_t u4LastRxTime[MAX_BSSID_NUM];
+	uint64_t u4LastRxTime[MAX_BSSID_NUM];
 };
 
 struct RX_MAILBOX {
@@ -1413,6 +1425,10 @@ struct ACTION_FRAME_SIZE_MAP {
 
 #define RXM_IS_FROM_DS(_u2FrameCtrl) \
 	(((_u2FrameCtrl & MASK_TO_DS_FROM_DS) == MASK_FC_FROM_DS) ? \
+	TRUE : FALSE)
+
+#define RXM_IS_FROM_DS_TO_DS(_u2FrameCtrl) \
+	(((_u2FrameCtrl & MASK_TO_DS_FROM_DS) == MASK_TO_DS_FROM_DS) ? \
 	TRUE : FALSE)
 
 #define RXM_IS_MORE_DATA(_u2FrameCtrl) \

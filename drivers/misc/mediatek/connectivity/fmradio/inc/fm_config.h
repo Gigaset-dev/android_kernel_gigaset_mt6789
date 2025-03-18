@@ -103,8 +103,6 @@ enum fm_cfg_parser_state {
 #define COMMENT_CHAR '#'
 #define DELIMIT_CHAR '='
 
-#define isspace(a) ((a) == 0x20)
-
 struct fm_rx_cust_cfg {
 	signed int desene_rssi_th;
 	signed int pamd_th;

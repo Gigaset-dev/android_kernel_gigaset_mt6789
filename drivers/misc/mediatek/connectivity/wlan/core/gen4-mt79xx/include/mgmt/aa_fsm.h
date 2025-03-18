@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/
  *							include/mgmt/aa_fsm.h#1
@@ -46,6 +47,7 @@
 /* Wait for a response to a transmitted SAE authentication MMPDU. */
 /* 2000 msec is the default value on 802.11-REVmd-D0.5 */
 #define DOT11_RSNA_SAE_RETRANS_PERIOD_TU	2000
+#define RSNA_SAE_RETRY_AUTH_PERIOD_TU	    512
 
 /* The maximum time to wait for JOIN process complete. */
 /* Beacon Interval, 20 * 100TU = 2 sec. */

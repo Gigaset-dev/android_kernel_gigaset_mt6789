@@ -1,8 +1,8 @@
-
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/os/linux/include
  *      /gl_os.h#4
@@ -186,6 +186,11 @@
 #include <linux/ftrace_event.h>
 #endif
 #endif
+
+#if CFG_SUPPORT_RX_WORK
+#include <linux/workqueue.h>
+#endif /* CFG_SUPPORT_TX_WORK || CFG_SUPPORT_RX_WORK */
+
 #if (CFG_SUPPORT_TX_TSO_SW == 1)
 #include <net/tso.h>
 #endif
@@ -239,7 +244,7 @@ extern const struct ieee80211_iface_combination
 extern const int32_t mtk_iface_combinations_p2p_num;
 extern uint8_t g_aucNvram[];
 
-#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+#if (CFG_MTK_CONNSYS_DEDICATED_LOG_PATH == 1)
 typedef void (*wifi_fwlog_event_func_cb)(int, int);
 /* adaptor ko */
 extern int  wifi_fwlog_onoff_status(void);
@@ -288,7 +293,8 @@ extern void update_driver_loaded_status(uint8_t loaded);
 #define GLUE_FLAG_RX_BIT				(10)
 #define GLUE_FLAG_HIF_PRT_HIF_DBG_INFO		BIT(16)
 #define GLUE_FLAG_HIF_PRT_HIF_DBG_INFO_BIT		(16)
-#define GLUE_FLAG_UPDATE_WMM_QUOTA			(17)
+#define GLUE_FLAG_UPDATE_WMM_QUOTA			BIT(17)
+#define GLUE_FLAG_UPDATE_WMM_QUOTA_BIT			(17)
 
 #if (CFG_SUPPORT_CONNINFRA == 1)
 #define GLUE_FLAG_RST_START BIT(18)
@@ -298,6 +304,9 @@ extern void update_driver_loaded_status(uint8_t loaded);
 #define GLUE_FLAG_NAN_MULTICAST_BIT (20)
 #define GLUE_FLAG_NAN_MULTICAST BIT(20)
 #endif
+
+#define GLUE_FLAG_RX_DIRECT_INT_BIT             (23)
+#define GLUE_FLAG_RX_DIRECT_INT                 BIT(23)
 
 #define GLUE_BOW_KFIFO_DEPTH        (1024)
 /* #define GLUE_BOW_DEVICE_NAME        "MT6620 802.11 AMP" */
@@ -353,6 +362,7 @@ struct GL_WPA_INFO {
 	uint32_t u4Mfp;
 	uint8_t ucRSNMfpCap;
 #endif
+	uint16_t u2RSNXCap;
 	uint8_t aucKek[NL80211_KEK_LEN];
 	uint8_t aucKck[NL80211_KCK_LEN];
 	uint8_t aucReplayCtr[NL80211_REPLAY_CTR_LEN];
@@ -551,7 +561,7 @@ struct GLUE_INFO {
 	/* struct net_device_stats rNetDevStats; */
 
 	/* Wireless statistics struct net_device */
-	struct iw_statistics rIwStats;
+	struct iw_statistics rIwStats[BSSID_NUM];
 
 	/* spinlock to sync power save mechanism */
 	spinlock_t rSpinLock[SPIN_LOCK_NUM];
@@ -669,7 +679,14 @@ struct GLUE_INFO {
 	struct task_struct *rx_thread;
 
 #endif
+#if CFG_SUPPORT_RX_WORK
+	int32_t i4RxWorkCpu; /* controlled by CPU Boost */
+	struct workqueue_struct *prRxWorkQueue;
+	struct work_struct rRxWork;
+#endif /* CFG_SUPPORT_RX_WORK */
 	struct tasklet_struct rRxTask;
+	uint8_t fgRxTaskReady;
+	uint32_t u4RxTaskScheduleCnt;
 #if (CFG_SUPPORT_RETURN_TASK == 1)
 	struct tasklet_struct rRxRfbRetTask;
 #endif
@@ -735,6 +752,8 @@ struct GLUE_INFO {
 #endif
 
 	u_int8_t fgIsInSuspendMode;
+	u_int8_t fgIsStaInSuspendMode;
+	u_int8_t fgIsP2pInSuspendMode;
 
 #if (CFG_SUPPORT_SUPPLICANT_MBO == 1)
 	uint8_t aucSupOpClassIE[200];    /*for Assoc req */
@@ -773,8 +792,8 @@ struct GLUE_INFO {
 	uint32_t u4AmpduRefNum;
 #endif
 
-	int32_t i4RssiCache;
-	uint32_t u4LinkSpeedCache;
+	int32_t i4RssiCache[BSSID_NUM];
+	uint32_t u4LinkSpeedCache[BSSID_NUM];
 
 #if CFG_AP_80211KVR_INTERFACE
 	struct delayed_work rChanNoiseControlWork;
@@ -1240,6 +1259,8 @@ struct PACKET_PRIVATE_RX_DATA {
 #endif
 
 #define MET_TAG_ID	0
+#define GLUE_GET_WIPHY(pr) \
+	pr->prDevHandler->ieee80211_ptr->wiphy
 
 /*----------------------------------------------------------------------------*/
 /* Macros of Data Type Check                                                  */
@@ -1359,7 +1380,8 @@ uint32_t wlanGetDriverDbgLevel(IN uint32_t u4DbgIdx,
 			       OUT uint32_t *pu4DbgMask);
 
 void wlanSetSuspendMode(struct GLUE_INFO *prGlueInfo,
-			u_int8_t fgEnable);
+			u_int8_t fgEnable,
+			enum ENUM_SUSPEND_MODE_SOURCE eSource);
 #if CFG_SUPPORT_CFG_FILE
 void wlanGetConfig(struct ADAPTER *prAdapter);
 #endif

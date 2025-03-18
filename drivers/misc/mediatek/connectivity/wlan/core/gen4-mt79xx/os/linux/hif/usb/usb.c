@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /******************************************************************************
 *[File]             usb.c
 *[Version]          v1.0
@@ -9,8 +10,6 @@
 *[Author]
 *[Description]
 *    The program provides USB HIF driver
-*[Copyright]
-*    Copyright (C) 2010 MediaTek Incorporation. All Rights Reserved.
 ******************************************************************************/
 
 
@@ -58,6 +57,9 @@
 #define MTK_USB_BULK_IN_MAX_EP          5
 #define MTK_USB_BULK_OUT_MIN_EP         4
 #define MTK_USB_BULK_OUT_MAX_EP         9
+#if CFG_DC_USB_WOW_CALLBACK
+#define WIFI_POWER_OFF_DONE     (0x7C053C2C)
+#endif
 
 static const struct usb_device_id mtk_usb_ids[] = {
 	/* {USB_DEVICE(0x0E8D,0x6632), .driver_info = MT_MAC_BASE}, */
@@ -87,6 +89,10 @@ static const struct usb_device_id mtk_usb_ids[] = {
 	{	USB_DEVICE_AND_INTERFACE_INFO(0x0E8D, 0x7902, 0xff, 0xff, 0xff),
 		.driver_info = (kernel_ulong_t)&mt66xx_driver_data_mt7902},
 #endif /* MT7902 */
+#ifdef MT7926
+	{	USB_DEVICE_AND_INTERFACE_INFO(0x0E8D, 0x7926, 0xff, 0xff, 0xff),
+		.driver_info = (kernel_ulong_t)&mt66xx_driver_data_mt7926},
+#endif /* MT7926 */
 #ifdef MT6639
 	{	USB_DEVICE_AND_INTERFACE_INFO(0x0E8D, 0x6639, 0xff, 0xff, 0xff),
 		.driver_info = (kernel_ulong_t)&mt66xx_driver_data_mt6639},
@@ -225,14 +231,35 @@ static void mtk_usb_disconnect(struct usb_interface *intf)
 	prGlueInfo  = (struct GLUE_INFO *)usb_get_intfdata(intf);
 
 	glUsbSetState(&prGlueInfo->rHifInfo, USB_STATE_LINK_DOWN);
-
-	if (g_fgDriverProbed)
-		pfWlanRemove();
+#if CFG_DC_USB_WOW_CALLBACK
+	if (prGlueInfo->rHifInfo.fgUsbShutdown) {
+		DBGLOG(HAL, WARN, "usb shutdown\n");
+	} else
+#endif
+	{
+		if (g_fgDriverProbed)
+			pfWlanRemove();
+	}
 
 	usb_set_intfdata(intf, NULL);
 	usb_put_dev(interface_to_usbdev(intf));
 
 	g_fgDriverProbed = FALSE;
+
+#if CFG_CHIP_RESET_SUPPORT
+#if CFG_CHIP_RESET_USB_DISCONNECT
+#if CFG_DC_USB_WOW_CALLBACK
+	if (prGlueInfo->rHifInfo.fgUsbShutdown) {
+		DBGLOG(HAL, WARN, "usb shutdown\n");
+	} else
+#endif
+	{
+		DBGLOG(HAL, STATE,
+		       "usb disconnect force reset\n");
+		kalRemoveProbe(prGlueInfo);
+	}
+#endif
+#endif
 
 	DBGLOG(HAL, STATE, "mtk_usb_disconnect() done\n");
 }
@@ -284,8 +311,6 @@ static int mtk_usb_resume(struct usb_interface *intf)
 		}
 	}
 
-	prGlueInfo->fgIsInSuspendMode = FALSE;
-
 	/* Allow upper layers to call the device hard_start_xmit routine. */
 	netif_tx_wake_all_queues(prGlueInfo->prDevHandler);
 
@@ -317,8 +342,8 @@ static int mtk_usb_resume(struct usb_interface *intf)
 
 static int mtk_usb_suspend(struct usb_interface *intf, pm_message_t message)
 {
-	struct GLUE_INFO *prGlueInfo = (struct GLUE_INFO *)usb_get_intfdata(intf);
-	uint32_t count = 0;
+	struct GLUE_INFO *prGlueInfo =
+		(struct GLUE_INFO *)usb_get_intfdata(intf);
 	struct BUS_INFO *prBusInfo = NULL;
 	int ret = 0;
 	struct ERR_RECOVERY_CTRL_T *prErrRecoveryCtrl;
@@ -339,24 +364,33 @@ static int mtk_usb_suspend(struct usb_interface *intf, pm_message_t message)
 		return -EPERM;
 	}
 
+	u4Tick = kalGetTimeTick();
 	while (prGlueInfo->u4ReadyFlag == 0) {
-		if (count > 1000) {
+		kalUsleep_range(10000, 20000);
+		if (CHECK_FOR_TIMEOUT(kalGetTimeTick(), u4Tick,
+			MSEC_TO_SYSTIME(WIFI_SUSPEND_WAIT_PROBE_TIMEOUT))) {
+
 			DBGLOG(HAL, ERROR, "wait wlanProbe timeout\n");
 			break;
 		}
-		mdelay(2);
-		count++;
 	}
 
-	prGlueInfo->fgIsInSuspendMode = TRUE;
 	prErrRecoveryCtrl = &prGlueInfo->rHifInfo.rErrRecoveryCtl;
 
 	/* Stop upper layers calling the device hard_start_xmit routine. */
 	netif_tx_stop_all_queues(prGlueInfo->prDevHandler);
 
+#if CFG_ENABLE_WAKE_LOCK
+	if (IS_FEATURE_ENABLED(prGlueInfo->prAdapter->rWifiVar.ucWow)) {
+		DBGLOG(HAL, STATE, ">> compile flag CFG_ENABLE_WAKE_LOCK\n");
+		aisPreSuspendFlow(prGlueInfo->prAdapter);
+		p2pRoleProcessPreSuspendFlow(prGlueInfo->prAdapter);
+	}
+#else
 	/* wait wiphy device do cfg80211 suspend done, then start hif suspend */
 	if (IS_FEATURE_ENABLED(prGlueInfo->prAdapter->rWifiVar.ucWow))
 		wlanWaitCfg80211SuspendDone(prGlueInfo);
+#endif
 
 	/* change to pre-Suspend state & block cfg80211 ops */
 	glUsbSetState(&prGlueInfo->rHifInfo, USB_STATE_PRE_SUSPEND);
@@ -381,14 +415,15 @@ static int mtk_usb_suspend(struct usb_interface *intf, pm_message_t message)
 
 	halUSBPreSuspendCmd(prGlueInfo->prAdapter);
 
+	u4Tick = kalGetTimeTick();
 	while (prGlueInfo->rHifInfo.state != USB_STATE_SUSPEND) {
-		if (count > 250) {
+		kalUsleep_range(10000, 20000);
+		if (CHECK_FOR_TIMEOUT(kalGetTimeTick(), u4Tick,
+			MSEC_TO_SYSTIME(WIFI_PRESUSPEND_DONE_TIMEOUT))) {
+
 			DBGLOG(HAL, ERROR, "pre_suspend timeout\n");
-			ret = -EFAULT;
 			break;
 		}
-		mdelay(2);
-		count++;
 	}
 
 	/* Make sure any pending or on-going L1 reset is done before HIF
@@ -403,7 +438,7 @@ static int mtk_usb_suspend(struct usb_interface *intf, pm_message_t message)
 			break;
 		}
 
-		kalMsleep(40);
+		kalUsleep_range(10000, 20000);
 
 		if (CHECK_FOR_TIMEOUT(kalGetTimeTick(), u4Tick,
 			       MSEC_TO_SYSTIME(WIFI_SER_L1_RST_DONE_TIMEOUT))) {
@@ -482,6 +517,11 @@ int32_t mtk_usb_vendor_request(IN struct GLUE_INFO *prGlueInfo,
 		return -EFAULT;
 	}
 
+	if (prHifInfo == NULL) {
+		DBGLOG(REQ, WARN, "prHifInfo = NULL\n");
+		return -EINVAL;
+	}
+
 	if (unlikely(TransferBufferLength > prHifInfo->vendor_req_buf_sz)) {
 		DBGLOG(REQ, ERROR, "len %u exceeds limit %u\n",
 			TransferBufferLength,
@@ -495,7 +535,12 @@ int32_t mtk_usb_vendor_request(IN struct GLUE_INFO *prGlueInfo,
 	}
 
 	/* use heap instead of old stack memory */
-	xfer_buf = (TransferBuffer) ? prHifInfo->vendor_req_buf : NULL;
+	if (TransferBuffer) {
+		xfer_buf = prHifInfo->vendor_req_buf;
+	} else {
+		xfer_buf = NULL;
+		TransferBufferLength = 0;
+	}
 
 	mutex_lock(&prHifInfo->vendor_req_sem);
 
@@ -532,6 +577,36 @@ int32_t mtk_usb_vendor_request(IN struct GLUE_INFO *prGlueInfo,
 
 	return (ret == TransferBufferLength) ? 0 : ret;
 }
+
+#if CFG_DC_USB_WOW_CALLBACK
+void mtk_usb_shutdown_vnd_cmd(struct GLUE_INFO *prGlueInfo)
+{
+	int ret = 0;
+	uint32_t u4Data = 0;
+
+	DBGLOG(INIT, ERROR, "mtk_usb_vnd_cmd\n");
+
+	if (prGlueInfo && prGlueInfo->prAdapter) {
+
+		HAL_MCR_RD(prGlueInfo->prAdapter, WIFI_POWER_OFF_DONE, &u4Data);
+		DBGLOG(REQ, STATE, "Read data is: %x\n", u4Data);
+
+		u4Data |= BIT(0);
+		DBGLOG(REQ, STATE, "Write data is: %x\n", u4Data);
+		HAL_MCR_WR(prGlueInfo->prAdapter, WIFI_POWER_OFF_DONE, u4Data);
+
+		ret = usb_control_msg(prGlueInfo->rHifInfo.udev,
+				usb_sndctrlpipe(prGlueInfo->rHifInfo.udev, 0),
+				VND_REQ_USB_SHUTDOWN,
+				DEVICE_VENDOR_REQUEST_OUT,
+				0, 0, NULL, 0, 100);
+
+		if (ret)
+			DBGLOG(INIT, ERROR,
+			"mtk_usb_vnd_cmd ERROR: %d\n", ret);
+	}
+}
+#endif
 
 /*----------------------------------------------------------------------------*/
 /*!
@@ -892,6 +967,9 @@ void glUsbSetState(struct GL_HIF_INFO *prHifInfo, enum usb_state state)
 {
 	unsigned long flags;
 
+	if (!prHifInfo)
+		return;
+
 	spin_lock_irqsave(&prHifInfo->rStateLock, flags);
 	prHifInfo->state = state;
 	spin_unlock_irqrestore(&prHifInfo->rStateLock, flags);
@@ -947,7 +1025,13 @@ int glUsbSubmitUrb(struct GL_HIF_INFO *prHifInfo, struct urb *urb,
 
 	spin_lock_irqsave(&prHifInfo->rStateLock, flags);
 	if (type == SUBMIT_TYPE_TX_CMD) {
-		if (!(prHifInfo->state == USB_STATE_LINK_UP ||
+		struct USB_REQ *prUsbReq = urb->context;
+		struct CMD_INFO *prCmdInfo = prUsbReq->prPriv;
+
+		if (prCmdInfo->ucCID == CMD_ID_NIC_POWER_CTRL &&
+				prHifInfo->state == USB_STATE_WIFI_OFF) {
+			DBGLOG(HAL, INFO, "CMD_ID_NIC_POWER_CTRL\n");
+		} else if (!(prHifInfo->state == USB_STATE_LINK_UP ||
 			prHifInfo->state == USB_STATE_PRE_RESUME ||
 			prHifInfo->state == USB_STATE_PRE_SUSPEND)) {
 			spin_unlock_irqrestore(&prHifInfo->rStateLock, flags);
@@ -1009,7 +1093,9 @@ void glSetHifInfo(struct GLUE_INFO *prGlueInfo, unsigned long ulCookie)
 
 	prHifInfo->eEventEpType = USB_EVENT_TYPE;
 	prHifInfo->fgEventEpDetected = FALSE;
-
+#if CFG_DC_USB_WOW_CALLBACK
+	prHifInfo->fgUsbShutdown = FALSE;
+#endif
 	prHifInfo->intf = (struct usb_interface *)ulCookie;
 	prHifInfo->udev = interface_to_usbdev(prHifInfo->intf);
 
@@ -1100,8 +1186,6 @@ void glSetHifInfo(struct GLUE_INFO *prGlueInfo, unsigned long ulCookie)
 		prUsbReq->prBufCtrl->u4BufSize = USB_TX_CMD_BUF_SIZE;
 		++i;
 	}
-
-	glUsbInitQ(prHifInfo, &prHifInfo->rTxCmdSendingQ, 0);
 
 	/* TX Data FFA */
 	prHifInfo->arTxDataFfaReqHead = glUsbInitQ(prHifInfo,
@@ -1196,9 +1280,6 @@ void glSetHifInfo(struct GLUE_INFO *prGlueInfo, unsigned long ulCookie)
 	}
 #endif
 
-	glUsbInitQ(prHifInfo, &prHifInfo->rTxCmdCompleteQ, 0);
-	glUsbInitQ(prHifInfo, &prHifInfo->rTxDataCompleteQ, 0);
-
 	/* RX EVENT */
 	prHifInfo->prRxEventReqHead = glUsbInitQ(prHifInfo, &prHifInfo->rRxEventFreeQ, USB_REQ_RX_EVENT_CNT);
 	i = 0;
@@ -1264,11 +1345,15 @@ void glSetHifInfo(struct GLUE_INFO *prGlueInfo, unsigned long ulCookie)
 	}
 #endif
 
-	glUsbInitQ(prHifInfo, &prHifInfo->rRxEventCompleteQ, 0);
-	glUsbInitQ(prHifInfo, &prHifInfo->rRxDataCompleteQ, 0);
+	INIT_LIST_HEAD(&prHifInfo->rTxCmdSendingQ);
+	INIT_LIST_HEAD(&prHifInfo->rTxCmdCompleteQ);
+	INIT_LIST_HEAD(&prHifInfo->rTxDataCompleteQ);
+	INIT_LIST_HEAD(&prHifInfo->rRxEventCompleteQ);
+	INIT_LIST_HEAD(&prHifInfo->rRxDataCompleteQ);
+
 #if CFG_CHIP_RESET_SUPPORT
 	if (prChipInfo->fgIsSupportL0p5Reset && prBusInfo->fgIsSupportWdtEp)
-		glUsbInitQ(prHifInfo, &prHifInfo->rRxWdtCompleteQ, 0);
+		INIT_LIST_HEAD(&prHifInfo->rRxWdtCompleteQ);
 #endif
 
 	glUsbSetState(prHifInfo, USB_STATE_LINK_UP);
@@ -1652,12 +1737,16 @@ u_int8_t kalDevRegRead(IN struct GLUE_INFO *prGlueInfo, IN uint32_t u4Register, 
 
 	ucTotalFailCnt = prBusInfo->ucVndReqToMcuFailCnt;
 
-	if (ucTotalFailCnt >= VND_REQ_FAIL_TH) {
+	if (ucTotalFailCnt == VND_REQ_FAIL_TH) {
+		prBusInfo->ucVndReqToMcuFailCnt++;
 		DBGLOG(HAL, ERROR, "vendor reqs keep failure over %d times\n",
 		       VND_REQ_FAIL_TH);
 		GL_DEFAULT_RESET_TRIGGER(
 			prGlueInfo->prAdapter,
 			RST_CMD_EVT_FAIL);
+		return FALSE;
+	} else if (ucTotalFailCnt > VND_REQ_FAIL_TH) {
+		DBGLOG(HAL, TRACE, "ignore vendor reqs during reset\n");
 		return FALSE;
 	}
 
@@ -1675,12 +1764,6 @@ u_int8_t kalDevRegRead(IN struct GLUE_INFO *prGlueInfo, IN uint32_t u4Register, 
 				"usb_control_msg() status: %d retry: %u\n",
 				ret, ucRetryCount);
 
-		if (ret) {
-			if (ucTotalFailCnt < 0xff)
-				ucTotalFailCnt++;
-		} else
-			ucTotalFailCnt = 0;
-
 		ucRetryCount++;
 		if (ucRetryCount > HIF_USB_ACCESS_RETRY_LIMIT)
 			break;
@@ -1695,6 +1778,7 @@ u_int8_t kalDevRegRead(IN struct GLUE_INFO *prGlueInfo, IN uint32_t u4Register, 
 	} else {
 		DBGLOG(HAL, TRACE, "Get CR[0x%08x] value[0x%08x]\n",
 			u4Register, *pu4Value);
+		prBusInfo->ucVndReqToMcuFailCnt = 0;
 	}
 
 	return (ret) ? FALSE : TRUE;
@@ -1728,12 +1812,16 @@ u_int8_t kalDevRegWrite(IN struct GLUE_INFO *prGlueInfo, IN uint32_t u4Register,
 
 	ucTotalFailCnt = prBusInfo->ucVndReqToMcuFailCnt;
 
-	if (ucTotalFailCnt >= VND_REQ_FAIL_TH) {
+	if (ucTotalFailCnt == VND_REQ_FAIL_TH) {
+		prBusInfo->ucVndReqToMcuFailCnt++;
 		DBGLOG(HAL, ERROR, "vendor reqs keep failure over %d times\n",
 		       VND_REQ_FAIL_TH);
 		GL_DEFAULT_RESET_TRIGGER(
 			prGlueInfo->prAdapter,
 			RST_CMD_EVT_FAIL);
+		return FALSE;
+	} else if (ucTotalFailCnt > VND_REQ_FAIL_TH) {
+		DBGLOG(HAL, TRACE, "ignore vendor reqs during reset\n");
 		return FALSE;
 	}
 
@@ -1752,12 +1840,6 @@ u_int8_t kalDevRegWrite(IN struct GLUE_INFO *prGlueInfo, IN uint32_t u4Register,
 				"usb_control_msg() status: %d retry: %u\n",
 				ret, ucRetryCount);
 
-		if (ret) {
-			if (ucTotalFailCnt < 0xff)
-				ucTotalFailCnt++;
-		} else
-			ucTotalFailCnt = 0;
-
 		ucRetryCount++;
 		if (ucRetryCount > HIF_USB_ACCESS_RETRY_LIMIT)
 			break;
@@ -1772,6 +1854,7 @@ u_int8_t kalDevRegWrite(IN struct GLUE_INFO *prGlueInfo, IN uint32_t u4Register,
 			prBusInfo->ucVndReqToMcuFailCnt++;
 	} else {
 		DBGLOG(HAL, INFO, "Set CR[0x%08x] value[0x%08x]\n", u4Register, u4Value);
+		prBusInfo->ucVndReqToMcuFailCnt = 0;
 	}
 
 	return (ret) ? FALSE : TRUE;
@@ -1795,6 +1878,7 @@ u_int8_t kalDevUhwRegRead(IN struct GLUE_INFO *prGlueInfo,
 	struct BUS_INFO *prBusInfo = NULL;
 	int ret = 0;
 	uint8_t ucRetryCount = 0;
+	uint8_t ucTotalFailCnt;
 
 	if (prGlueInfo == NULL) {
 		DBGLOG(HAL, ERROR, "prGlueInfo is NULL error\n");
@@ -1807,6 +1891,20 @@ u_int8_t kalDevUhwRegRead(IN struct GLUE_INFO *prGlueInfo,
 
 	prBusInfo = prGlueInfo->prAdapter->chip_info->bus_info;
 	*pu4Value = 0xFFFFFFFF;
+	ucTotalFailCnt = prBusInfo->ucVndReqToMcuFailCnt;
+
+	if (ucTotalFailCnt == VND_REQ_FAIL_TH) {
+		prBusInfo->ucVndReqToMcuFailCnt++;
+		DBGLOG(HAL, ERROR, "vendor reqs keep failure over %d times\n",
+		       VND_REQ_FAIL_TH);
+		GL_DEFAULT_RESET_TRIGGER(
+			prGlueInfo->prAdapter,
+			RST_CMD_EVT_FAIL);
+		return FALSE;
+	} else if (ucTotalFailCnt > VND_REQ_FAIL_TH) {
+		DBGLOG(HAL, TRACE, "ignore vendor reqs during reset\n");
+		return FALSE;
+	}
 
 	do {
 		ret = mtk_usb_vendor_request(prGlueInfo,
@@ -1834,9 +1932,12 @@ u_int8_t kalDevUhwRegRead(IN struct GLUE_INFO *prGlueInfo,
 				  ucRetryCount);
 		DBGLOG(HAL, ERROR, "usb_readl() reports error: %x retry: %u\n",
 		       ret, ucRetryCount);
+		if (prBusInfo->ucVndReqToMcuFailCnt < VND_REQ_FAIL_TH)
+			prBusInfo->ucVndReqToMcuFailCnt++;
 	} else {
 		DBGLOG(HAL, TRACE, "Get CR[0x%08x] value[0x%08x]\n",
 			u4Register, *pu4Value);
+		prBusInfo->ucVndReqToMcuFailCnt = 0;
 	}
 
 	return (ret) ? FALSE : TRUE;
@@ -1860,6 +1961,7 @@ u_int8_t kalDevUhwRegWrite(IN struct GLUE_INFO *prGlueInfo,
 	int ret = 0;
 	uint8_t ucRetryCount = 0;
 	struct BUS_INFO *prBusInfo = NULL;
+	uint8_t ucTotalFailCnt;
 
 	if (prGlueInfo == NULL) {
 		DBGLOG(HAL, ERROR, "prGlueInfo is NULL error\n");
@@ -1867,6 +1969,21 @@ u_int8_t kalDevUhwRegWrite(IN struct GLUE_INFO *prGlueInfo,
 	}
 
 	prBusInfo = prGlueInfo->prAdapter->chip_info->bus_info;
+	ucTotalFailCnt = prBusInfo->ucVndReqToMcuFailCnt;
+
+	if (ucTotalFailCnt == VND_REQ_FAIL_TH) {
+		prBusInfo->ucVndReqToMcuFailCnt++;
+		DBGLOG(HAL, ERROR, "vendor reqs keep failure over %d times\n",
+		       VND_REQ_FAIL_TH);
+		GL_DEFAULT_RESET_TRIGGER(
+			prGlueInfo->prAdapter,
+			RST_CMD_EVT_FAIL);
+		return FALSE;
+	} else if (ucTotalFailCnt > VND_REQ_FAIL_TH) {
+		DBGLOG(HAL, TRACE, "ignore vendor reqs during reset\n");
+		return FALSE;
+	}
+
 	do {
 		ret = mtk_usb_vendor_request(prGlueInfo,
 			0,
@@ -1894,9 +2011,12 @@ u_int8_t kalDevUhwRegWrite(IN struct GLUE_INFO *prGlueInfo,
 				  ret, ucRetryCount);
 		DBGLOG(HAL, ERROR, "uhw_writel() reports error: %x retry: %u\n",
 		       ret, ucRetryCount);
+		if (prBusInfo->ucVndReqToMcuFailCnt < VND_REQ_FAIL_TH)
+			prBusInfo->ucVndReqToMcuFailCnt++;
 	} else {
 		DBGLOG(HAL, TRACE, "Set CR[0x%08x] value[0x%08x]\n", u4Register,
 		       u4Value);
+		prBusInfo->ucVndReqToMcuFailCnt = 0;
 	}
 
 	return (ret) ? FALSE : TRUE;
@@ -2131,109 +2251,124 @@ void glGetHifDev(struct GL_HIF_INFO *prHif, struct device **dev)
 #if CFG_CHIP_RESET_SUPPORT
 void kalRemoveProbe(IN struct GLUE_INFO *prGlueInfo)
 {
-	uint32_t gpio_num = WIFI_DONGLE_RESET_GPIO_PIN;
-
-#if	(CFG_ENABLE_GKI_SUPPORT != 1)
-	typedef void (*gpioLegacyFunc) (unsigned int, int);
-	char *pcLegacyApiName = "mtk_gpio_set_value";
-	gpioLegacyFunc pfLegacyApi = NULL;
+	uint32_t gpio_num, default_level, action_level, invert_time;
+#if CFG_CHIP_RESET_USE_DTS_GPIO_NUM
+	struct device_node *node;
+#endif
+#if CFG_ENABLE_GKI_SUPPORT
+	uint32_t i4Status;
+#else
+	typedef void (*gpioFunc) (unsigned int gpio, int init_value);
+	gpioFunc pFuncSetValue = NULL;
+	char *func_name = "mtk_gpio_set_value";
 #if CFG_CHIP_RESET_USE_MSTAR_GPIO_API
 	typedef void (*gpioMstarFunc)(uint32_t);
-	char *pcMstarSetLowApiName = "MDrv_GPIO_Set_Low";
-	char *pcMstarSetHighApiName = "MDrv_GPIO_Set_High";
-	gpioMstarFunc pfMstarSetLowApi = NULL;
-	gpioMstarFunc pfMstarSetHighApi = NULL;
+	gpioMstarFunc pFuncSetLow = NULL;
+	gpioMstarFunc pFuncSetHigh = NULL;
+	char *pcSetLowApiName = "MDrv_GPIO_Set_Low";
+	char *pcSetHighApiName = "MDrv_GPIO_Set_High";
 #endif
 #endif
 
 #if CFG_CHIP_RESET_USE_DTS_GPIO_NUM
-	struct device_node *node;
-	int32_t i4Status = 0;
-
-	node = of_find_compatible_node(NULL, NULL, CHIP_RESET_DTS_NODE_NAME);
-	if (node) {
-		i4Status = of_get_named_gpio(node,
-				CHIP_RESET_GPIO_PROPERTY_NAME, 0);
-		if (i4Status >= 0) {
-			gpio_num = i4Status;
-			i4Status = 0;
-		} else if (of_property_read_u32(node,
-				CHIP_RESET_GPIO_PROPERTY_NAME,
-				&gpio_num) == 0){
-			i4Status = 0;
-		} else {
-			i4Status = -1;
-			DBGLOG(HAL, ERROR,
-				"[SER][L0]: Failed to get GPIO num, gpio property: %s\n",
-				CHIP_RESET_GPIO_PROPERTY_NAME);
-		}
-	} else {
-		i4Status = -1;
+	node = of_find_compatible_node(NULL,
+				       NULL,
+				       CHIP_RESET_DTS_COMPATIBLE_NAME);
+	if (!node) {
 		DBGLOG(HAL, ERROR,
-			"[SER][L0]: Failed to find dts node: %s\n",
-			CHIP_RESET_DTS_NODE_NAME);
-	}
-	if (i4Status != 0)
-		return;
-#endif
-
-	DBGLOG(HAL, WARN, "[SER][L0]: Use GPIO num: %d\n", gpio_num);
-
-#if (CFG_ENABLE_GKI_SUPPORT != 1)
-	pfLegacyApi = (gpioLegacyFunc) GLUE_SYMBOL_GET(pcLegacyApiName);
-	if (pfLegacyApi) {
-		DBGLOG(HAL, WARN, "[SER][L0]: Use legacy api %s\n",
-			pcLegacyApiName);
-		pfLegacyApi(gpio_num, 0);
-		mdelay(RESET_PIN_SET_LOW_TIME);
-		pfLegacyApi(gpio_num, 1);
-		GLUE_SYMBOL_PUT(pcLegacyApiName);
+		       "[SER][L0]: Failed to find dts node: %s\n",
+		       CHIP_RESET_DTS_COMPATIBLE_NAME);
 		return;
 	}
-
-	DBGLOG(HAL, ERROR, "[SER][L0]: Failed to find api: %s\n",
-			pcLegacyApiName);
-
-#if CFG_CHIP_RESET_USE_MSTAR_GPIO_API
-	pfMstarSetLowApi =
-		(gpioMstarFunc) GLUE_SYMBOL_GET(pcMstarSetLowApiName);
-	pfMstarSetHighApi =
-		(gpioMstarFunc) GLUE_SYMBOL_GET(pcMstarSetHighApiName);
-
-	if (pfMstarSetLowApi && pfMstarSetHighApi) {
-		DBGLOG(HAL, WARN, "[SER][L0]: Use mstar api %s and %s\n",
-			pcMstarSetLowApiName, pcMstarSetHighApiName);
-		pfMstarSetLowApi(gpio_num);
-		mdelay(RESET_PIN_SET_LOW_TIME);
-		pfMstarSetHighApi(gpio_num);
-		GLUE_SYMBOL_PUT(pcMstarSetLowApiName);
-		GLUE_SYMBOL_PUT(pcMstarSetHighApiName);
+	if (of_property_read_u32(node, CHIP_RESET_GPIO_PROPERTY_NAME,
+				&gpio_num) != 0) {
+		DBGLOG(HAL, ERROR,
+		       "[SER][L0]: Failed to get gpio_num: %s\n",
+		       CHIP_RESET_GPIO_PROPERTY_NAME);
 		return;
 	}
-
-	DBGLOG(HAL, ERROR, "[SER][L0]: Failed to find api: %s or %s\n",
-		pcMstarSetLowApiName, pcMstarSetHighApiName);
+#ifndef RESET_PIN_SET_LOW_TIME
+	if (of_property_read_u32(node, CHIP_RESET_INVERT_PROPERTY_NAME,
+				&invert_time) != 0) {
+		DBGLOG(HAL, WARN,
+		       "[SER][L0]: Failed to get invert_time: %s\n",
+		       CHIP_RESET_INVERT_PROPERTY_NAME);
+		return;
+	}
+#else
+	invert_time = RESET_PIN_SET_LOW_TIME;
 #endif
+	if (of_property_read_u32(node, CHIP_RESET_DEFAULT_VAL_PROPERTY_NAME,
+				&default_level) != 0) {
+		DBGLOG(HAL, WARN,
+		       "[SER][L0]: Failed to get default_level: %s\n",
+		       CHIP_RESET_DEFAULT_VAL_PROPERTY_NAME);
+		default_level = 1;
+	}
+	default_level = (default_level == 0) ? 0 : 1;
+	action_level = (default_level == 0) ? 1 : 0;
+#else
+	gpio_num = WIFI_DONGLE_RESET_GPIO_PIN;
+	invert_time = RESET_PIN_SET_LOW_TIME;
+	default_level = 1;
+	action_level = 0;
 #endif
 
-#if CFG_CHIP_RESET_USE_LINUX_GPIO_API
-	i4Status = gpio_request(gpio_num, CHIP_RESET_GPIO_PROPERTY_NAME);
+	DBGLOG(HAL, INFO,
+	       "[SER][L0]: wifi reset gpio %d pull %s %dms\n",
+	       gpio_num, (action_level == 0) ? "down" : "up", invert_time);
+
+#if CFG_ENABLE_GKI_SUPPORT
+	i4Status = gpio_request(gpio_num, "wifi-reset");
 	if (i4Status < 0) {
 		DBGLOG(HAL, ERROR,
-			"[SER][L0]: gpio_request(%d,%s) %d failed\n",
-			gpio_num, CHIP_RESET_GPIO_PROPERTY_NAME, i4Status);
+		       "[SER][L0]: gpio_request(%d,%s) %d failed\n",
+		       gpio_num, "wifi-reset", i4Status);
 		return;
 	}
-	i4Status = gpio_direction_output(gpio_num, 0);
+	i4Status = gpio_direction_output(gpio_num, action_level);
 	DBGLOG(HAL, WARN,
-		"[SER][L0]: Invoke gpio_direction_output (%d, 0) %d\n",
-		gpio_num, i4Status);
-	mdelay(RESET_PIN_SET_LOW_TIME);
-	i4Status = gpio_direction_output(gpio_num, 1);
+	       "[SER][L0]: Invoke gpio_direction_output (%d, %d) %d\n",
+	       gpio_num, action_level, i4Status);
+	mdelay(invert_time);
+	i4Status = gpio_direction_output(gpio_num, default_level);
 	DBGLOG(HAL, WARN,
-		"[SER][L0]: Invoke gpio_direction_output (%d, 1) %d\n",
-		gpio_num, i4Status);
+	       "[SER][L0]: Invoke gpio_direction_output (%d, %d) %d\n",
+	       gpio_num, default_level, i4Status);
 	gpio_free(gpio_num);
+#else
+	pFuncSetValue = (gpioFunc)GLUE_SYMBOL_GET(func_name);
+	if (pFuncSetValue) {
+		DBGLOG(HAL, WARN, "[SER][L0]%s: Invoke %s(%d,%d)\n",
+		       __func__, func_name, gpio_num, action_level);
+		pFuncSetValue(gpio_num, action_level);
+		mdelay(invert_time);
+		DBGLOG(HAL, WARN, "[SER][L0]%s: Invoke %s(%d,%d)\n",
+		       __func__, func_name, gpio_num, default_level);
+		pFuncSetValue(gpio_num, default_level);
+		GLUE_SYMBOL_PUT(func_name);
+		return;
+	}
+	DBGLOG(HAL, ERROR, "[SER][L0]%s: No Exported Func Found [%s]\n",
+	       __func__, func_name);
+
+#if CFG_CHIP_RESET_USE_MSTAR_GPIO_API
+	pFuncSetLow = (gpioMstarFunc)GLUE_SYMBOL_GET(pcSetLowApiName);
+	pFuncSetHigh = (gpioMstarFunc)GLUE_SYMBOL_GET(pcSetHighApiName);
+
+	if (pFuncSetLow && pFuncSetHigh) {
+		DBGLOG(HAL, WARN, "[SER][L0]: Use mstar api %s and %s\n",
+		       pcSetLowApiName, pcSetHighApiName);
+		default_level ? pFuncSetLow(gpio_num) : pFuncSetHigh(gpio_num);
+		mdelay(invert_time);
+		default_level ? pFuncSetHigh(gpio_num) : pFuncSetLow(gpio_num);
+		GLUE_SYMBOL_PUT(pcSetLowApiName);
+		GLUE_SYMBOL_PUT(pcSetHighApiName);
+		return;
+	}
+	DBGLOG(HAL, ERROR, "[SER][L0]: Failed to find api: %s or %s\n",
+	       pcSetLowApiName, pcSetHighApiName);
+#endif
 #endif
 }
 #endif

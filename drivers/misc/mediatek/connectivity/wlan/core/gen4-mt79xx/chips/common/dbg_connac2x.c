@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /******************************************************************************
  *[File]             dbg_connac2x.c
  *[Version]          v1.0
@@ -9,8 +10,6 @@
  *[Author]
  *[Description]
  *    The program provides WIFI FALCON MAC Debug APIs
- *[Copyright]
- *    Copyright (C) 2015 MediaTek Incorporation. All Rights Reserved.
  ******************************************************************************/
 
 #if (CFG_SUPPORT_CONNAC2X == 1)
@@ -1404,40 +1403,40 @@ static void connac2x_print_wtbl_info(
 				LOG_FUNC("LWTBL DW %d\n",
 					(rate_idx/2)+10);
 
-				if (txmode == TX_RATE_MODE_CCK)
-					LOG_FUNC(
-	"\tRate%d(0x%x):TxMode=%d(%s) TxRate=%d(%s) Nsts=%d STBC=%d\n",
-					rate_idx + 1,
-					txrate[rate_idx],
-					txmode,
-					(txmode < ENUM_TX_MODE_NUM ?
-					RATE_V2_HW_TX_MODE_STR[txmode] : "N/A"),
-					mcs,
-					mcs < 4 ? HW_TX_RATE_CCK_STR[mcs] :
-					   HW_TX_RATE_CCK_STR[4],
-					nss, stbc);
-				else if (txmode == TX_RATE_MODE_OFDM)
-					LOG_FUNC(
-	"\tRate%d(0x%x):TxMode=%d(%s) TxRate=%d(%s) Nsts=%d STBC=%d\n",
-					rate_idx + 1,
-					txrate[rate_idx],
-					txmode,
-					(txmode < ENUM_TX_MODE_NUM ?
-					RATE_V2_HW_TX_MODE_STR[txmode] : "N/A"),
-					mcs,
-					nicHwRateOfdmStr(mcs),
-					nss, stbc);
-				else
-					LOG_FUNC(
-	"\tRate%d(0x%x):TxMode=%d(%s) TxRate=%d(MCS%d) Nsts=%d STBC=%d\n",
-					rate_idx + 1,
-					txrate[rate_idx],
-					txmode,
-					(txmode < ENUM_TX_MODE_NUM ?
-					RATE_V2_HW_TX_MODE_STR[txmode] : "N/A"),
-					mcs,
-					mcs,
-					nss, stbc);
+			if (txmode == TX_RATE_MODE_CCK)
+				LOG_FUNC(
+"\tRate%d(0x%x):TxMode=%d(%s) TxRate=%d(%s) Nsts=%d STBC=%d\n",
+				rate_idx + 1,
+				txrate[rate_idx],
+				txmode,
+				(txmode < ENUM_TX_MODE_NUM ?
+				RATE_V2_HW_TX_MODE_STR[txmode] : "N/A"),
+				mcs,
+				mcs < 4 ? HW_TX_RATE_CCK_STR[mcs] :
+				   HW_TX_RATE_CCK_STR[4],
+				nss, stbc);
+			else if (txmode == TX_RATE_MODE_OFDM)
+				LOG_FUNC(
+"\tRate%d(0x%x):TxMode=%d(%s) TxRate=%d(%s) Nsts=%d STBC=%d\n",
+				rate_idx + 1,
+				txrate[rate_idx],
+				txmode,
+				(txmode < ENUM_TX_MODE_NUM ?
+				RATE_V2_HW_TX_MODE_STR[txmode] : "N/A"),
+				mcs,
+				nicHwRateOfdmStr(mcs),
+				nss, stbc);
+			else
+				LOG_FUNC(
+"\tRate%d(0x%x):TxMode=%d(%s) TxRate=%d(MCS%d) Nsts=%d STBC=%d\n",
+				rate_idx + 1,
+				txrate[rate_idx],
+				txmode,
+				(txmode < ENUM_TX_MODE_NUM ?
+				RATE_V2_HW_TX_MODE_STR[txmode] : "N/A"),
+				mcs,
+				mcs,
+				nss, stbc);
 		}
 		LOG_FUNC("\n");
 
@@ -1925,6 +1924,7 @@ int32_t connac2x_show_stat_info(
 	uint8_t aucAggRange[AGG_RANGE_SEL_NUM];
 	uint32_t au4RangeCtrl[AGG_RANGE_SEL_4BYTE_NUM];
 	enum AGG_RANGE_TYPE_T eRangeType = ENUM_AGG_RANGE_TYPE_TX;
+	uint8_t ucBssIndex;
 
 	ucSkipAr = prQueryStaStatistics->ucSkipAr;
 	prRxCtrl = &prAdapter->rRxCtrl;
@@ -2148,10 +2148,16 @@ int32_t connac2x_show_stat_info(
 			"%s", "----- Last Rx Info (Group 0x04) -----\n");
 
 		/* get Beacon RSSI */
-		rStatus = kalIoctl(prAdapter->prGlueInfo,
+#if (KAL_AIS_NUM == 1)
+		ucBssIndex = AIS_DEFAULT_INDEX;
+#else
+		ucBssIndex = secGetBssIdxByWlanIdx
+			(prAdapter, (uint8_t)(prHwWlanInfo->u4Index));
+#endif
+		rStatus = kalIoctlByBssIdx(prAdapter->prGlueInfo,
 				   wlanoidQueryRssi, &rRssi,
 				   sizeof(rRssi), TRUE, TRUE, TRUE,
-				   &u4BufLen);
+				   &u4BufLen, ucBssIndex);
 		if (rStatus != WLAN_STATUS_SUCCESS)
 			DBGLOG(REQ, WARN, "unable to retrieve rssi\n");
 

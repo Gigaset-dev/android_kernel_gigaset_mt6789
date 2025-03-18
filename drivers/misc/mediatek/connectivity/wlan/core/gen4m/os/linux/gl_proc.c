@@ -1197,7 +1197,7 @@ static ssize_t procCountryRead(struct file *filp, char __user *buf,
 	country = rlmDomainGetCountryCode();
 
 	if (country)
-		kalSnprintf(pucProcBuf, sizeof(pucProcBuf),
+		kalSnprintf(pucProcBuf, PROC_MAX_BUF_SIZE,
 			"Current Country Code: %d\n", country);
 	else
 		kalSnprintf(pucProcBuf, PROC_MAX_BUF_SIZE,

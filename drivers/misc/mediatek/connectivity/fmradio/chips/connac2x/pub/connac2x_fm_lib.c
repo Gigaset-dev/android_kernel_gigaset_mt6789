@@ -19,6 +19,7 @@
 
 #include "mt6635_fm_reg.h"
 #include "mt6635_fm_lib.h"
+#include "mt6631_op_fm_lib.h"
 
 #define HQA_RETURN_ZERO_MAP 0
 #define HQA_ZERO_DESENSE_MAP 0
@@ -40,7 +41,7 @@ static struct fm_patch_tbl connac2x_patch_tbl[5] = {
 };
 
 static struct fm_hw_info connac2x_hw_info = {
-	.chip_id = 0x00006635,
+	.chip_id = 0x000066FF,
 	.eco_ver = 0x00000000,
 	.rom_ver = 0x00000000,
 	.patch_ver = 0x00000000,
@@ -86,7 +87,12 @@ static signed int connac2x_pwroff(signed int data)
 
 static unsigned short connac2x_get_chipid(void)
 {
-	return connac2x_hw_info.chip_id;
+	unsigned int adie = 0x0;
+
+	if (fm_wcn_ops.ei.get_get_adie)
+		adie = fm_wcn_ops.ei.get_get_adie();
+
+	return (unsigned short) adie;
 }
 
 /*  connac2x_SetAntennaType - set Antenna type
@@ -308,7 +314,7 @@ static signed int connac2x_get_rom_version(void)
 	return (signed int) nRomVersion;
 }
 
-static signed int connac2x_pwrup_clock_on_reg_op(unsigned char *buf, signed int buf_size)
+static signed int mt6635_6637_c2x_pwrup_clock_on_reg_op(unsigned char *buf, signed int buf_size)
 {
 	signed int pkt_size = 4;
 	unsigned short de_emphasis;
@@ -325,13 +331,6 @@ static signed int connac2x_pwrup_clock_on_reg_op(unsigned char *buf, signed int 
 
 	de_emphasis = fm_config.rx_cfg.deemphasis;
 	de_emphasis &= 0x0001;	/* rang 0~1 */
-
-#if 0
-	if (connac2x_hw_info.chip_id == 0x6637) {
-		/* enable FM RF xo buffer TODO: remove it */
-		pkt_size += fm_bop_top_write(0xB18, 0x00000004, &buf[pkt_size], buf_size - pkt_size);
-	}
-#endif
 
 	/* 3,enable MTCMOS */
 	pkt_size += fm_bop_top_write(0x160, 0x00000030, &buf[pkt_size], buf_size - pkt_size);
@@ -377,7 +376,10 @@ static signed int connac2x_pwrup_clock_on(unsigned char *buf, signed int buf_siz
 {
 	signed int pkt_size = 0;
 
-	pkt_size = connac2x_pwrup_clock_on_reg_op(buf, buf_size);
+	if (connac2x_hw_info.chip_id == 0x6631)
+		pkt_size = mt6631_pwrup_clock_on_reg_op(buf, buf_size);
+	else
+		pkt_size = mt6635_6637_c2x_pwrup_clock_on_reg_op(buf, buf_size);
 	return fm_op_seq_combine_cmd(buf, FM_ENABLE_OPCODE, pkt_size);
 }
 
@@ -411,7 +413,7 @@ static signed int connac2x_pwrup_digital_init_reg_op(unsigned char *buf, signed 
 	/* D2.6 set SDM coeff1_L */
 	pkt_size += fm_bop_write(0xDB, 0x2A38, &buf[pkt_size], buf_size - pkt_size);	/* wr DB 0x2A38 */
 
-	if (connac2x_hw_info.chip_id == 0x6635) {
+	if (connac2x_hw_info.chip_id == 0x6635 || connac2x_hw_info.chip_id == 0x6631) {
 		/* D2.7 set 26M clock */
 		pkt_size += fm_bop_write(0x23, 0x4000, &buf[pkt_size], buf_size - pkt_size); /* wr 23 4000 */
 	}
@@ -453,7 +455,7 @@ static signed int connac2x_pwrup_digital_init(unsigned char *buf, signed int buf
 	return fm_op_seq_combine_cmd(buf, FM_ENABLE_OPCODE, pkt_size);
 }
 
-static signed int mt6635_c2x_pwrup_fine_tune_reg_op(unsigned char *buf, signed int buf_size)
+static signed int mt6631_6635_c2x_pwrup_fine_tune_reg_op(unsigned char *buf, signed int buf_size)
 {
 	signed int pkt_size = 4;
 
@@ -477,9 +479,13 @@ static signed int mt6635_c2x_pwrup_fine_tune_reg_op(unsigned char *buf, signed i
 	pkt_size += fm_bop_write(0x17, 0x092A, &buf[pkt_size], buf_size - pkt_size);
 	pkt_size += fm_bop_write(0x34, 0x807F, &buf[pkt_size], buf_size - pkt_size);
 	pkt_size += fm_bop_write(0x35, 0x311E, &buf[pkt_size], buf_size - pkt_size);
-	pkt_size += fm_bop_write(0x40, 0x0100, &buf[pkt_size], buf_size - pkt_size);
-	pkt_size += fm_bop_write(0x03, 0xFAF5, &buf[pkt_size], buf_size - pkt_size);
-	pkt_size += fm_bop_write(0x05, 0x7A80, &buf[pkt_size], buf_size - pkt_size);
+
+	if (connac2x_hw_info.chip_id == 0x6635) {
+		/* mt6635 only */
+		pkt_size += fm_bop_write(0x40, 0x0100, &buf[pkt_size], buf_size - pkt_size);
+		pkt_size += fm_bop_write(0x03, 0xFAF5, &buf[pkt_size], buf_size - pkt_size);
+		pkt_size += fm_bop_write(0x05, 0x7A80, &buf[pkt_size], buf_size - pkt_size);
+	}
 
 	/* F4 set DSP control RF register */
 	pkt_size += fm_bop_write(0x60, 0x000F, &buf[pkt_size], buf_size - pkt_size);
@@ -549,8 +555,8 @@ static signed int connac2x_pwrup_fine_tune(unsigned char *buf, signed int buf_si
 {
 	signed int pkt_size = 0;
 
-	if (connac2x_hw_info.chip_id == 0x6635)
-		pkt_size = mt6635_c2x_pwrup_fine_tune_reg_op(buf, buf_size);
+	if (connac2x_hw_info.chip_id == 0x6631 || connac2x_hw_info.chip_id == 0x6635)
+		pkt_size = mt6631_6635_c2x_pwrup_fine_tune_reg_op(buf, buf_size);
 	else if (connac2x_hw_info.chip_id == 0x6637)
 		pkt_size = mt6637_c2x_pwrup_fine_tune_reg_op(buf, buf_size);
 	else
@@ -560,7 +566,7 @@ static signed int connac2x_pwrup_fine_tune(unsigned char *buf, signed int buf_si
 	return fm_op_seq_combine_cmd(buf, FM_ENABLE_OPCODE, pkt_size);
 }
 
-static signed int connac2x_pwrdown_reg_op(unsigned char *buf, signed int buf_size)
+static signed int mt6635_6637_c2x_pwrdown_reg_op(unsigned char *buf, signed int buf_size)
 {
 	signed int pkt_size = 4;
 
@@ -620,7 +626,11 @@ static signed int connac2x_pwrdown(unsigned char *buf, signed int buf_size)
 {
 	signed int pkt_size = 0;
 
-	pkt_size = connac2x_pwrdown_reg_op(buf, buf_size);
+	if (connac2x_hw_info.chip_id == 0x6631)
+		pkt_size = mt6631_pwrdown_reg_op(buf, buf_size);
+	else
+		pkt_size = mt6635_6637_c2x_pwrdown_reg_op(buf, buf_size);
+
 	return fm_op_seq_combine_cmd(buf, FM_ENABLE_OPCODE, pkt_size);
 }
 
@@ -756,14 +766,11 @@ out:
 		fm_vfree(dsp_buf);
 	return ret;
 }
-static void connac2x_show_reg(void)
+
+static void mt6635_6637_c2x_show_fm_reg(void)
 {
-	struct fm_ext_interface *ei = &fm_wcn_ops.ei;
 	unsigned int debug_reg1[3] = {0};
 	unsigned short debug_reg2[3] = {0};
-
-	if (ei->host_reg_dump)
-		ei->host_reg_dump();
 
 	fm_top_reg_read(0x003c, &debug_reg1[0]);
 	fm_top_reg_read(0x0a18, &debug_reg1[1]);
@@ -776,6 +783,19 @@ static void connac2x_show_reg(void)
 		debug_reg1[0], debug_reg1[1], debug_reg1[2], debug_reg2[0], debug_reg2[1], debug_reg2[2]);
 }
 
+static void connac2x_show_reg(void)
+{
+	struct fm_ext_interface *ei = &fm_wcn_ops.ei;
+
+	if (ei->host_reg_dump)
+		ei->host_reg_dump();
+
+	if (connac2x_hw_info.chip_id == 0x6631)
+		mt6631_show_fm_reg();
+	else
+		mt6635_6637_c2x_show_fm_reg();
+}
+
 static signed int connac2x_PowerUp(unsigned short *chip_id, unsigned short *device_id)
 {
 	struct fm_ext_interface *ei = &fm_wcn_ops.ei;
@@ -783,6 +803,9 @@ static signed int connac2x_PowerUp(unsigned short *chip_id, unsigned short *devi
 	unsigned short pkt_size;
 	unsigned short tmp_reg = 0;
 	unsigned int tem = 0;
+
+	connac2x_hw_info.chip_id = connac2x_get_chipid();
+	WCN_DBG(FM_NTC | CHIP, "A-die id: 0x%08x\n", connac2x_hw_info.chip_id);
 
 	if (chip_id == NULL) {
 		WCN_DBG(FM_ERR | CHIP, "%s,invalid pointer\n", __func__);
@@ -805,30 +828,39 @@ static signed int connac2x_PowerUp(unsigned short *chip_id, unsigned short *devi
 		return ret;
 	}
 
-	if (!(ei->is_aoc_support())) {
-		/* B1 Enable Top Clock */
-		ret = fm_top_reg_write(0xA00, 0xFFFFFFFF);
+	/* B1 Enable Top Clock */
+	if (connac2x_hw_info.chip_id == 0x6631) {
+		/* turn on RG_TOP_BGLDO */
+		ret = mt6631_TurnOn_RgTopGbLdo();
 		if (ret) {
-			WCN_DBG(FM_ALT | CHIP, "Enable top clock failed\n");
+			WCN_DBG(FM_ERR | CHIP, "mt6631_TurnOn_RgTopGbLdo failed\n");
 			return ret;
 		}
-	} else
-		WCN_DBG(FM_NTC | CHIP, "skip 0xA00 write\n");
 
-	/* B2 Read A-die id */
-	ret = fm_top_reg_read(0x02C, &tem);
+		ret = fm_top_reg_write(0xA10, 0xFFFFFFFF);
+	} else
+		ret = fm_top_reg_write(0xA00, 0xFFFFFFFF);
+
 	if (ret) {
 		WCN_DBG(FM_ALT | CHIP, "Enable top clock failed\n");
 		return ret;
 	}
 
-	if ((tem & 0xFFFF0000) == 0x66350000 ||
-		(tem & 0xFFFF0000) == 0x66370000) {
-		*chip_id = tem >> 16;
-		connac2x_hw_info.chip_id = (signed int) *chip_id;
-		WCN_DBG(FM_NTC | CHIP, "A-die id 0x%08x\n", tem);
+	/* B2 Read A-die id */
+	if (connac2x_hw_info.chip_id == 0x6631)
+		ret = fm_top_reg_read(0x024, &tem);
+	else
+		ret = fm_top_reg_read(0x02C, &tem);
+	if (ret) {
+		WCN_DBG(FM_ALT | CHIP, "Read A-die Top Id failed\n");
+		return ret;
+	}
+
+	tmp_reg = tem >> 16;
+	if (tmp_reg == connac2x_hw_info.chip_id) {
+		WCN_DBG(FM_NTC | CHIP, "A-die Top Id: 0x%08x\n", tem);
 	} else {
-		WCN_DBG(FM_ALT | CHIP, "Unexpected A-die id 0x%08x\n", tem);
+		WCN_DBG(FM_ALT | CHIP, "Unexpected A-die Top Id 0x%08x\n", tem);
 		return -FM_EFW;
 	}
 
@@ -847,7 +879,7 @@ static signed int connac2x_PowerUp(unsigned short *chip_id, unsigned short *devi
 	/* Wholechip FM Power Up: step 2, read HW version */
 	connac2x_show_reg();
 	fm_reg_read(0x62, &tmp_reg);
-	if (tmp_reg == *chip_id)
+	if (tmp_reg == connac2x_hw_info.chip_id)
 		*device_id = tmp_reg;
 	else {
 		connac2x_show_reg();
@@ -856,7 +888,11 @@ static signed int connac2x_PowerUp(unsigned short *chip_id, unsigned short *devi
 	}
 
 	/* Wholechip FM Power Up: step 3, patch download */
-	ret = connac2x_pwrup_DSP_download(connac2x_patch_tbl);
+	if (connac2x_hw_info.chip_id == 0x6631)
+		ret = connac2x_pwrup_DSP_download(mt6631_get_patch_tbl());
+	else
+		ret = connac2x_pwrup_DSP_download(connac2x_patch_tbl);
+
 	if (ret) {
 		WCN_DBG(FM_ERR | CHIP, "connac2x_pwrup_DSP_download failed\n");
 		return ret;
@@ -871,6 +907,15 @@ static signed int connac2x_PowerUp(unsigned short *chip_id, unsigned short *devi
 	if (ret) {
 		WCN_DBG(FM_ALT | CHIP, "connac2x_pwrup_digital_init failed\n");
 		return ret;
+	}
+
+	/* double check if FM ok after DSP switch clock to ADPLL */
+	fm_reg_read(0x62, &tmp_reg);
+	if (tmp_reg != connac2x_hw_info.chip_id) {
+		connac2x_show_reg();
+		WCN_DBG(FM_ALT | CHIP,
+			"A-die no clock after DSP auto control, please check VCN28.\n");
+		return -FM_ENOVCN28;
 	}
 
 	/* Wholechip FM Power Up: step 5, FM RF fine tune setting */
@@ -1040,7 +1085,9 @@ static signed int connac2x_set_freq_fine_tune(unsigned char *buf, signed int buf
 {
 	signed int pkt_size = 0;
 
-	if (connac2x_hw_info.chip_id == 0x6635)
+	if (connac2x_hw_info.chip_id == 0x6631)
+		pkt_size = mt6631_set_freq_fine_tune_reg_op(buf, buf_size);
+	else if (connac2x_hw_info.chip_id == 0x6635)
 		pkt_size = mt6635_c2x_set_freq_fine_tune_reg_op(buf, buf_size);
 	else if (connac2x_hw_info.chip_id == 0x6637)
 		pkt_size = mt6637_c2x_set_freq_fine_tune_reg_op(buf, buf_size);
@@ -1153,8 +1200,8 @@ static bool connac2x_SetFreq(unsigned short freq)
 		WCN_DBG(FM_ERR | CHIP, "%s: Set 0x60 [D3:D0] = 0x0F failed\n", __func__);
 
 	/* A1 Get Channel parameter from map list*/
-
 	chan_para = connac2x_chan_para_get(freq);
+
 	WCN_DBG(FM_DBG | CHIP, "%s: %d chan para = %d\n", __func__, (signed int) freq, (signed int) chan_para);
 
 	freq_reg = freq;
@@ -1573,6 +1620,11 @@ static signed int connac2x_hw_info_get(struct fm_hw_info *req)
 		return -FM_EPARA;
 	}
 
+	if (connac2x_hw_info.chip_id == 0x66FF) {
+		/* get the real chip id */
+		connac2x_hw_info.chip_id = connac2x_get_chipid();
+	}
+
 	req->chip_id = connac2x_hw_info.chip_id;
 	req->eco_ver = connac2x_hw_info.eco_ver;
 	req->patch_ver = connac2x_hw_info.patch_ver;
@@ -1986,7 +2038,7 @@ static signed int connac2x_desense_check(unsigned short freq, signed int rssi)
 	return 0;
 }
 
-static bool connac2x_TDD_chan_check(unsigned short freq)
+static bool mt6635_6637_c2x_TDD_chan_check(unsigned short freq)
 {
 	unsigned int i = 0;
 	unsigned short freq_tmp = freq;
@@ -2024,8 +2076,16 @@ static bool connac2x_TDD_chan_check(unsigned short freq)
 		return false;
 }
 
+static bool connac2x_TDD_chan_check(unsigned short freq)
+{
+	if (connac2x_hw_info.chip_id == 0x6631)
+		return mt6631_TDD_chan_check(freq);
+	else
+		return mt6635_6637_c2x_TDD_chan_check(freq);
+}
+
 /* get channel parameter, HL side/ FA / ATJ */
-static unsigned short connac2x_chan_para_get(unsigned short freq)
+static unsigned short mt6635_6637_c2x_chan_para_get(unsigned short freq)
 {
 	signed int pos, size;
 
@@ -2049,6 +2109,13 @@ static unsigned short connac2x_chan_para_get(unsigned short freq)
 	return connac2x_chan_para_map[pos];
 }
 
+static unsigned short connac2x_chan_para_get(unsigned short freq)
+{
+	if (connac2x_hw_info.chip_id == 0x6631)
+		return mt6631_chan_para_get(freq);
+	else
+		return mt6635_6637_c2x_chan_para_get(freq);
+}
 
 static bool connac2x_SPI_hopping_check(unsigned short freq)
 {

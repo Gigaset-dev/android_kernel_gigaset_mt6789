@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/nic/nic_tx.c#2
  */
@@ -177,6 +178,27 @@ static uint8_t *apucTxResultStr[TX_RESULT_NUM] = {
  *                              F U N C T I O N S
  *******************************************************************************
  */
+
+#if KERNEL_VERSION(4, 15, 0) <= LINUX_VERSION_CODE
+void nicTxFwdCheckPendQ(struct timer_list *timer)
+#else
+void nicTxFwdCheckPendQ(unsigned long data)
+#endif
+{
+#if KERNEL_VERSION(4, 15, 0) <= LINUX_VERSION_CODE
+	struct ADAPTER *prAdapter =
+		from_timer(prAdapter, timer, rTxFwdTimer);
+	struct GLUE_INFO *prGlueInfo = prAdapter->prGlueInfo;
+#else
+	struct GLUE_INFO *prGlueInfo = (struct GLUE_INFO *)data;
+	struct ADAPTER *prAdapter = prGlueInfo->prAdapter;
+#endif
+	struct TX_CTRL *prTxCtrl = &prAdapter->rTxCtrl;
+	uint32_t u4FwdPendCnt = (uint32_t) GLUE_GET_REF_CNT(
+		prTxCtrl->i4PendingFwdFrameCount);
+	if (u4FwdPendCnt > 0)
+		kalSetTxEvent2Hif(prGlueInfo);
+}
 /*----------------------------------------------------------------------------*/
 /*!
  * @brief This function will initial all variables in regard to SW TX Queues and
@@ -2294,6 +2316,9 @@ uint32_t nicTxMsduQueue(IN struct ADAPTER *prAdapter,
 		if (!halTxIsDataBufEnough(prAdapter, prMsduInfo)) {
 			QUEUE_INSERT_HEAD(prQue,
 				(struct QUE_ENTRY *) prMsduInfo);
+			if (HAL_IS_TX_DIRECT())
+				mod_timer(&prAdapter->rTxFwdTimer,
+					jiffies + TX_FWD_PATH_CHECK_INTERVAL);
 			break;
 		}
 
@@ -2331,7 +2356,8 @@ uint32_t nicTxMsduQueue(IN struct ADAPTER *prAdapter,
 				&prMsduInfo->rLifetimeTimer,
 				(PFN_MGMT_TIMEOUT_FUNC)
 				 nicTxMsduLifeTimeoutHandler,
-				(unsigned long) prMsduInfo);
+				(unsigned long) prMsduInfo,
+				TIMER_WAKELOCK_AUTO);
 
 			cnmTimerStartTimer(prAdapter,
 				&prMsduInfo->rLifetimeTimer,
@@ -3442,7 +3468,7 @@ void nicTxProcessTxDoneEvent(IN struct ADAPTER *prAdapter,
 
 		if (prTxDone->ucStatus == 0 &&
 			prMsduInfo->ucBssIndex < MAX_BSSID_NUM)
-			GET_CURRENT_SYSTIME(
+			GET_BOOT_SYSTIME(
 				&prTxCtrl->u4LastTxTime
 				[prMsduInfo->ucBssIndex]);
 	}
@@ -4326,9 +4352,9 @@ void nicTxSwTsoClearSkbQ(IN struct ADAPTER *prAdapter)
  */
 /*----------------------------------------------------------------------------*/
 void nicTxDirectStartCheckQTimer(IN struct ADAPTER
-				 *prAdapter)
+				 *prAdapter, uint8_t fgWait)
 {
-	mod_timer(&prAdapter->rTxDirectHifTimer, jiffies + 1);
+	mod_timer(&prAdapter->rTxDirectHifTimer, jiffies + !!fgWait);
 }
 
 void nicTxDirectClearSkbQ(IN struct ADAPTER *prAdapter)
@@ -4752,7 +4778,8 @@ static void nicTxDirectEnqueueStaPendQ(IN struct ADAPTER *prAdapter,
 	}
 
 	if (secIsProtectedBss(prAdapter, prBssInfo) &&
-	    (prMsduInfo->fgIs802_1x) && (prMsduInfo->fgIs802_1x_NonProtected)) {
+	    (prMsduInfo->fgIs802_1x) && (prMsduInfo->fgIs802_1x_NonProtected) &&
+	    (!prAdapter->fgIsPostponeTxEAPOLM3)) {
 		/* The EAPoL frame can't be blocked. */
 		DBGLOG(TX, TRACE, "Is EAPoL frame\n");
 	} else {
@@ -5001,7 +5028,7 @@ uint32_t nicTxDirectStartXmitMain(struct sk_buff
 					&prAdapter->rTxDirectHifQueue[ucHifTc],
 					(struct QUE_ENTRY *) prMsduInfo);
 			}
-			nicTxDirectStartCheckQTimer(prAdapter);
+			nicTxDirectStartCheckQTimer(prAdapter, TRUE);
 			return WLAN_STATUS_SUCCESS;
 		}
 
@@ -5057,7 +5084,7 @@ uint32_t nicTxDirectStartXmitMain(struct sk_buff
 						(struct QUE_ENTRY *)
 							prMsduInfo);
 				}
-				nicTxDirectStartCheckQTimer(prAdapter);
+				nicTxDirectStartCheckQTimer(prAdapter, TRUE);
 				return WLAN_STATUS_SUCCESS;
 			}
 
@@ -5353,7 +5380,7 @@ void nicTxResourceUpdate_v1(IN struct ADAPTER *prAdapter)
 	uint32_t u4share, u4remains;
 	struct WIFI_VAR *prWifiVar = &prAdapter->rWifiVar;
 	uint32_t *pau4TcPageCount;
-	uint8_t ucMaxTcNum = TC_NUM;
+	uint8_t ucMaxTcNum;
 #if QM_ADAPTIVE_TC_RESOURCE_CTRL
 	struct QUE_MGT *prQM = &prAdapter->rQM;
 #endif
@@ -5363,6 +5390,8 @@ void nicTxResourceUpdate_v1(IN struct ADAPTER *prAdapter)
 	ucMaxTcNum = TC4_INDEX + 1;
 	prTc->au4PseCtrlEnMap = BITS(TC0_INDEX, ucMaxTcNum-1);
 	prTc->au4PleCtrlEnMap = BITS(TC0_INDEX, ucMaxTcNum-1) & ~(1<<TC4_INDEX);
+#else
+	ucMaxTcNum = TC_NUM;
 #endif
 
 

@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   soc3_0.c
 *    \brief  Internal driver stack will export
 *    the required procedures here for GLUE Layer.
@@ -1372,7 +1373,7 @@ void soc3_0_Sw_interrupt_handler(struct ADAPTER *prAdapter)
 		  (CONN_INFRA_CFG_AP2WF_BUS_ADDR + 0xc8),
 		  value);
 
-#ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+#if (CFG_MTK_CONNSYS_DEDICATED_LOG_PATH == 1)
 	if (value & BIT(0))
 		fw_log_wifi_irq_handler();
 #endif

@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/mgmt/auth.c#1
  */
@@ -96,10 +97,20 @@ authComposeAuthFrameHeaderAndFF(IN struct ADAPTER *prAdapter,
 {
 	struct WLAN_AUTH_FRAME *prAuthFrame;
 	uint16_t u2FrameCtrl;
+
 #if (CFG_SUPPORT_SUPPLICANT_SME == 1)
+	struct BSS_INFO *prBssInfo = NULL;
+	uint8_t ucRoleIdx = 0;
 	struct CONNECTION_SETTINGS *prConnSettings;
+	struct P2P_CONNECTION_SETTINGS *prP2pConnSettings = NULL;
 
 	prConnSettings = aisGetConnSettings(prAdapter, ucBssIndex);
+	if (prStaRec) {
+		prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIndex);
+		ucRoleIdx = (uint8_t)prBssInfo->u4PrivateData;
+		prP2pConnSettings =
+			prAdapter->rWifiVar.prP2PConnSettings[ucRoleIdx];
+	}
 #endif
 
 	ASSERT(pucBuffer);
@@ -159,6 +170,12 @@ authComposeAuthFrameHeaderAndFF(IN struct ADAPTER *prAdapter,
 		kalMemCopy(prAuthFrame->aucAuthData,
 			prConnSettings->aucAuthData,
 			prConnSettings->ucAuthDataLen);
+	} else if ((prP2pConnSettings != NULL) &&
+		(prP2pConnSettings->ucAuthDataLen != 0) &&
+		prStaRec && IS_STA_IN_P2P(prStaRec)) {
+		kalMemCopy(prAuthFrame->aucAuthData,
+			prP2pConnSettings->aucAuthData,
+			prP2pConnSettings->ucAuthDataLen);
 	} else {
 		/* Fill the Authentication Transaction Sequence Number field. */
 		prAuthFrame->aucAuthData[0] = (uint8_t)
@@ -379,10 +396,19 @@ authSendAuthFrame(IN struct ADAPTER *prAdapter,
 	uint16_t u2PayloadLen;
 	uint16_t ucAuthAlgNum;
 	uint32_t i;
+
 #if (CFG_SUPPORT_SUPPLICANT_SME == 1)
 	struct CONNECTION_SETTINGS *prConnSettings;
+	struct P2P_CONNECTION_SETTINGS *prP2pConnSettings = NULL;
+	uint8_t ucRoleIdx = 0;
 
 	prConnSettings = aisGetConnSettings(prAdapter, ucBssIndex);
+	if (prStaRec) {
+		prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIndex);
+		ucRoleIdx = (uint8_t)prBssInfo->u4PrivateData;
+		prP2pConnSettings =
+			prAdapter->rWifiVar.prP2PConnSettings[ucRoleIdx];
+	}
 #endif
 	DBGLOG(SAA, LOUD,
 		"Send Auth Frame %d, Status Code = %d\n",
@@ -397,6 +423,15 @@ authSendAuthFrame(IN struct ADAPTER *prAdapter,
 			WLAN_MAC_MGMT_HEADER_LEN +
 			AUTH_ALGORITHM_NUM_FIELD_LEN +
 			+ prConnSettings->ucAuthDataLen);
+	} else if (prStaRec && IS_STA_IN_P2P(prStaRec) &&
+		(prP2pConnSettings->ucAuthDataLen != 0)) {
+		DBGLOG(SAA, INFO,
+			"prP2pConnSettings->ucAuthDataLen = %d\n",
+			prP2pConnSettings->ucAuthDataLen);
+		u2EstimatedFrameLen = (MAC_TX_RESERVED_FIELD +
+		       WLAN_MAC_MGMT_HEADER_LEN +
+		       AUTH_ALGORITHM_NUM_FIELD_LEN +
+		       prP2pConnSettings->ucAuthDataLen);
 	} else
 		u2EstimatedFrameLen = (MAC_TX_RESERVED_FIELD +
 		       WLAN_MAC_MGMT_HEADER_LEN +
@@ -497,13 +532,18 @@ authSendAuthFrame(IN struct ADAPTER *prAdapter,
 	/* Fill the length of auth frame body */
 #if (CFG_SUPPORT_SUPPLICANT_SME == 1)
 	if (prStaRec && !IS_STA_IN_P2P(prStaRec) &&
-		(prConnSettings->ucAuthDataLen != 0))
+		(prConnSettings->ucAuthDataLen != 0)) {
 		u2PayloadLen = (AUTH_ALGORITHM_NUM_FIELD_LEN +
 				prConnSettings->ucAuthDataLen);
-	else
+	} else if (prStaRec && IS_STA_IN_P2P(prStaRec) &&
+		(prP2pConnSettings->ucAuthDataLen != 0)) {
+		u2PayloadLen = (AUTH_ALGORITHM_NUM_FIELD_LEN +
+			prP2pConnSettings->ucAuthDataLen);
+	} else {
 		u2PayloadLen = (AUTH_ALGORITHM_NUM_FIELD_LEN +
 			AUTH_TRANSACTION_SEQENCE_NUM_FIELD_LEN +
 			STATUS_CODE_FIELD_LEN);
+	}
 #else
 	u2PayloadLen =
 	    (AUTH_ALGORITHM_NUM_FIELD_LEN +
@@ -688,7 +728,8 @@ uint32_t authCheckRxAuthFrameTransSeq(IN struct ADAPTER *prAdapter,
 		if (prBssInfo == NULL)
 			return WLAN_STATUS_SUCCESS;
 
-		if (prBssInfo->eCurrentOPMode == OP_MODE_INFRASTRUCTURE)
+		if ((prBssInfo->eCurrentOPMode == OP_MODE_INFRASTRUCTURE) ||
+			(prBssInfo->eCurrentOPMode == OP_MODE_P2P_DEVICE))
 			saaFsmRunEventRxAuth(prAdapter, prSwRfb);
 #if CFG_SUPPORT_AAA
 		else if (prBssInfo->eCurrentOPMode ==
@@ -1474,7 +1515,14 @@ authProcessRxAuthFrame(IN struct ADAPTER *prAdapter,
 #else
 	u2RxStatusCode = prAuthFrame->u2StatusCode;
 #endif
-	if (u2RxStatusCode != STATUS_CODE_RESERVED) {
+
+#if CFG_SAP_SUPPORT_WPA3_H2E
+	if ((u2RxStatusCode != STATUS_CODE_RESERVED) &&
+		(u2RxStatusCode != STATUS_CODE_SAE_HASH_TO_ELEMENT))
+#else
+	if (u2RxStatusCode != STATUS_CODE_RESERVED)
+#endif
+	{
 		DBGLOG(AAA, LOUD, "Invalid Status code %d\n", u2RxStatusCode);
 		return WLAN_STATUS_FAILURE;
 	}

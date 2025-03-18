@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /******************************************************************************
  *[File]             dbg_mt7902.c
  *[Version]          v1.0
@@ -9,11 +10,9 @@
  *[Author]
  *[Description]
  *    The program provides WIFI FALCON MAC Debug APIs
- *[Copyright]
- *    Copyright (C) 2015 MediaTek Incorporation. All Rights Reserved.
  ******************************************************************************/
 
-#if defined(MT7902)
+#if defined(MT7902) || defined(MT7926)
 /*******************************************************************************
  *                         C O M P I L E R   F L A G S
  *******************************************************************************
@@ -1488,4 +1487,4 @@ u_int8_t mt7902_show_debug_sop_info(struct ADAPTER *prAdapter,
 #endif /* (CFG_SUPPORT_DEBUG_SOP == 1)  */
 
 
-#endif /* defined(MT7902) */
+#endif /* defined(MT7902) || defined(MT7926) */

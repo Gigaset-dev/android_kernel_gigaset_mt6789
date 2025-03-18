@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+/* SPDX-License-Identifier: BSD-2-Clause */
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*! \file   adapter.h
  *  \brief  Definition of internal data structure for driver manipulation.
  *
@@ -77,6 +31,16 @@
  *                              C O N S T A N T S
  *******************************************************************************
  */
+
+#if CFG_SUPPORT_CSI
+#define CSI_RING_SIZE 1000
+#define CSI_MAX_DATA_COUNT 256
+#define CSI_MAX_RSVD1_COUNT 10
+
+#define CSI_H_max_Index 4               /* for 2x2 support*/
+#define CSI_MAX_RSVD2_COUNT 10
+#define Max_Stream_Bytes 3000
+#endif
 
 /*******************************************************************************
  *                             D A T A   T Y P E S
@@ -279,6 +243,7 @@ struct CONNECTION_SETTINGS {
 	struct OWE_INFO_T rOweInfo;
 #endif
 	struct RSNXE rRsnXE;
+	u_int8_t fgAuthOsenWithRSN;
 };
 
 struct BSS_INFO {
@@ -599,6 +564,20 @@ struct BSS_INFO {
 	enum ENUM_IFTYPE eIftype;
 
 	enum PARAM_POWER_MODE ePowerModeFromUser;
+
+#if (CFG_SUPPORT_AUTO_SCC == 1)
+	uint8_t fgGoStarted;
+#endif
+
+
+#if (CFG_SUPPORT_SOFTAP_WPA3 == 1)
+	u_int8_t fgEnableH2E;
+#endif
+
+#if CFG_SUPPORT_DUAL_WTBL_GTK_REKEY_OFFLOAD
+	/*Indicate driver's dual GTK key auto added by it itself*/
+	uint32_t u4DualGTKKeyIndex;
+#endif
 };
 
 /* Support AP Selection */
@@ -830,6 +809,7 @@ struct WIFI_VAR {
 	uint8_t ucP2pGoVht;
 	uint8_t ucP2pGcHt;
 	uint8_t ucP2pGcVht;
+	uint8_t ucDisP2pPs;
 
 	/* NIC capability from FW event*/
 	uint8_t ucHwNotSupportAC;
@@ -941,6 +921,14 @@ struct WIFI_VAR {
 	uint8_t ucChannelSwitchMode;
 	uint8_t ucNewChannelNumber;
 	uint8_t ucChannelSwitchCount;
+
+#if CFG_SUPPORT_P2P_CSA
+	uint8_t ucSecondaryOffset;
+	uint8_t ucNewChannelWidth;
+	uint8_t ucNewChannelS1;
+	uint8_t ucNewChannelS2;
+	uint8_t ucP2pCsaCount;
+#endif
 
 	uint32_t u4HifIstLoopCount;
 	uint32_t u4Rx2OsLoopCount;
@@ -1085,7 +1073,15 @@ struct WIFI_VAR {
 	bool	fgEnableWACIE;
 #endif
 	uint32_t u4ForceEdca;
+	uint32_t u4P2pGoWmmParamAC0;
+	uint32_t u4P2pGoWmmParamAC1;
+	uint32_t u4P2pGoWmmParamAC2;
+	uint32_t u4P2pGoWmmParamAC3;
 	uint8_t ucDisMixRegionSetup;
+
+#if (CFG_SUPPORT_P2PGO_ACS == 1)
+	uint8_t ucP2pGoACS;
+#endif
 };
 
 /* cnm_timer module */
@@ -1259,6 +1255,67 @@ struct PERF_MONITOR_T {
 	unsigned long ulTotalTxFailCount;
 };
 
+#if CFG_SUPPORT_CSI
+/*
+ * CSI_DATA_T is used for representing
+ * the CSI and other useful * information
+ * for application usage
+ */
+struct CSI_DATA_T {
+	uint8_t ucFwVer;
+	uint8_t ucBw;
+	bool bIsCck;
+	uint16_t u2DataCount;
+	int16_t ac2IData[CSI_MAX_DATA_COUNT];
+	int16_t ac2QData[CSI_MAX_DATA_COUNT];
+	uint8_t ucDbdcIdx;
+	int8_t cRssi;
+	uint8_t ucSNR;
+	uint64_t u8TimeStamp;
+	uint8_t ucDataBw;
+	uint8_t ucPrimaryChIdx;
+	uint8_t aucTA[MAC_ADDR_LEN];
+	uint32_t u4ExtraInfo;
+	uint8_t ucRxMode;
+	uint16_t u2RxRate;
+	int32_t ai4Rsvd1[CSI_MAX_RSVD1_COUNT];
+	int32_t au4Rsvd2[CSI_MAX_RSVD2_COUNT];
+	uint8_t ucRsvd1Cnt;
+	uint8_t ucRsvd2Cnt;
+	int32_t i4Rsvd3;
+	uint8_t ucRsvd4;
+	uint32_t Antenna_pattern;
+	uint32_t u4TRxIdx;
+};
+
+/*
+ * CSI_INFO_T is used to store the CSI
+ * settings and CSI event data
+ */
+struct CSI_INFO_T {
+	/* Variables for manipulate the CSI data in g_aucProcBuf */
+	bool bIncomplete;
+	int32_t u4CopiedDataSize;
+	int32_t u4RemainingDataSize;
+	wait_queue_head_t waitq;
+	/* Variable for recording the CSI function config */
+	uint8_t ucMode;
+	uint8_t ucValue1[CSI_CONFIG_ITEM_NUM];
+	uint8_t ucValue2[CSI_CONFIG_ITEM_NUM];
+	/* Variable for manipulating the CSI ring buffer */
+	struct CSI_DATA_T arCSIBuffer[CSI_RING_SIZE];
+	uint32_t u4CSIBufferHead;
+	uint32_t u4CSIBufferTail;
+	uint32_t u4CSIBufferUsed;
+	int16_t ai2TempIData[CSI_MAX_DATA_COUNT];
+	int16_t ai2TempQData[CSI_MAX_DATA_COUNT];
+	/*for usr to get the specific H(jw), 0 for all */
+	uint16_t Matrix_Get_Bit;
+	uint8_t byte_stream[Max_Stream_Bytes];/*send bytes to proc interfacel */
+};
+#endif
+
+
 /*
  * Major ADAPTER structure
  * Major data structure for driver operation
@@ -1382,6 +1439,8 @@ struct ADAPTER {
 	uint32_t u4StaPsBitmap;
 	struct QUE rBssAbsentQueue[MAX_BSSID_NUM + 1];
 	uint32_t u4BssAbsentBitmap;
+	struct QUE rStaPendQueue[CFG_STA_REC_NUM];
+	uint32_t u4StaPendBitmap;
 	/* TX Direct related : END */
 
 	struct QUE rPendingCmdQueue;
@@ -1615,6 +1674,7 @@ struct ADAPTER {
 
 #if defined(_HIF_USB)
 	struct TIMER rSerSyncTimer;
+	uint8_t ucSerNoAckCount;
 #endif	/* _HIF_USB */
 
 #endif	/* CFG_SUPPORT_SER */
@@ -1670,6 +1730,10 @@ struct ADAPTER {
 	uint32_t u4SetP2pMccTime;
 #endif /*CFG_SUPPORT_RX_DYNAMIC_MCC_PRIORITY*/
 
+#if CFG_SUPPORT_CSI
+	struct CSI_INFO_T rCSIInfo;
+#endif
+
 #if CFG_SUPPORT_GET_MCS_INFO
 	struct TIMER rRxMcsInfoTimer;
 	bool fgIsMcsInfoValid;
@@ -1691,6 +1755,10 @@ struct ADAPTER {
 	int32_t  i4RssiThreshold;
 #endif
 
+#if defined(_HIF_SDIO)
+	u_int8_t fgGetMailBoxRWAck;
+#endif
+bool fgIsPostponeTxEAPOLM3;
 };				/* end of _ADAPTER_T */
 
 /*******************************************************************************
@@ -1730,6 +1798,10 @@ struct ADAPTER {
 #define IS_BSS_APGO(_prBssInfo) \
 	(IS_BSS_P2P(_prBssInfo) && \
 	(_prBssInfo)->eCurrentOPMode == OP_MODE_ACCESS_POINT)
+
+#define IS_BSS_P2P_GC(_prBssInfo) \
+	(IS_BSS_P2P(_prBssInfo) && \
+	(_prBssInfo)->eCurrentOPMode == OP_MODE_INFRASTRUCTURE)
 
 #define SET_NET_ACTIVE(_prAdapter, _BssIndex) \
 	{(_prAdapter)->aprBssInfo[(_BssIndex)]->fgIsNetActive = TRUE; }

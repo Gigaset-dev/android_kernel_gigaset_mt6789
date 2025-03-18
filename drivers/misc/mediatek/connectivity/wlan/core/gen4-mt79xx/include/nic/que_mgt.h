@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/
 				MT6620_WIFI_DRIVER_V2_3/include/nic/que_mgt.h#2
@@ -1271,6 +1272,9 @@ void qmReleaseCHAtFinishedDhcp(struct ADAPTER *prAdapter,
 void qmHandleEventBaOffloadIndication(IN struct ADAPTER *prAdapter,
 			      IN struct WIFI_EVENT *prEvent);
 #endif
+
+void qmCheckRxEAPOLM3(IN struct ADAPTER *prAdapter,
+		IN struct SW_RFB *prSwRfb, uint8_t ucBssIndex);
 
 /*******************************************************************************
  *                              F U N C T I O N S

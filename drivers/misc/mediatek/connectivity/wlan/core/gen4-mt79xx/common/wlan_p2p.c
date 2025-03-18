@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/TRUNK/WiFi_P2P_Driver/common/wlan_p2p.c#8
  */
@@ -1579,7 +1580,7 @@ wlanoidSetP2pSupplicantVersion(IN struct ADAPTER *prAdapter,
 		IN uint32_t u4SetBufferLen,
 		OUT uint32_t *pu4SetInfoLen)
 {
-	uint32_t rResult = WLAN_STATUS_FAILURE;
+	uint32_t rResult;
 	uint8_t ucVersionNum;
 
 	do {

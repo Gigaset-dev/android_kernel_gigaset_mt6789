@@ -1,6 +1,6 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
 
 /*! \file   "rlm.h"
@@ -51,6 +51,11 @@
  *                  F U N C T I O N   D E C L A R A T I O N S
  ******************************************************************************
  */
+
+#if (CFG_SUPPORT_WIFI_6G == 1)
+void rlmUpdate6GOpInfo(struct ADAPTER *prAdapter,
+		struct BSS_INFO *prBssInfo);
+#endif
 
 void rlmBssInitForAP(struct ADAPTER *prAdapter, struct BSS_INFO *prBssInfo);
 

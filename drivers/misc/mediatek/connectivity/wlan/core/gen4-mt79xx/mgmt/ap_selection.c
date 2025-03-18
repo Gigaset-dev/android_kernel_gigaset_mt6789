@@ -1,6 +1,6 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
 
 #include "precomp.h"
@@ -21,6 +21,10 @@
 #define MINIMUM_RSSI_2G4                        -94
 /* Link speed 6Mbps need at least rssi -86dbm for 5G */
 #define MINIMUM_RSSI_5G                         -86
+#if (CFG_SUPPORT_WIFI_6G == 1)
+/* Link speed 6Mbps need at least rssi -86dbm for 6G */
+#define MINIMUM_RSSI_6G                         -86
+#endif
 
 /* level of rssi range on StatusBar */
 #define RSSI_MAX_LEVEL                          -55
@@ -136,10 +140,18 @@ struct WEIGHT_CONFIG gasMtkWeightConfig[ROAM_TYPE_NUM] = {
 	(BSS_FULL_SCORE - (prAdapter->rWifiVar.rScanInfo.u4ScanUpdateIdx - \
 	prBssDesc->u4UpdateIdx) * 25)))
 
+#if (CFG_SUPPORT_WIFI_6G == 1)
+#define CALCULATE_SCORE_BY_BAND(prAdapter, prBssDesc, cRssi, eRoamType) \
+	(gasMtkWeightConfig[eRoamType].ucBandWeight * \
+	((((prBssDesc->eBand == BAND_5G && prAdapter->fgEnable5GBand) || \
+	   (prBssDesc->eBand == BAND_6G && prAdapter->fgIsHwSupport6G)) && \
+	cRssi > -70) ? BSS_FULL_SCORE : 0))
+#else
 #define CALCULATE_SCORE_BY_BAND(prAdapter, prBssDesc, cRssi, eRoamType) \
 	(gasMtkWeightConfig[eRoamType].ucBandWeight * \
 	((prBssDesc->eBand == BAND_5G && prAdapter->fgEnable5GBand && \
 	cRssi > -70) ? BSS_FULL_SCORE : 0))
+#endif
 
 #define CALCULATE_SCORE_BY_STBC(prAdapter, prBssDesc, eRoamType) \
 	(gasMtkWeightConfig[eRoamType].ucStbcWeight * \
@@ -399,9 +411,15 @@ static u_int8_t scanNeedReplaceCandidate(struct ADAPTER *prAdapter,
 	}
 	/* 1.3 Hard connecting RSSI check */
 	if ((prCurrBss->eBand == BAND_5G && cCurrRssi < MINIMUM_RSSI_5G) ||
+#if (CFG_SUPPORT_WIFI_6G == 1)
+		(prCurrBss->eBand == BAND_6G && cCurrRssi < MINIMUM_RSSI_6G) ||
+#endif
 		(prCurrBss->eBand == BAND_2G4 && cCurrRssi < MINIMUM_RSSI_2G4))
 		return FALSE;
 	else if ((prCandBss->eBand == BAND_5G && cCandRssi < MINIMUM_RSSI_5G) ||
+#if (CFG_SUPPORT_WIFI_6G == 1)
+		(prCurrBss->eBand == BAND_6G && cCurrRssi < MINIMUM_RSSI_6G) ||
+#endif
 		(prCandBss->eBand == BAND_2G4 && cCandRssi < MINIMUM_RSSI_2G4))
 		return TRUE;
 
@@ -1065,6 +1083,7 @@ void scanGetCurrentEssChnlList(struct ADAPTER *prAdapter,
 	uint8_t ucBitNum = 0;
 	uint8_t ucChnlCount = 0;
 	uint8_t j = 0;
+	struct LINK_ENTRY *prLinkEntryEss = NULL;
 
 	if (!prConnSettings)  {
 		log_dbg(SCN, INFO, "No prConnSettings\n");
@@ -1099,10 +1118,8 @@ void scanGetCurrentEssChnlList(struct ADAPTER *prAdapter,
 		sizeof(struct ESS_CHNL_INFO));
 
 	while (!LINK_IS_EMPTY(prCurEssLink)) {
-		prBssDesc = LINK_PEEK_HEAD(prCurEssLink,
-			struct BSS_DESC, rLinkEntryEss[ucBssIndex]);
-		LINK_REMOVE_KNOWN_ENTRY(prCurEssLink,
-			&prBssDesc->rLinkEntryEss[ucBssIndex]);
+		LINK_REMOVE_HEAD(prCurEssLink, prLinkEntryEss,
+			struct LINK_ENTRY *);
 	}
 	LINK_FOR_EACH_ENTRY(prBssDesc, prBSSDescList, rLinkEntry,
 		struct BSS_DESC) {

@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 #include "precomp.h"
 
 uint32_t p2pCalculate_IEForAssocReq(IN struct ADAPTER *prAdapter,
@@ -56,6 +57,11 @@ uint32_t p2pCalculate_IEForAssocReq(IN struct ADAPTER *prAdapter,
 			u4RetValue += heRlmCalculateHeCapIELen(prAdapter,
 				 prStaRec->ucBssIndex, prStaRec);
 		}
+#if (CFG_SUPPORT_WIFI_6G == 1)
+		/* Add HE 6G Band Cap IE */
+		u4RetValue += (ELEM_HDR_LEN + ELEM_MAX_LEN_HE_6G_CAP);
+#endif
+
 #endif
 
 #if CFG_SUPPORT_MTK_SYNERGY
@@ -122,6 +128,10 @@ void p2pGenerate_IEForAssocReq(IN struct ADAPTER *prAdapter,
 #if CFG_SUPPORT_802_11AX
 		/* Add HE IE */
 		heRlmReqGenerateHeCapIE(prAdapter, prMsduInfo);
+#if (CFG_SUPPORT_WIFI_6G == 1)
+		/* Add HE 6G Band Cap IE */
+		heRlmReqGenerateHe6gBandCapIE(prAdapter, prMsduInfo);
+#endif
 #endif
 
 #if CFG_SUPPORT_MTK_SYNERGY

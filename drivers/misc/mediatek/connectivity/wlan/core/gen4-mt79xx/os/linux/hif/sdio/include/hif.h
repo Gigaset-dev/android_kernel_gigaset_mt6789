@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
 ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/os/linux/hif/sdio/include/hif.h#1
 */
@@ -424,6 +425,7 @@ void halPreSuspendCmd(IN struct ADAPTER *prAdapter);
 void halPreResumeCmd(IN struct ADAPTER *prAdapter);
 void glSdioSetState(struct GL_HIF_INFO *prHifInfo, enum sdio_state state);
 enum sdio_state glSdioGetState(struct GL_HIF_INFO *prHifInfo);
+bool halPreventFwOwnEn(IN u_int8_t fgEnable);
 
 /*******************************************************************************
 *                              F U N C T I O N S

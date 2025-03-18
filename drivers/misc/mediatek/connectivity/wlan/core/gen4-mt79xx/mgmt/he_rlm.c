@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
 ** Id: @(#) he_rlm.c@@
 */
@@ -109,6 +110,31 @@ static void heRlmFillHe6gBandCapIE(struct ADAPTER *prAdapter,
 *                              F U N C T I O N S
 ********************************************************************************
 */
+uint8_t heRlmMaxBwToHeBw(uint8_t ucMaxBw)
+{
+	uint8_t ucHeBw = HE_OP_CHANNEL_WIDTH_20;
+
+	switch (ucMaxBw) {
+	case MAX_BW_20MHZ:
+		ucHeBw = HE_OP_CHANNEL_WIDTH_20;
+		break;
+	case MAX_BW_40MHZ:
+		ucHeBw = HE_OP_CHANNEL_WIDTH_40;
+		break;
+	case MAX_BW_80MHZ:
+		ucHeBw = HE_OP_CHANNEL_WIDTH_80;
+		break;
+	case MAX_BW_160MHZ:
+	case MAX_BW_80_80_MHZ:
+		ucHeBw = HE_OP_CHANNEL_WIDTH_80P80_160;
+		break;
+	default:
+		break;
+	}
+
+	return ucHeBw;
+}
+
 uint32_t heRlmCalculateHeCapIELen(
 	struct ADAPTER *prAdapter,
 	uint8_t ucBssIndex,
@@ -119,6 +145,10 @@ uint32_t heRlmCalculateHeCapIELen(
 	uint32_t u4OverallLen = OFFSET_OF(struct _IE_HE_CAP_T, aucVarInfo[0]);
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIndex);
+	if (!prBssInfo) {
+		DBGLOG(RLM, ERROR, "prBssInfo is null\n");
+		return u4OverallLen;
+	}
 	ucMaxBw = cnmGetBssMaxBw(prAdapter, prBssInfo->ucBssIndex);
 
 	u4OverallLen += 4;
@@ -386,7 +416,7 @@ static void heRlmFillHeCapIE(
 	prHeCap->ucId = ELEM_ID_RESERVED;
 	prHeCap->ucExtId = ELEM_EXT_ID_HE_CAP;
 
-	ucMaxBw = cnmGetBssMaxBw(prAdapter, prBssInfo->ucBssIndex);
+	ucMaxBw = cnmGetBssBandBw(prAdapter, prBssInfo, prBssInfo->eBand);
 
 	/* MAC capabilities */
 	HE_RESET_MAC_CAP(prHeCap->ucHeMacCap);
@@ -405,6 +435,11 @@ static void heRlmFillHeCapIE(
 	else if (prBssInfo->eBand == BAND_5G)
 		HE_SET_MAC_CAP_MAX_AMPDU_LEN_EXP(prHeCap->ucHeMacCap,
 					   prChipInfo->uc5GHeCapMaxAmpduLenExp);
+#if (CFG_SUPPORT_WIFI_6G == 1)
+	else if (prBssInfo->eBand == BAND_6G)
+		HE_SET_MAC_CAP_MAX_AMPDU_LEN_EXP(prHeCap->ucHeMacCap,
+					   prChipInfo->uc5GHeCapMaxAmpduLenExp);
+#endif
 
 #if (CFG_SUPPORT_TWT == 1)
 	if (IS_FEATURE_ENABLED(prWifiVar->ucTWTRequester))
@@ -420,16 +455,15 @@ static void heRlmFillHeCapIE(
 	/* PHY capabilities */
 	HE_RESET_PHY_CAP(prHeCap->ucHePhyCap);
 
-	switch (prBssInfo->eBand) {
-	case BAND_2G4:
-		if (ucMaxBw >= MAX_BW_40MHZ)
+	if (prBssInfo->eBand == BAND_2G4) {
+		if (ucMaxBw >= MAX_BW_40MHZ && prBssInfo->fgAssoc40mBwAllowed)
 			HE_SET_PHY_CAP_CHAN_WIDTH_SET_BW40_2G(
 				prHeCap->ucHePhyCap);
-		break;
+	} else if ((prBssInfo->eBand == BAND_5G)
 #if (CFG_SUPPORT_WIFI_6G == 1)
-	case BAND_6G:
+		|| (prBssInfo->eBand == BAND_6G)
 #endif
-	case BAND_5G:
+	) {
 		if (ucMaxBw >= MAX_BW_40MHZ)
 			HE_SET_PHY_CAP_CHAN_WIDTH_SET_BW40_BW80_5G(
 				prHeCap->ucHePhyCap);
@@ -441,9 +475,6 @@ static void heRlmFillHeCapIE(
 		if (ucMaxBw >= MAX_BW_80_80_MHZ)
 			HE_SET_PHY_CAP_CHAN_WIDTH_SET_BW80P80_5G(
 				prHeCap->ucHePhyCap);
-		break;
-	default:
-		break;
 	}
 
 	if (IS_FEATURE_ENABLED(prWifiVar->ucRxLdpc) &&
@@ -628,7 +659,10 @@ static void heRlmFillHeOpIE(
 	struct MSDU_INFO *prMsduInfo)
 {
 	struct _IE_HE_OP_T *prHeOp;
-	uint32_t u4OverallLen = OFFSET_OF(struct _IE_HE_OP_T, aucVarInfo[0]);
+	uint32_t u4Offset = OFFSET_OF(struct _IE_HE_OP_T, aucVarInfo[0]);
+#if (CFG_SUPPORT_WIFI_6G == 1)
+	struct _6G_OPER_INFOR_T *pr6gOperInfor = NULL;
+#endif
 
 	ASSERT(prAdapter);
 	ASSERT(prBssInfo);
@@ -644,7 +678,24 @@ static void heRlmFillHeOpIE(
 	prHeOp->ucBssColorInfo = prBssInfo->ucBssColorInfo;
 	prHeOp->u2HeBasicMcsSet = CPU_TO_LE16(prBssInfo->u2HeBasicMcsSet);
 
-	prHeOp->ucLength= u4OverallLen - ELEM_HDR_LEN;
+#if (CFG_SUPPORT_WIFI_6G == 1)
+	if (IS_BSS_APGO(prBssInfo) &&
+		HE_IS_6G_OP_INFOR_PRESENT(prBssInfo->ucHeOpParams)) {
+
+		if (HE_IS_CO_HOSTED_BSS(prBssInfo->ucHeOpParams))
+			u4Offset += sizeof(uint8_t);
+
+		pr6gOperInfor = (struct _6G_OPER_INFOR_T *)
+			(((uint8_t *) prHeOp) + u4Offset);
+
+		kalMemCopy(pr6gOperInfor, &prBssInfo->r6gOperInfor,
+			sizeof(struct _6G_OPER_INFOR_T));
+
+		u4Offset += sizeof(struct _6G_OPER_INFOR_T);
+	}
+#endif
+
+	prHeOp->ucLength = u4Offset - ELEM_HDR_LEN;
 	prMsduInfo->u2FrameLength += IE_SIZE(prHeOp);
 }
 
@@ -1085,18 +1136,51 @@ void heRlmRecHeOperation(
 	else
 		prBssInfo->fgIsCoHostedBssPresent = FALSE;
 
-	if (prBssInfo->eBand == BAND_6G &&
-		HE_IS_VHT_OP_INFO_PRESENT(prHeOp->ucHeOpParams))
-		prBssInfo->fgIsHE6GPresent = FALSE;
-	else if (prBssInfo->eBand == BAND_6G) {
-		if (HE_IS_6G_OP_INFOR_PRESENT(prHeOp->ucHeOpParams))
+	if (prBssInfo->eBand == BAND_6G) {
+		if (HE_IS_VHT_OP_INFO_PRESENT(prHeOp->ucHeOpParams))
+			prBssInfo->fgIsHE6GPresent = FALSE;
+		else if (HE_IS_6G_OP_INFOR_PRESENT(prHeOp->ucHeOpParams))
 			prBssInfo->fgIsHE6GPresent = TRUE;
 		else
 			prBssInfo->fgIsHE6GPresent = FALSE;
-	} else
+	} else {
 		prBssInfo->fgIsHE6GPresent = FALSE;
+	}
 #endif
 }
+
+#if (CFG_SUPPORT_UPDATE_HE_BSS_COLOR_FROM_BEACON == 1)
+void heRlmRecBssColorChangeAnnouncement(
+	struct ADAPTER *prAdapter,
+	struct BSS_INFO *prBssInfo,
+	uint8_t *pucIE)
+{
+	struct _IE_COLOR_CHANGE_ANNOUNCEMENT_T *prColorChangeAnnouncement =
+		(struct _IE_COLOR_CHANGE_ANNOUNCEMENT_T *) pucIE;
+
+	if (IE_SIZE(prColorChangeAnnouncement)
+			< (sizeof(struct _IE_COLOR_CHANGE_ANNOUNCEMENT_T))) {
+		DBGLOG(SCN, WARN, "COLOR_CHANGE_ANNOUNCEMENT IE_LEN err(%d)!\n",
+			IE_LEN(prColorChangeAnnouncement));
+		return;
+	}
+
+	prBssInfo->ucColorAnnouncement = TRUE;
+
+	prBssInfo->ucColorSwitchCntdn =
+		prColorChangeAnnouncement->ucColorSwitchCntdn;
+	prBssInfo->ucNewBssColorInfo =
+		prColorChangeAnnouncement->ucNewBssColorInfo;
+
+
+	DBGLOG(RLM, LOUD,
+		"RlmBssColorChangeAnnouncement-ColorSwitchCntdn:0x%x,NewBssColorInfo:0x%x\n",
+		prBssInfo->ucColorSwitchCntdn,
+		prBssInfo->ucNewBssColorInfo
+	);
+
+}   /* end of heRlmRecBssColorChangeAnnouncement */
+#endif /* CFG_SUPPORT_UPDATE_HE_BSS_COLOR_FROM_BEACON */
 
 uint8_t heRlmUpdateSRParams(
 	struct BSS_INFO *prBssInfo,

@@ -1858,7 +1858,15 @@ void rsnGenerateRSNIE(IN struct ADAPTER *prAdapter,
 			} else  {
 				entry = rsnSearchPmkidEntry(prAdapter,
 					prStaRec->aucMacAddr, ucBssIndex);
+
+				if (prStaRec->ucAuthAlgNum ==
+						AUTH_ALGORITHM_NUM_SAE) {
+					DBGLOG(RSN, INFO,
+						"Do not apply PMKID in RSNIE if auth type is SAE");
+					entry = NULL;
+				}
 			}
+
 			/* Fill PMKID Count and List field */
 			if (entry) {
 				uint8_t *pmk = entry->rBssidInfo.arPMKID;
@@ -2056,6 +2064,11 @@ void rsnParserCheckForRSNCCMPPSK(struct ADAPTER *prAdapter,
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter,
 					  prStaRec->ucBssIndex);
+	if (prBssInfo == NULL) {
+		DBGLOG(RSN, WARN, "prBssInfo is %d NULL\n",
+			prStaRec->ucBssIndex);
+		return;
+	}
 	*pu2StatusCode = STATUS_CODE_INVALID_INFO_ELEMENT;
 	kalMemZero(&rRsnIe, sizeof(struct RSN_INFO));
 
@@ -2326,6 +2339,12 @@ struct PMKID_ENTRY *rsnSearchPmkidEntry(IN struct ADAPTER *prAdapter,
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter,
 		ucBssIndex);
+
+	if (prBssInfo == NULL) {
+		DBGLOG(RSN, ERROR, "prBssInfo [%d] is null!\n",
+			ucBssIndex);
+		return NULL;
+	}
 	cache = &prBssInfo->rPmkidCache;
 
 	LINK_FOR_EACH_ENTRY(entry, cache, rLinkEntry, struct PMKID_ENTRY) {
@@ -2409,7 +2428,12 @@ uint32_t rsnSetPmkid(IN struct ADAPTER *prAdapter,
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter,
 		prPmkid->ucBssIdx);
-	cache = &prBssInfo->rPmkidCache;
+	if (prBssInfo == NULL) {
+		DBGLOG(RSN, ERROR, "prBssInfo is %d null\n",
+			prPmkid->ucBssIdx);
+		return WLAN_STATUS_FAILURE;
+	}
+		cache = &prBssInfo->rPmkidCache;
 
 	entry = rsnSearchPmkidEntry(prAdapter, prPmkid->arBSSID,
 		prPmkid->ucBssIdx);
@@ -3166,7 +3190,11 @@ void rsnGenerateWSCIEForAssocRsp(struct ADAPTER *prAdapter,
 
 	DBGLOG(RSN, TRACE, "WPS: Building WPS IE for (Re)Association Response");
 	prP2pBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, prMsduInfo->ucBssIndex);
-
+	if (prP2pBssInfo == NULL) {
+		DBGLOG(RSN, ERROR, "prP2pBssInfo is %d Null\n",
+			prMsduInfo->ucBssIndex);
+		return;
+	}
 	if (prP2pBssInfo->eNetworkType != NETWORK_TYPE_P2P)
 		return;
 
@@ -3319,6 +3347,12 @@ uint8_t rsnApCheckSaQueryTimeout(IN struct ADAPTER
 
 		prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter,
 						  prStaRec->ucBssIndex);
+
+		if (prBssInfo == NULL) {
+			DBGLOG(RSN, INFO, "prBssInfo is %d NULL\n",
+				prStaRec->ucBssIndex);
+			return 0;
+		}
 
 		/* refer to p2pRoleFsmRunEventRxDeauthentication */
 		if (prBssInfo->eCurrentOPMode == OP_MODE_ACCESS_POINT) {

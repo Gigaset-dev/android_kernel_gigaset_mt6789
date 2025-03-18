@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/mgmt/swcr.c#1
  */
@@ -223,10 +224,10 @@ void dumpQueue(struct ADAPTER *prAdapter)
 	       prAdapter->rRxCtrl.rReceivedRfbList.u4NumElem);
 	DBGLOG(SW4, INFO, " rIndicatedRfbList %u\n",
 	       prAdapter->rRxCtrl.rIndicatedRfbList.u4NumElem);
-	DBGLOG(SW4, INFO, " ucNumIndPacket %u\n",
-	       prAdapter->rRxCtrl.ucNumIndPacket);
-	DBGLOG(SW4, INFO, " ucNumRetainedPacket %u\n",
-	       prAdapter->rRxCtrl.ucNumRetainedPacket);
+	DBGLOG(SW4, INFO, " u2NumIndPacket %u\n",
+	       prAdapter->rRxCtrl.u2NumIndPacket);
+	DBGLOG(SW4, INFO, " u2NumRetainedPacket %u\n",
+	       prAdapter->rRxCtrl.u2NumRetainedPacket);
 
 }
 
@@ -1216,7 +1217,8 @@ void swCrDebugInit(struct ADAPTER *prAdapter)
 
 	cnmTimerInitTimer(prAdapter, &g_rSwcrDebugTimer,
 			  (PFN_MGMT_TIMEOUT_FUNC) swCrDebugCheckTimeout,
-			  (unsigned long) NULL);
+			  (unsigned long) NULL,
+			  TIMER_WAKELOCK_AUTO);
 
 	if (g_u4SwcrDebugCheckTimeout)
 		swCrDebugCheckEnable(prAdapter, TRUE,

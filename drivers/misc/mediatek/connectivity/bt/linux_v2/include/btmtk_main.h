@@ -610,7 +610,7 @@ typedef int (*cif_dl_dma_ptr)(struct btmtk_dev *bdev, u8 *image,
 typedef void (*cif_dump_debug_sop_ptr)(struct btmtk_dev *bdev);
 typedef void (*cif_waker_notify_ptr)(struct btmtk_dev *bdev);
 typedef int (*cif_enter_standby_ptr)(void);
-
+typedef void (*cif_resetko_notify)(void *data);
 struct hif_hook_ptr {
 	cif_bt_init_ptr			init;
 	cif_bt_exit_ptr			exit;
@@ -637,6 +637,7 @@ struct hif_hook_ptr {
 	cif_dump_debug_sop_ptr		dump_debug_sop;
 	cif_waker_notify_ptr		waker_notify;
 	cif_enter_standby_ptr		enter_standby;
+	cif_resetko_notify			resetko_notify;
 };
 
 struct hci_snoop {

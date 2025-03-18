@@ -288,9 +288,13 @@ UINT32 wlanPollingCpupcr(UINT32 u4Times, UINT32 u4Sleep)
 #if defined(MT6631)
 	UINT32 u4Count;
 
-	for (u4Count = 0; u4Count < u4Times; u4Count++) {
-		DBGLOG(INIT, ERROR, "i:%d,cpupcr:%08x\n", u4Count, wmt_plat_read_cpupcr());
-		kalMsleep(u4Sleep);
+	if ((kalIsResetting() || kalIsResetTriggered())) {
+		DBGLOG(INIT, ERROR, "during chip reset, skip polling\n");
+	} else {
+		for (u4Count = 0; u4Count < u4Times; u4Count++) {
+			DBGLOG(INIT, ERROR, "i:%d,cpupcr:%08x\n", u4Count, wmt_plat_read_cpupcr());
+			kalMsleep(u4Sleep);
+		}
 	}
 #else
 	DBGLOG(INIT, ERROR, "This chip don't support polling cpupcr\n");

@@ -26,6 +26,8 @@
 #define CFM_DT_PROP_PINMUX		"pinmux"
 #define CFM_DT_PROP_MAPPING		"mapping"
 #define CFM_DT_PROP_LAA_PINMUX		"laa-pinmux"
+/* #gpio-cells will be defined in pio node of mtXXXX.dts */
+#define CFM_DT_PROP_GPIO_CELLS		"#gpio-cells"
 
 #define CFM_DT_PARTS_NOFEM		"nofem"
 

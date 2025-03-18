@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3
  *     /include/mgmt/cnm_timer.h#1
@@ -134,6 +135,10 @@ struct TIMER {
 /* The macro to get the current OS system time */
 #define GET_CURRENT_SYSTIME(_systime_p)	{ *(_systime_p) = kalGetTimeTick(); }
 
+/* monotonic time since boot, which also includes the time spent in suspend */
+#define GET_BOOT_SYSTIME(_systime_p) \
+	{ *(_systime_p) = (kalGetBootTime() / USEC_PER_MSEC); }
+
 /* The macro to copy the system time */
 #define COPY_SYSTIME(_destTime, _srcTime)	{(_destTime) = (_srcTime); }
 
@@ -201,12 +206,13 @@ static __KAL_INLINE__ int32_t timerPendingTimer(IN struct TIMER *prTimer)
 }
 
 static __KAL_INLINE__ void cnmTimerInitTimer(IN struct ADAPTER *prAdapter,
-					     IN struct TIMER *prTimer,
-					     IN PFN_MGMT_TIMEOUT_FUNC pfFunc,
-					     IN unsigned long ulDataPtr)
+			IN struct TIMER *prTimer,
+			IN PFN_MGMT_TIMEOUT_FUNC pfFunc,
+			IN unsigned long ulDataPtr,
+			IN enum ENUM_TIMER_WAKELOCK_TYPE_T eType)
 {
 	cnmTimerInitTimerOption(prAdapter, prTimer, pfFunc, ulDataPtr,
-		TIMER_WAKELOCK_AUTO);
+		eType);
 }
 
 #if CFG_WOW_SUPPORT

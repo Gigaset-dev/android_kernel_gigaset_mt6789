@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /******************************************************************************
 *[File]             hif_api.c
 *[Version]          v1.0
@@ -9,8 +10,6 @@
 *[Author]
 *[Description]
 *    The program provides USB HIF APIs
-*[Copyright]
-*    Copyright (C) 2015 MediaTek Incorporation. All Rights Reserved.
 ******************************************************************************/
 
 /*******************************************************************************
@@ -222,7 +221,10 @@ uint32_t halTxUSBSendCmd(IN struct GLUE_INFO *prGlueInfo, IN uint8_t ucTc, IN st
 	int ret;
 	struct TX_DESC_OPS_T *prTxDescOps;
 
-	if (!(prHifInfo->state == USB_STATE_LINK_UP ||
+	if (prCmdInfo->ucCID == CMD_ID_NIC_POWER_CTRL &&
+		prHifInfo->state == USB_STATE_WIFI_OFF) {
+		DBGLOG(HAL, INFO, "TX CMD_ID_NIC_POWER_CTRL\n");
+	} else if (!(prHifInfo->state == USB_STATE_LINK_UP ||
 		prHifInfo->state == USB_STATE_PRE_RESUME ||
 		prHifInfo->state == USB_STATE_PRE_SUSPEND)) {
 		DBGLOG(HAL, ERROR, "TX CMD CID[0x%X] invalid state %d!\n",
@@ -397,6 +399,8 @@ void halTxCancelAllSending(IN struct ADAPTER *prAdapter)
 	struct GLUE_INFO *prGlueInfo;
 	struct USB_REQ *prUsbReq, *prUsbReqNext;
 	struct GL_HIF_INFO *prHifInfo;
+	struct list_head rTempTxCmdSendingQ;
+	unsigned long flags;
 #if CFG_USB_TX_AGG
 	uint8_t ucTc;
 #endif
@@ -408,8 +412,14 @@ void halTxCancelAllSending(IN struct ADAPTER *prAdapter)
 
 	prGlueInfo = prAdapter->prGlueInfo;
 	prHifInfo = &prGlueInfo->rHifInfo;
+	INIT_LIST_HEAD(&rTempTxCmdSendingQ);
 
-	list_for_each_entry_safe(prUsbReq, prUsbReqNext, &prHifInfo->rTxCmdSendingQ, list) {
+	spin_lock_irqsave(&prHifInfo->rTxCmdQLock, flags);
+	list_splice_init(&prHifInfo->rTxCmdSendingQ, &rTempTxCmdSendingQ);
+	spin_unlock_irqrestore(&prHifInfo->rTxCmdQLock, flags);
+
+	list_for_each_entry_safe(prUsbReq, prUsbReqNext,
+				 &rTempTxCmdSendingQ, list) {
 		usb_kill_urb(prUsbReq->prUrb);
 	}
 
@@ -956,6 +966,8 @@ uint32_t halRxUSBReceiveEvent(IN struct ADAPTER *prAdapter, IN u_int8_t fgFillUr
 	int ret;
 
 	while (1) {
+		if (prAdapter->fgIsIntEnable == FALSE)
+			break;
 		prUsbReq = glUsbDequeueReq(prHifInfo, &prHifInfo->rRxEventFreeQ, &prHifInfo->rRxEventQLock);
 		if (prUsbReq == NULL)
 			return WLAN_STATUS_RESOURCES;
@@ -1148,6 +1160,8 @@ uint32_t halRxUSBReceiveData(IN struct ADAPTER *prAdapter)
 	prHifInfo = &prGlueInfo->rHifInfo;
 
 	while (1) {
+		if (prAdapter->fgIsIntEnable == FALSE)
+			break;
 		prUsbReq = glUsbDequeueReq(prHifInfo, &prHifInfo->rRxDataFreeQ, &prHifInfo->rRxDataQLock);
 		if (prUsbReq == NULL)
 			return WLAN_STATUS_RESOURCES;
@@ -1415,6 +1429,8 @@ void halEnableInterrupt(IN struct ADAPTER *prAdapter)
 	prGlueInfo = prAdapter->prGlueInfo;
 	prHifInfo = &prGlueInfo->rHifInfo;
 
+	prAdapter->fgIsIntEnable = TRUE;
+
 	halRxUSBReceiveData(prAdapter);
 	if (prHifInfo->eEventEpType != EVENT_EP_TYPE_DATA_EP)
 		halRxUSBReceiveEvent(prAdapter, TRUE);
@@ -1449,6 +1465,8 @@ void halDisableInterrupt(IN struct ADAPTER *prAdapter)
 	prGlueInfo = prAdapter->prGlueInfo;
 	prHifInfo = &prGlueInfo->rHifInfo;
 
+	prAdapter->fgIsIntEnable = FALSE;
+
 	usb_kill_anchored_urbs(&prHifInfo->rRxDataAnchor);
 	usb_kill_anchored_urbs(&prHifInfo->rRxEventAnchor);
 #if CFG_CHIP_RESET_SUPPORT
@@ -1459,7 +1477,6 @@ void halDisableInterrupt(IN struct ADAPTER *prAdapter)
 
 	if (!wlanIsChipNoAck(prAdapter))
 		glUdmaRxAggEnable(prGlueInfo, FALSE);
-	prAdapter->fgIsIntEnable = FALSE;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -2138,19 +2155,57 @@ void halTxCompleteTasklet(unsigned long data)
 	}
 }
 
+void halWaitSendingDataCompleted(struct GL_HIF_INFO *prHifInfo)
+{
+	uint8_t ucLoop;
+	uint8_t ucTc;
+	uint8_t fgCompleted = TRUE;
+
+	for (ucLoop = 0; ucLoop < MAX_POLLING_TX_DONE_LOOP; ucLoop++) {
+#if CFG_USB_TX_AGG
+		for (ucTc = 0; ucTc < USB_TC_NUM; ucTc++) {
+			if (!usb_anchor_empty(
+				    &prHifInfo->rTxDataAnchor[ucTc])) {
+				fgCompleted = FALSE;
+				break;
+			}
+		}
+#else
+		if (!usb_anchor_empty(&prHifInfo->rTxDataAnchor))
+			fgCompleted = FALSE;
+#endif
+		if (fgCompleted) {
+			DBGLOG(INIT, INFO,
+				"Sending Data Completed! Loop:%u\n", ucLoop);
+			return;
+		}
+
+		msleep(POLLING_TX_DONE_TIME_IN_MS);
+		fgCompleted = TRUE;
+	}
+
+	DBGLOG(INIT, ERROR, "Wait Sending Data Completed Failed!\n");
+}
+
 /* Hif power off wifi */
 uint32_t halHifPowerOffWifi(IN struct ADAPTER *prAdapter)
 {
 	uint32_t rStatus = WLAN_STATUS_SUCCESS;
+	struct GL_HIF_INFO *prHifInfo;
 
 	DBGLOG(INIT, INFO, "Power off Wi-Fi!\n");
+
+	prHifInfo = &prAdapter->prGlueInfo->rHifInfo;
+
+	if (glUsbGetState(prHifInfo) != USB_STATE_LINK_DOWN) {
+		glUsbSetState(prHifInfo, USB_STATE_WIFI_OFF);
+		halWaitSendingDataCompleted(&prAdapter->prGlueInfo->rHifInfo);
+	}
 
 	/* Power off Wi-Fi */
 	wlanSendNicPowerCtrlCmd(prAdapter, TRUE);
 
 	rStatus = wlanCheckWifiFunc(prAdapter, FALSE);
-
-	glUsbSetState(&prAdapter->prGlueInfo->rHifInfo, USB_STATE_WIFI_OFF);
 
 	nicDisableInterrupt(prAdapter);
 

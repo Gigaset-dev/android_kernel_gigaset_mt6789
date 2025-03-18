@@ -314,7 +314,7 @@ void statsParseARPInfo(struct sk_buff *skb,
 	case EVENT_RX:
 		GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
 		if (u2OpCode == ARP_PRO_REQ)
-			DBGLOG_LIMITED(RX, INFO,
+			DBGLOG_LIMITED(RX, TRACE,
 				"<RX> Arp Req From IP: " IPV4STR "\n",
 				IPV4TOSTR(&pucEthBody[ARP_SENDER_IP_OFFSET]));
 		else if (u2OpCode == ARP_PRO_RSP)
@@ -384,7 +384,7 @@ void statsParseUDPInfo(struct sk_buff *skb, uint8_t *pucEthBody,
 					break;
 				}
 			}
-			DBGLOG_LIMITED(RX, INFO,
+			DBGLOG_LIMITED(RX, TRACE,
 				"<RX> DHCP: Recv %s IPID 0x%02x, MsgType 0x%x, TransID 0x%04x\n",
 				buf, u2IpId, prBootp->aucOptions[6],
 				u4TransID);
@@ -422,7 +422,7 @@ void statsParseUDPInfo(struct sk_buff *skb, uint8_t *pucEthBody,
 				}
 			}
 
-			DBGLOG_LIMITED(TX, INFO,
+			DBGLOG_LIMITED(TX, TRACE,
 				"<TP> DHCP %s, XID[0x%08x] OPT[0x%08x] TYPE[%u], SeqNo: %d\n",
 				buf, u4Xid, u4Opt, prBootp->aucOptions[6],
 				GLUE_GET_PKT_SEQ_NO(skb));
@@ -435,11 +435,11 @@ void statsParseUDPInfo(struct sk_buff *skb, uint8_t *pucEthBody,
 			(pucBootp[0] << 8) | pucBootp[1];
 		if (eventType == EVENT_RX) {
 			GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
-			DBGLOG_LIMITED(RX, INFO,
+			DBGLOG_LIMITED(RX, TRACE,
 				"<RX> DNS: IPID 0x%02x, TransID 0x%04x\n",
 				u2IpId, u2TransId);
 		} else if (eventType == EVENT_TX) {
-			DBGLOG_LIMITED(TX, INFO,
+			DBGLOG_LIMITED(TX, TRACE,
 				"<TX> DNS: IPID[0x%02x] TransID[0x%04x] SeqNo[%d]\n",
 				u2IpId, u2TransId, GLUE_GET_PKT_SEQ_NO(skb));
 		}
@@ -477,12 +477,12 @@ void statsParseIPV4Info(struct sk_buff *skb,
 		switch (eventType) {
 		case EVENT_RX:
 			GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
-			DBGLOG_LIMITED(RX, INFO,
+			DBGLOG_LIMITED(RX, TRACE,
 				"<RX> ICMP: Type %d, Id BE 0x%04x, Seq BE 0x%04x\n",
 				ucIcmpType, u2IcmpId, u2IcmpSeq);
 			break;
 		case EVENT_TX:
-			DBGLOG_LIMITED(TX, INFO,
+			DBGLOG_LIMITED(TX, TRACE,
 				"<TX> ICMP: IPID[0x%04x] Type %d, Id 0x%04x, Seq BE 0x%04x, SeqNo: %d\n",
 				u2IpId, ucIcmpType, u2IcmpId, u2IcmpSeq,
 				GLUE_GET_PKT_SEQ_NO(skb));
@@ -603,11 +603,11 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
 				/*143 multi listener report v2*/
 				GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
 
-				DBGLOG_LIMITED(RX, INFO,
+				DBGLOG_LIMITED(RX, TRACE,
 					"<RX><IPv6> hop-by-hop packet\n");
 				break;
 			case EVENT_TX:
-				DBGLOG_LIMITED(TX, INFO,
+				DBGLOG_LIMITED(TX, TRACE,
 					"<TX><IPv6> hop-by-hop packet\n");
 				break;
 			}
@@ -625,26 +625,26 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
 
 				switch (ucICMPv6Type) {
 				case 0x85: /*ICMPV6_TYPE_ROUTER_SOLICITATION*/
-					DBGLOG_LIMITED(RX, INFO,
+					DBGLOG_LIMITED(RX, TRACE,
 				"<RX><IPv6> ICMPV6 Router Solicitation\n");
 					break;
 
 				case 0x86: /*ICMPV6_TYPE_ROUTER_ADVERTISEMENT*/
-					DBGLOG_LIMITED(RX, INFO,
+					DBGLOG_LIMITED(RX, TRACE,
 				"<RX><IPv6> ICMPV6 Router Advertisement\n");
 					break;
 
 				case ICMPV6_TYPE_NEIGHBOR_SOLICITATION:
-					DBGLOG_LIMITED(RX, INFO,
+					DBGLOG_LIMITED(RX, TRACE,
 				"<RX><IPv6> ICMPV6 Neighbor Solicitation\n");
 					break;
 
 				case ICMPV6_TYPE_NEIGHBOR_ADVERTISEMENT:
-					DBGLOG_LIMITED(RX, INFO,
+					DBGLOG_LIMITED(RX, TRACE,
 				"<RX><IPv6> ICMPV6 Neighbor Advertisement\n");
 					break;
 				default:
-					DBGLOG_LIMITED(RX, INFO,
+					DBGLOG_LIMITED(RX, TRACE,
 						"<RX><IPv6> ICMPV6 type=%u\n",
 						ucICMPv6Type);
 					break;
@@ -652,7 +652,7 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
 			}
 				break;
 			case EVENT_TX:
-				DBGLOG_LIMITED(TX, INFO,
+				DBGLOG_LIMITED(TX, TRACE,
 					"<TX><IPv6> ICMPV6 packet\n");
 				break;
 			}

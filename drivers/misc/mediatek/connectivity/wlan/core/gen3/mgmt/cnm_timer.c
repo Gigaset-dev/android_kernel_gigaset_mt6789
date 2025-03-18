@@ -430,7 +430,7 @@ VOID cnmTimerDoTimeOutCheck(IN P_ADAPTER_T prAdapter)
 		prTimer = LINK_ENTRY(prLinkEntry, TIMER_T, rLinkEntry);
 		index++;
 
-		if (!timerPendingTimer(prTimer) || (index > u4PrevTimerNum)) {
+		if (!timerPendingTimer(prTimer)) {
 			if (prPrevTimer)
 				DBGLOG(CNM, WARN, "FATAL ERROR, timer out of list, file %s, prAdapter: %p\n",
 				       prPrevTimer->pucFileAndLineForNextTimer, prAdapter);

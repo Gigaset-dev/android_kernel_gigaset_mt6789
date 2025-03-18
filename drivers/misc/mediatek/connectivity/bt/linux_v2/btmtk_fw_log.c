@@ -894,10 +894,6 @@ int btmtk_dispatch_fwlog(struct btmtk_dev *bdev, struct sk_buff *skb)
 		if (state != BTMTK_STATE_FW_DUMP) {
 			BTMTK_INFO("%s: FW dump begin", __func__);
 			DUMP_TIME_STAMP("FW_dump_start");
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-			if (rstNotifyWholeChipRstStatus(RST_MODULE_BT, RST_MODULE_STATE_DUMP_START, NULL) == RST_MODULE_RET_FAIL)
-				return 0;
-#endif
 			btmtk_hci_snoop_print_to_log();
 			/* Print too much log, it may cause kernel panic. */
 			dump_data_counter = 0;
@@ -935,9 +931,6 @@ int btmtk_dispatch_fwlog(struct btmtk_dev *bdev, struct sk_buff *skb)
 			DUMP_TIME_STAMP("FW_dump_end");
 			if (bmain_info->hif_hook.waker_notify)
 				bmain_info->hif_hook.waker_notify(bdev);
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-			rstNotifyWholeChipRstStatus(RST_MODULE_BT, RST_MODULE_STATE_DUMP_END, NULL);
-#endif
 		}
 
 		if (skb_queue_len(&g_fwlog->fwlog_queue) < FWLOG_ASSERT_QUEUE_COUNT) {

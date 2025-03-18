@@ -1517,6 +1517,55 @@ uint8_t scanSearchBssidInCurrentList(
 	return FALSE;
 }
 
+uint8_t scanRnrChnlIsNeedScan(struct ADAPTER *prAdapter,
+	uint8_t ucRnrChNum, uint8_t ucOpClass)
+{
+	struct SCAN_INFO *prScanInfo;
+	struct SCAN_PARAM *prScanParam;
+	uint32_t i;
+	struct RF_CHANNEL_INFO *prCnlInfo;
+	enum ENUM_BAND eRfBand;
+
+	ASSERT(prAdapter);
+
+	prScanInfo = &(prAdapter->rWifiVar.rScanInfo);
+	prScanParam = &(prScanInfo->rScanParam);
+	scanOpClassToBand(ucOpClass, (uint8_t *)&eRfBand);
+
+	/* sanity check */
+	if (ucRnrChNum == 0)
+		return FALSE;
+
+#if (CFG_SUPPORT_WIFI_6G == 1)
+	if (eRfBand == BAND_6G &&
+		!rlmDomainIsLegalChannel(prAdapter, eRfBand, ucRnrChNum)) {
+		return FALSE;
+	}
+#endif
+
+	/* Check RNR scan channel is in current scan list or not,
+	 * if RNR scan channel is 2.4G or 5G, ignore it. 6G needs
+	 * to send probe request with BSSID, so keep it.
+	 */
+	if (prScanParam->eScanChannel == SCAN_CHANNEL_SPECIFIED) {
+		for (i = 0; i < prScanParam->ucChannelListNum; i++) {
+			prCnlInfo = &prScanParam->arChnlInfoList[i];
+			if (eRfBand == prCnlInfo->eBand &&
+			    ucRnrChNum == prCnlInfo->ucChannelNum
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			    && eRfBand != BAND_6G
+#endif
+			) {
+				log_dbg(SCN, INFO,
+					"[ch:%d][band:%d] already in scan chnl list\n",
+						ucRnrChNum, eRfBand);
+				return FALSE;
+			}
+		}
+	}
+	return TRUE;
+}
+
 /*----------------------------------------------------------------------------*/
 /*!
  * @brief Allocate new NEIGHBOR_AP_INFO structure
@@ -1531,10 +1580,10 @@ void scanParsingRnrElement(IN struct ADAPTER *prAdapter,
 {
 	uint8_t *pucProfileIE, i = 0, j = 0, ucNewLink = FALSE;
 	uint8_t ucShortSsidOffset, ucBssParamOffset;
-	uint8_t ucBssidNum = 0, ucCurrentLength = 0, ucShortSsidNum = 0;
+	uint8_t ucBssidNum = 0, ucShortSsidNum = 0;
 	uint8_t ucRnrChNum, ucHasBssid = FALSE, ucScanEnable = TRUE;
 	uint8_t aucNullAddr[] = NULL_MAC_ADDR;
-	uint16_t u2TbttInfoCount, u2TbttInfoLength;
+	uint16_t u2TbttInfoCount, u2TbttInfoLength, u2CurrentLength = 0;
 	struct SCAN_INFO *prScanInfo;
 	struct NEIGHBOR_AP_INFO *prNeighborAPInfo = NULL;
 	struct NEIGHBOR_AP_INFO_FIELD *prNeighborAPInfoField;
@@ -1550,8 +1599,8 @@ void scanParsingRnrElement(IN struct ADAPTER *prAdapter,
 		return;
 	}
 
-	while (ucCurrentLength < IE_LEN(pucIE)) {
-		pucProfileIE = &IE_ID_EXT(pucIE) + ucCurrentLength;
+	while (u2CurrentLength < IE_LEN(pucIE)) {
+		pucProfileIE = &IE_ID_EXT(pucIE) + u2CurrentLength;
 		prNeighborAPInfoField =
 			(struct NEIGHBOR_AP_INFO_FIELD *)pucProfileIE;
 
@@ -1581,14 +1630,14 @@ void scanParsingRnrElement(IN struct ADAPTER *prAdapter,
 				prNeighborAPInfoField->ucOpClass);
 
 			/* Calculate next NeighborAPInfo's index if exists */
-			ucCurrentLength += 4 +
+			u2CurrentLength += 4 +
 				(u2TbttInfoCount * u2TbttInfoLength);
 			continue;
 		} else {
 			/* RNR bring 6G channel, but chip not support 6G */
 			/* Calculate next NeighborAPInfo's index if exists */
 #if !(CFG_SUPPORT_WIFI_6G)
-			ucCurrentLength += 4 +
+			u2CurrentLength += 4 +
 				(u2TbttInfoCount * u2TbttInfoLength);
 			continue;
 #endif
@@ -1664,7 +1713,8 @@ void scanParsingRnrElement(IN struct ADAPTER *prAdapter,
 		/* Get RNR channel */
 		ucRnrChNum =
 			scanGetRnrChannel(prAdapter, prNeighborAPInfoField);
-		if (ucRnrChNum == 0 || IS_6G_PSC_CHANNEL(ucRnrChNum)) {
+		if (!scanRnrChnlIsNeedScan(prAdapter, ucRnrChNum,
+				prNeighborAPInfoField->ucOpClass)) {
 			DBGLOG(SCN, TRACE, "Not handle RNR channel(%d)!\n",
 					ucRnrChNum);
 			if (ucNewLink) {
@@ -1672,7 +1722,7 @@ void scanParsingRnrElement(IN struct ADAPTER *prAdapter,
 				ucNewLink = FALSE;
 			}
 			/* Calculate next NeighborAPInfo's index if exists */
-			ucCurrentLength += 4 +
+			u2CurrentLength += 4 +
 				(u2TbttInfoCount * u2TbttInfoLength);
 			continue;
 		}
@@ -1795,7 +1845,7 @@ void scanParsingRnrElement(IN struct ADAPTER *prAdapter,
 						ucBssidNum);
 		}
 		/* Calculate next NeighborAPInfo's index if exists */
-		ucCurrentLength += 4 + (u2TbttInfoCount * u2TbttInfoLength);
+		u2CurrentLength += 4 + (u2TbttInfoCount * u2TbttInfoLength);
 
 		/* Only handle RnR with BSSID */
 		if (ucHasBssid && ucScanEnable) {
@@ -1904,6 +1954,7 @@ struct BSS_DESC *scanAddToBssDesc(IN struct ADAPTER *prAdapter,
 
 	uint8_t *pucIE;
 	uint16_t u2IELength;
+	int iPayloadOffset = 0;
 	uint16_t u2Offset = 0;
 
 	struct WLAN_BEACON_FRAME *prWlanBeaconFrame
@@ -1985,15 +2036,6 @@ struct BSS_DESC *scanAddToBssDesc(IN struct ADAPTER *prAdapter,
 	u2IELength = (prSwRfb->u2PacketLen - prSwRfb->u2HeaderLen) -
 	    (uint16_t) OFFSET_OF(struct WLAN_BEACON_FRAME_BODY, aucInfoElem[0]);
 
-	if (u2IELength > CFG_IE_BUFFER_SIZE) {
-		/* Give an warning msg when IE is going to be
-		 * truncated.
-		 */
-		DBGLOG(SCN, ERROR,
-			"IE len(%u) > Max IE buffer size(%u), truncate IE!\n",
-			u2IELength, CFG_IE_BUFFER_SIZE);
-		u2IELength = CFG_IE_BUFFER_SIZE;
-	}
 	kalMemZero(&rSsid, sizeof(rSsid));
 	IE_FOR_EACH(pucIE, u2IELength, u2Offset) {
 		/* Error handling for disorder IE that IE length is 0 */
@@ -2249,18 +2291,29 @@ struct BSS_DESC *scanAddToBssDesc(IN struct ADAPTER *prAdapter,
 		}
 	}
 
-	prBssDesc->u2RawLength = prSwRfb->u2PacketLen;
-	if (prBssDesc->u2RawLength > CFG_RAW_BUFFER_SIZE) {
-		prBssDesc->u2RawLength = CFG_RAW_BUFFER_SIZE;
-		/* Give an warning msg when content is going to be
-		 * truncated.
-		 */
-		DBGLOG(SCN, WARN,
-			"Pkt len(%u) > Max RAW buffer size(%u), truncate it!\n",
-			prSwRfb->u2PacketLen, CFG_RAW_BUFFER_SIZE);
+/* 2018/04/17 Frog: always update IE is not a good choice */
+	/* Because of not considering hidden BSS */
+	/* Hidden BSS Beacon v.s. hidden BSS probe response */
+	if ((prBssDesc->u2RawLength == 0) || (fgIsValidSsid)) {
+		prBssDesc->u2RawLength = prSwRfb->u2PacketLen;
+		if (prBssDesc->u2RawLength > CFG_RAW_BUFFER_SIZE) {
+			prBssDesc->u2RawLength = CFG_RAW_BUFFER_SIZE;
+			/* Give an warning msg when content is going to be
+			 * truncated.
+			 */
+			DBGLOG(SCN, WARN,
+				"Pkt len(%u) > Max RAW buffer size(%u), truncate it!\n",
+				prSwRfb->u2PacketLen, CFG_RAW_BUFFER_SIZE);
+		}
+		kalMemCopy(prBssDesc->aucRawBuf,
+			prWlanBeaconFrame, prBssDesc->u2RawLength);
+
+		iPayloadOffset = sortGetPayloadOffset(prAdapter,
+							prBssDesc->aucRawBuf);
+		prBssDesc->pucIeBuf = prBssDesc->aucRawBuf + iPayloadOffset;
+		prBssDesc->u2IELength = prBssDesc->u2RawLength - iPayloadOffset;
+		u2IELength = prBssDesc->u2IELength;
 	}
-	kalMemCopy(prBssDesc->aucRawBuf,
-		prWlanBeaconFrame, prBssDesc->u2RawLength);
 
 	/* NOTE: Keep consistency of Scan Record during JOIN process */
 	if (fgIsNewBssDesc == FALSE && prBssDesc->fgIsConnecting) {
@@ -2284,23 +2337,7 @@ struct BSS_DESC *scanAddToBssDesc(IN struct ADAPTER *prAdapter,
 
 	prBssDesc->u2CapInfo = u2CapInfo;
 
-	/* 4 <2.1> Retrieve IEs for later parsing */
-	u2IELength = (prSwRfb->u2PacketLen - prSwRfb->u2HeaderLen) -
-	    (uint16_t) OFFSET_OF(struct WLAN_BEACON_FRAME_BODY, aucInfoElem[0]);
-
-	if (u2IELength > CFG_IE_BUFFER_SIZE) {
-		u2IELength = CFG_IE_BUFFER_SIZE;
-		prBssDesc->fgIsIEOverflow = TRUE;
-	} else {
-		prBssDesc->fgIsIEOverflow = FALSE;
-	}
-	prBssDesc->u2IELength = u2IELength;
-
-	if (fgIsProbeResp || fgIsValidSsid) {
-		kalMemCopy(prBssDesc->aucIEBuf, prWlanBeaconFrame->aucInfoElem,
-		u2IELength);
-	}
-	/* 4 <2.2> reset prBssDesc variables in case that AP
+	/* 4 <2.1> reset prBssDesc variables in case that AP
 	 * has been reconfigured
 	 */
 #if (CFG_SUPPORT_HE_ER == 1)
@@ -4446,8 +4483,6 @@ void scanReportBss2Cfg80211(IN struct ADAPTER *prAdapter,
 							RCPI_TO_dBm(
 							prBssDesc->ucRCPI));
 					}
-					kalMemZero(prBssDesc->aucRawBuf,
-						CFG_RAW_BUFFER_SIZE);
 					prBssDesc->u2RawLength = 0;
 #if CFG_ENABLE_WIFI_DIRECT
 					prBssDesc->fgIsP2PReport = FALSE;
@@ -5213,4 +5248,32 @@ void scanParseHEOpIE(IN uint8_t *pucIE, IN struct BSS_DESC *prBssDesc,
 		prBssDesc->fgIsHE6GPresent = FALSE;
 }
 #endif
+
+void scanOpClassToBand(uint8_t ucOpClass, uint8_t *band)
+{
+	switch (ucOpClass) {
+	case 112:
+	case 115 ... 127:
+	case 128 ... 130:
+		*band = BAND_5G;
+		break;
+#if (CFG_SUPPORT_WIFI_6G == 1)
+	case 131 ... 137:
+		*band = BAND_6G;
+		break;
+#endif
+	case 81:
+	case 82:
+	case 83:
+	case 84:
+		*band = BAND_2G4;
+		break;
+	/* not support 60Ghz */
+	case 180:
+	default:
+		*band = BAND_NULL;
+		log_dbg(SCN, WARN, "OpClass%d illegal\n", ucOpClass);
+		break;
+	}
+}
 

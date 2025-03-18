@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/nic/nic.c#4
  */
@@ -1153,12 +1154,14 @@ uint32_t nicChannelNum2Freq(uint32_t u4ChannelNum, enum ENUM_BAND eBand)
 	uint32_t u4ChannelInMHz;
 
 #if (CFG_SUPPORT_WIFI_6G == 1)
-	if (eBand == BAND_6G)
-		u4ChannelInMHz = 5950 + u4ChannelNum * 5;
-	else if (u4ChannelNum >= 1 && u4ChannelNum <= 13)
-#else
-	if (u4ChannelNum >= 1 && u4ChannelNum <= 13)
+	if (eBand == BAND_6G) {
+		if (u4ChannelNum >= 1 && u4ChannelNum <= 233)
+			u4ChannelInMHz = 5950 + u4ChannelNum * 5;
+		else
+			u4ChannelInMHz = 0;
+	} else
 #endif
+	if (u4ChannelNum >= 1 && u4ChannelNum <= 13)
 		u4ChannelInMHz = 2412 + (u4ChannelNum - 1) * 5;
 	else if (u4ChannelNum == 14)
 		u4ChannelInMHz = 2484;
@@ -1357,6 +1360,56 @@ uint32_t nicFreq2ChannelNum(uint32_t u4FreqInKHz)
 	}
 }
 
+uint8_t nicGetS2(IN enum ENUM_BAND eBand,
+	IN uint8_t ucPrimaryChannel,
+	IN uint8_t ucBandwidth,
+	IN uint8_t ucS1)
+{
+#if (CFG_SUPPORT_WIFI_6G == 1)
+	if (eBand == BAND_6G)
+		return nicGetHe6gS2(ucPrimaryChannel, ucBandwidth, ucS1);
+#endif
+	return 0;
+}
+
+#if (CFG_SUPPORT_WIFI_6G == 1)
+uint8_t nicGetHe6gS2(IN uint8_t ucPrimaryChannel,
+	IN uint8_t ucBandwidth,
+	IN uint8_t ucS1)
+{
+	if (ucBandwidth == CW_160MHZ) {
+		if (ucPrimaryChannel > ucS1)
+			return ucS1 + 8;
+		else if (ucPrimaryChannel < ucS1)
+			return ucS1 - 8;
+	}
+
+	return 0;
+}
+#endif
+
+uint32_t nicGetS1Freq(IN enum ENUM_BAND eBand,
+	IN uint8_t ucPrimaryChannel,
+	IN uint8_t ucBandwidth)
+{
+	uint8_t ucS1;
+
+	ucS1 = nicGetS1(eBand, ucPrimaryChannel, ucBandwidth);
+
+	return nicChannelNum2Freq(ucS1, eBand) / 1000;
+}
+
+uint8_t nicGetS1(IN enum ENUM_BAND eBand,
+	IN uint8_t ucPrimaryChannel,
+	IN uint8_t ucBandwidth)
+{
+#if (CFG_SUPPORT_WIFI_6G == 1)
+	if (eBand == BAND_6G)
+		return nicGetHe6gS1(ucPrimaryChannel, ucBandwidth);
+#endif
+	return nicGetVhtS1(ucPrimaryChannel, ucBandwidth);
+}
+
 uint8_t nicGetVhtS1(uint8_t ucPrimaryChannel,
 		    uint8_t ucBandwidth)
 {
@@ -1459,6 +1512,13 @@ uint8_t nicGetHe6gS1(uint8_t ucPrimaryChannel,
 
 /* firmware command wrapper */
 /* NETWORK (WIFISYS) */
+
+uint32_t nicActivateNetwork(IN struct ADAPTER *prAdapter,
+	IN uint8_t ucBssIndex)
+{
+	return nicActivateNetworkEx(prAdapter, ucBssIndex, TRUE);
+}
+
 /*----------------------------------------------------------------------------*/
 /*!
  * @brief This utility function is used to activate WIFISYS for specified
@@ -1470,8 +1530,9 @@ uint8_t nicGetHe6gS1(uint8_t ucPrimaryChannel,
  * @retval -
  */
 /*----------------------------------------------------------------------------*/
-uint32_t nicActivateNetwork(IN struct ADAPTER *prAdapter,
-			    IN uint8_t ucBssIndex)
+uint32_t nicActivateNetworkEx(IN struct ADAPTER *prAdapter,
+			    IN uint8_t ucBssIndex,
+			    IN uint8_t fgReset40mBw)
 {
 	struct CMD_BSS_ACTIVATE_CTRL rCmdActivateCtrl;
 	struct BSS_INFO *prBssInfo;
@@ -1484,6 +1545,11 @@ uint32_t nicActivateNetwork(IN struct ADAPTER *prAdapter,
 	prAdapter->u4TxHangFlag |= BIT(ucBssIndex);
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIndex);
+
+	if (fgReset40mBw) {
+		prBssInfo->fg40mBwAllowed = FALSE;
+		prBssInfo->fgAssoc40mBwAllowed = FALSE;
+	}
 
 	prBssInfo->fg40mBwAllowed = FALSE;
 	prBssInfo->fgAssoc40mBwAllowed = FALSE;
@@ -1507,7 +1573,7 @@ uint32_t nicActivateNetwork(IN struct ADAPTER *prAdapter,
 	kalMemZero(&rCmdActivateCtrl.ucReserved,
 		   sizeof(rCmdActivateCtrl.ucReserved));
 
-#if 1				/* DBG */
+#if 1
 	DBGLOG(RSN, INFO,
 	       "[wlan index]=%d OwnMac%d=" MACSTR " BSSID=" MACSTR
 	       " BMCIndex = %d NetType=%d\n",
@@ -2172,6 +2238,49 @@ nicConfigPowerSaveProfile(IN struct ADAPTER *prAdapter,
 	return WLAN_STATUS_SUCCESS;
 } /* end of nicConfigPowerSaveProfile */
 
+#if (CONFIG_WIFI_ULTRA_RADIO_OFF_CTRL == 1)
+uint32_t
+nicRadioStateCtrl(IN struct ADAPTER *prAdapter,
+			  IN u_int8_t uPwrState)
+{
+	struct CMD_PM_STATE_CTRL rCmdSetPowerStateCtrl;
+	uint32_t rWlanStatus = WLAN_STATUS_SUCCESS;
+
+	DEBUGFUNC("nicRadioStateCtrl");
+	if (!prAdapter)
+		return WLAN_STATUS_FAILURE;
+
+	if (!(prAdapter->rWifiVar.ucRadioCtrlEn))
+		return WLAN_STATUS_NOT_SUPPORTED;
+
+	kalMemSet(&rCmdSetPowerStateCtrl, 0,
+		  sizeof(struct CMD_PM_STATE_CTRL));
+	/* uPwrState 1: radio off 2: radio on */
+	rCmdSetPowerStateCtrl.ucPmNumber = 7;
+	rCmdSetPowerStateCtrl.ucPmState = uPwrState;
+
+	DBGLOG(INIT, INFO,
+	       "PmNumber[%d] PmState[%d]\n",
+	       rCmdSetPowerStateCtrl.ucPmNumber,
+	       rCmdSetPowerStateCtrl.ucPmState);
+
+	rWlanStatus = wlanSendSetQueryExtCmd(prAdapter,
+			     CMD_ID_LAYER_0_EXT_MAGIC_NUM,
+			     EXT_CMD_ID_PM_STATE_CTRL,
+			     TRUE, /* Query Bit: True->write False->read */
+			     TRUE,
+			     TRUE,
+			     NULL, /* No Tx done function wait until fw ack */
+			     nicOidCmdTimeoutCommon,
+			     sizeof(struct CMD_PM_STATE_CTRL),
+			     (uint8_t *) (&rCmdSetPowerStateCtrl), NULL,
+			     0);
+
+	return rWlanStatus;
+
+} /* end of nicRadioStateCtrl */
+#endif
+
 uint32_t
 nicConfigProcSetCamCfgWrite(IN struct ADAPTER *prAdapter,
 	IN u_int8_t enabled, IN uint8_t ucBssIndex)
@@ -2644,19 +2753,16 @@ nicUpdateBeaconIETemplate(IN struct ADAPTER *prAdapter,
 		return WLAN_STATUS_INVALID_DATA;
 
 	if (eIeUpdMethod == IE_UPD_METHOD_UPDATE_RANDOM
-	    || eIeUpdMethod == IE_UPD_METHOD_UPDATE_ALL) {
+	    || eIeUpdMethod == IE_UPD_METHOD_UPDATE_ALL
+#if CFG_SUPPORT_P2P_GO_OFFLOAD_PROBE_RSP
+		|| eIeUpdMethod == IE_UPD_METHOD_UPDATE_PROBE_RSP
+#endif
+		|| eIeUpdMethod == IE_UPD_METHOD_UNSOL_PROBE_RSP) {
 		u2CmdBufLen = OFFSET_OF(struct CMD_BEACON_TEMPLATE_UPDATE,
 					aucIE) + u2IELen;
 	} else if (eIeUpdMethod == IE_UPD_METHOD_DELETE_ALL) {
 		u2CmdBufLen = OFFSET_OF(struct CMD_BEACON_TEMPLATE_UPDATE,
 					u2IELen);
-#if CFG_SUPPORT_P2P_GO_OFFLOAD_PROBE_RSP
-	} else if (eIeUpdMethod == IE_UPD_METHOD_UPDATE_PROBE_RSP) {
-		u2CmdBufLen = OFFSET_OF(struct CMD_BEACON_TEMPLATE_UPDATE,
-					aucIE) + u2IELen;
-		DBGLOG(NIC, INFO,
-		       "update for probe response offload to firmware\n");
-#endif
 	} else {
 		DBGLOG(INIT, ERROR, "Unknown IeUpdMethod.\n");
 		return WLAN_STATUS_FAILURE;
@@ -4452,7 +4558,7 @@ void nicUpdateRSSI(IN struct ADAPTER *prAdapter,
 			prAdapter->rLinkQuality.cLinkQuality = cLinkQuality;
 			/* indicate to glue layer */
 			kalUpdateRSSI(prAdapter->prGlueInfo,
-				      KAL_NETWORK_TYPE_AIS_INDEX,
+				      ucBssIndex,
 				      prAdapter->rLinkQuality.cRssi,
 				      prAdapter->rLinkQuality.cLinkQuality);
 		}
@@ -4467,7 +4573,7 @@ void nicUpdateRSSI(IN struct ADAPTER *prAdapter,
 		prAdapter->rP2pLinkQuality.cLinkQuality = cLinkQuality;
 
 		kalUpdateRSSI(prAdapter->prGlueInfo,
-			      KAL_NETWORK_TYPE_P2P_INDEX, cRssi, cLinkQuality);
+			      ucBssIndex, cRssi, cLinkQuality);
 		break;
 #endif
 	default:
@@ -4897,7 +5003,8 @@ void nicSerInit(IN struct ADAPTER *prAdapter, IN const u_int8_t bAtResetFlow)
 			cnmTimerInitTimer(prAdapter,
 					  &rSerSyncTimer,
 				     (PFN_MGMT_TIMEOUT_FUNC) nicSerTimerHandler,
-					  (unsigned long) NULL);
+					  (unsigned long) NULL,
+					  TIMER_WAKELOCK_NONE);
 		}
 
 		cnmTimerStartTimer(prAdapter,
@@ -4984,3 +5091,53 @@ void nicUpdateWakeupStatistics(IN struct ADAPTER *prAdapter,
 }
 #endif /* fos_change end */
 
+#if CFG_SUPPORT_NAN
+/*----------------------------------------------------------------------------*/
+/*!
+ * @brief This function is called to update dfs proxy mode to
+ *        firmware domain
+ *
+ * @param prAdapter      Pointer to Adapter Data Structure
+ *        ptrDfspCfg     Pointer to DFS proxy related config setting
+ * @return none
+ */
+/*----------------------------------------------------------------------------*/
+uint32_t nicUpdateDfspConfig(struct ADAPTER *prAdapter,
+	struct CMD_DFSP_CONFIG *ptrDfspCfg)
+{
+	uint32_t rStatus = WLAN_STATUS_FAILURE;
+	struct CMD_DFSP_CONFIG rCmdDfspConfig = {0};
+
+	if (prAdapter == NULL || ptrDfspCfg == NULL)
+		return rStatus;
+
+	kalMemZero(&rCmdDfspConfig, sizeof(rCmdDfspConfig));
+
+	rCmdDfspConfig.flags = ptrDfspCfg->flags;
+	COPY_MAC_ADDR(rCmdDfspConfig.mon_bssid, ptrDfspCfg->mon_bssid);
+	rCmdDfspConfig.mon_chan = ptrDfspCfg->mon_chan;
+	rCmdDfspConfig.version = ptrDfspCfg->version;
+	rCmdDfspConfig.length = ptrDfspCfg->length;
+	rCmdDfspConfig.max_bcn_miss_duration =
+		ptrDfspCfg->max_bcn_miss_duration;
+	/* Default 1s for DFS AP BTO */
+	if (rCmdDfspConfig.max_bcn_miss_duration == 0)
+		rCmdDfspConfig.max_bcn_miss_duration = 1000;
+
+	rCmdDfspConfig.max_bcn_miss_af_duration =
+		ptrDfspCfg->max_bcn_miss_af_duration;
+	rCmdDfspConfig.mcsp_ttl = ptrDfspCfg->mcsp_ttl;
+	rCmdDfspConfig.bcsa_cnt = ptrDfspCfg->bcsa_cnt;
+	rCmdDfspConfig.max_empty_aw = ptrDfspCfg->max_empty_aw;
+
+	rStatus = wlanSendSetQueryCmd(prAdapter,
+				   CMD_ID_DFSP_CONFIG,
+				   TRUE,
+				   FALSE,
+				   FALSE, NULL, nicCmdTimeoutCommon,
+				   sizeof(struct CMD_DFSP_CONFIG),
+				   (uint8_t *) &rCmdDfspConfig, NULL, 0);
+
+	return rStatus;
+}
+#endif

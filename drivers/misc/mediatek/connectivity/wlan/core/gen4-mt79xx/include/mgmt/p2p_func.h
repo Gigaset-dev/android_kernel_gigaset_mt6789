@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 #ifndef _P2P_FUNC_H
 #define _P2P_FUNC_H
 
@@ -173,6 +174,10 @@ void p2pFuncRecordCacStartBootTime(void);
 uint32_t p2pFuncGetCacRemainingTime(void);
 #endif
 
+uint8_t p2pFuncGetCsaBssIndex(void);
+
+void p2pFuncSetCsaBssIndex(uint8_t ucBssIdx);
+
 void p2pFuncSetChannel(IN struct ADAPTER *prAdapter,
 		IN uint8_t ucRoleIdx,
 		IN struct RF_CHANNEL_INFO *prRfChannelInfo);
@@ -206,7 +211,8 @@ p2pFuncAssocRespUpdate(IN struct ADAPTER *prAdapter,
 uint32_t
 p2pFuncProbeRespUpdate(IN struct ADAPTER *prAdapter,
 		IN struct BSS_INFO *prP2pBssInfo,
-		IN uint8_t *ProbeRespIE, IN uint32_t u4ProbeRespLen);
+		IN uint8_t *ProbeRespIE, IN uint32_t u4ProbeRespLen,
+		IN enum ENUM_IE_UPD_METHOD eMethod);
 #endif
 
 u_int8_t
@@ -240,6 +246,8 @@ void p2pFuncValidateRxActionFrame(IN struct ADAPTER *prAdapter,
 		IN u_int8_t fgIsDevInterface, IN uint8_t ucRoleIdx);
 
 u_int8_t p2pFuncIsAPMode(IN struct P2P_CONNECTION_SETTINGS *prP2pConnSettings);
+
+u_int8_t p2pFuncIsDualAPMode(struct ADAPTER *prAdapter);
 
 void
 p2pFuncParseBeaconContent(IN struct ADAPTER *prAdapter,
@@ -395,7 +403,8 @@ uint8_t p2pFunGetAcsBestCh(IN struct ADAPTER *prAdapter,
 		IN enum ENUM_MAX_BANDWIDTH_SETTING eChnlBw,
 		IN uint32_t u4LteSafeChnMask_2G,
 		IN uint32_t u4LteSafeChnMask_5G_1,
-		IN uint32_t u4LteSafeChnMask_5G_2);
+		IN uint32_t u4LteSafeChnMask_5G_2,
+		IN uint32_t u4LteSafeChnMask_6G);
 
 #if (CFG_SUPPORT_P2PGO_ACS == 1 ||\
 	CFG_SUPPORT_P2P_CSA_ACS == 1)
@@ -405,6 +414,7 @@ void p2pFunGetAcsBestChList(IN struct ADAPTER *prAdapter,
 		IN uint32_t u4LteSafeChnMask_2G,
 		IN uint32_t u4LteSafeChnMask_5G_1,
 		IN uint32_t u4LteSafeChnMask_5G_2,
+		IN uint32_t u4LteSafeChnMask_6G,
 		OUT uint8_t *pucSortChannelNumber,
 		OUT struct RF_CHANNEL_INFO *paucSortChannelList);
 #endif

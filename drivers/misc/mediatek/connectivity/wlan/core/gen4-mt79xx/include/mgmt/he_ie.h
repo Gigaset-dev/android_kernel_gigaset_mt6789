@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 #ifndef _HE_IE_H
 #define _HE_IE_H
 
@@ -17,6 +18,8 @@
 #define ELEM_EXT_ID_MU_EDCA_PARAM        38
 /* Spatial Reuse Parameter Set element */
 #define ELEM_EXT_ID_SR_PARAM             39
+/* BSS Color Change Announcement */
+#define ELEM_EXT_ID_BSS_COLOR_CHANGE     42
 
 #if (CFG_SUPPORT_WIFI_6G == 1)
 /* HE 6G Band Capabilities */
@@ -283,6 +286,7 @@
 /* HE Operation element - BSS Color Information */
 #define HE_OP_BSSCOLOR_BSS_COLOR_MASK                   BITS(0, 5)
 #define HE_OP_BSSCOLOR_BSS_COLOR_SHFT                   0
+#define HE_OP_BSSCOLOR_PARTIAL_BSS_COLOR                BIT(6)
 #define HE_OP_BSSCOLOR_PARTIAL_BSS_COLOR_SHFT           6
 #define HE_OP_BSSCOLOR_BSS_COLOR_DISABLE                BIT(7)
 #define HE_OP_BSSCOLOR_BSS_COLOR_DISABLE_SHFT           7
@@ -666,6 +670,9 @@ enum ENUM_HEBA_TYPE {
 	((_aucHeOpParams[2] & HE_OP_PARAM2_6G_OP_INFOR_PRESENT) \
 	== HE_OP_PARAM2_6G_OP_INFOR_PRESENT)
 
+#define HE_SET_6G_OP_INFOR_PRESENT(_aucHeOpParams) \
+	(_aucHeOpParams[2] |= HE_OP_PARAM2_6G_OP_INFOR_PRESENT)
+
 #define HE_IS_HTC_HE_VARIANT(_u4HTC) \
 	(_u4HTC & HTC_HE_VARIANT == HTC_HE_VARIANT)
 #define HE_SET_HTC_HE_VARIANT(_u4HTC) \
@@ -797,6 +804,14 @@ struct _IE_HE_OP_T {
 	u_int8_t  ucBssColorInfo;
 	u_int16_t u2HeBasicMcsSet;
 	u_int8_t  aucVarInfo[0];
+} __KAL_ATTRIB_PACKED__;
+
+struct _IE_COLOR_CHANGE_ANNOUNCEMENT_T {
+	u_int8_t  ucId;
+	u_int8_t  ucLength;
+	u_int8_t  ucExtId;
+	u_int8_t  ucColorSwitchCntdn;
+	u_int8_t  ucNewBssColorInfo;
 } __KAL_ATTRIB_PACKED__;
 
 #if (CFG_SUPPORT_WIFI_6G == 1)

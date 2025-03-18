@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/TRUNK/WiFi_P2P_Driver/include/nic/p2p.h#3
  */
@@ -77,6 +78,9 @@
 
 #define AP_DEFAULT_CHANNEL_2G     6
 #define AP_DEFAULT_CHANNEL_5G     36
+#if (CFG_SUPPORT_WIFI_6G == 1)
+#define AP_DEFAULT_CHANNEL_6G     5
+#endif
 
 /******************************************************************************
  *                                 M A C R O S
@@ -201,7 +205,13 @@ struct P2P_SCAN_REQ_INFO {
 	uint8_t ucSsidNum;
 	enum ENUM_SCAN_REASON eScanReason;
 	/* Currently we can only take one SSID scan request */
-	struct P2P_SSID_STRUCT arSsidStruct[SCN_SSID_MAX_NUM];
+	struct P2P_SSID_STRUCT arSsidStruct[CFG_SCAN_SSID_MAX_NUM];
+};
+
+enum P2P_AUTH_POLICY {
+	P2P_AUTH_POLICY_NONE = 0,
+	P2P_AUTH_POLICY_RESET = 1,
+	P2P_AUTH_POLICY_IGNORE = 2,
 };
 
 enum P2P_VENDOR_ACS_HW_MODE {
@@ -223,8 +233,12 @@ struct P2P_ACS_REQ_INFO {
 	uint32_t u4LteSafeChnMask_2G;
 	uint32_t u4LteSafeChnMask_5G_1;
 	uint32_t u4LteSafeChnMask_5G_2;
+	uint32_t u4LteSafeChnMask_6G;
+	u_int8_t fgIsAis;
 
 	/* output only */
+	uint8_t ucBand;
+	enum ENUM_BAND eBand;
 	uint8_t ucPrimaryCh;
 	uint8_t ucSecondCh;
 	uint8_t ucCenterFreqS1;
@@ -347,6 +361,16 @@ struct P2P_SPECIFIC_BSS_INFO {
 
 	uint16_t u2RsnIeLen;
 	uint8_t aucRsnIeBuffer[ELEM_HDR_LEN + ELEM_MAX_LEN_RSN];
+
+#if (CFG_SAP_SUPPORT_WPA3_H2E == 1)
+	uint16_t u2RsnxIeLen;
+	uint8_t aucRsnxIeBuffer[ELEM_HDR_LEN + ELEM_MAX_LEN_RSN];
+#endif
+
+#if CFG_SUPPORT_SOFTAP_OWE
+	uint16_t u2OweIeLen;
+	uint8_t aucOweIeBuffer[ELEM_HDR_LEN + ELEM_MAX_LEN_WPA];
+#endif
 };
 
 struct P2P_QUEUED_ACTION_FRAME {

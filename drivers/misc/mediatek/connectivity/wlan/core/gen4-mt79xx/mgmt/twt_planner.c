@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2017 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   "twt_planner.c"
 *   \brief  TWT Planner to determine TWT negotiation policy
 */
@@ -1063,8 +1064,7 @@ void twtPlannerSetParams(
 #endif
 
 	/* For COEX concern, suppose only 5G is allowed */
-	if ((prAdapter->rWifiVar.ucTWTStaBandBitmap & prBssInfo->eBand)
-		!= prBssInfo->eBand) {
+	if (!(prAdapter->rWifiVar.ucTWTStaBandBitmap & BIT(prBssInfo->eBand))) {
 		DBGLOG(TWT_PLANNER, ERROR,
 			"TWT BAND support bitmaps(%u)!=%u\n",
 			prAdapter->rWifiVar.ucTWTStaBandBitmap,

@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/mgmt/rlm_obss.c#2
  */
@@ -81,7 +82,8 @@ void rlmObssInit(struct ADAPTER *prAdapter)
 
 		cnmTimerInitTimer(prAdapter, &prBssInfo->rObssScanTimer,
 				  (PFN_MGMT_TIMEOUT_FUNC) rlmObssScanTimeout,
-				  (unsigned long) prBssInfo);
+				  (unsigned long) prBssInfo,
+				  TIMER_WAKELOCK_AUTO);
 	}
 }
 
@@ -336,7 +338,7 @@ void rlmObssTriggerScan(struct ADAPTER *prAdapter, struct BSS_INFO *prBssInfo)
 	 */
 	kalMemZero(prScanReqMsg, sizeof(struct MSG_SCN_SCAN_REQ_V2));
 	prScanReqMsg->rMsgHdr.eMsgId = MID_RLM_SCN_SCAN_REQ_V2;
-	prScanReqMsg->ucSeqNum = 0x33;
+	prScanReqMsg->ucSeqNum = OBSS_SCAN_SEQ_NUM;
 	prScanReqMsg->ucBssIndex = prBssInfo->ucBssIndex;
 	prScanReqMsg->eScanType = SCAN_TYPE_ACTIVE_SCAN;
 	prScanReqMsg->ucSSIDType = SCAN_REQ_SSID_WILDCARD;
@@ -349,4 +351,56 @@ void rlmObssTriggerScan(struct ADAPTER *prAdapter, struct BSS_INFO *prBssInfo)
 
 	DBGLOG(RLM, INFO, "Timeout to trigger OBSS scan (NetIdx=%d)!!\n",
 	       prBssInfo->ucBssIndex);
+}
+
+void rlmObssAbortScan(struct ADAPTER *prAdapter, uint8_t ucBssIndex)
+{
+	struct BSS_INFO *prBssInfo = NULL;
+	struct MSG_SCN_SCAN_CANCEL *prScanCancelMsg;
+
+	if (!prAdapter) {
+		DBGLOG(RLM, ERROR, "prAdapter == NULL\n");
+		return;
+	}
+
+	if (ucBssIndex >= prAdapter->ucHwBssIdNum) {
+		DBGLOG(RLM, ERROR,
+			"ucBssIndex %d >= ucHwBssIdNum %d\n",
+			ucBssIndex, prAdapter->ucHwBssIdNum);
+		return;
+	}
+
+	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter,
+			ucBssIndex);
+
+	if (!prBssInfo) {
+		DBGLOG(RLM, ERROR, "prBssInfo == NULL, ucBssIndex = %d\n",
+			ucBssIndex);
+		return;
+	}
+
+	DBGLOG(RLM, STATE, "[%d] rlmObssAbortScan\n",
+		ucBssIndex);
+
+	/* Abort obss process. */
+	prScanCancelMsg =
+	    (struct MSG_SCN_SCAN_CANCEL *)cnmMemAlloc(prAdapter, RAM_TYPE_MSG,
+		sizeof(struct MSG_SCN_SCAN_CANCEL));
+	if (!prScanCancelMsg) {
+		DBGLOG(RLM, ERROR, "Can't abort SCN FSM\n");
+		return;
+	}
+	kalMemZero(prScanCancelMsg, sizeof(struct MSG_SCN_SCAN_CANCEL));
+	prScanCancelMsg->rMsgHdr.eMsgId = MID_RLM_SCN_SCAN_CANCEL;
+	prScanCancelMsg->ucSeqNum = OBSS_SCAN_SEQ_NUM;
+	prScanCancelMsg->ucBssIndex = ucBssIndex;
+	prScanCancelMsg->fgIsChannelExt = FALSE;
+
+	cnmTimerStopTimer(prAdapter,
+		&prBssInfo->rObssScanTimer);
+	prBssInfo->u2ObssScanInterval = 0;
+
+	/* unbuffered message to guarantee scan is cancelled in sequence */
+	mboxSendMsg(prAdapter, MBOX_ID_0, (struct MSG_HDR *)prScanCancelMsg,
+		    MSG_SEND_METHOD_UNBUF);
 }

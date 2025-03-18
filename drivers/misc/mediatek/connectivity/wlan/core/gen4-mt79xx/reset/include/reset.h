@@ -1,99 +1,109 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2017 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   "reset.h"
 *   \brief  This file contains the declairation of reset module
 */
 
-/*******************************************************************************
-*                         C O M P I L E R   F L A G S
-********************************************************************************
-*/
 
-/*******************************************************************************
-*                    E X T E R N A L   R E F E R E N C E S
-********************************************************************************
+/**********************************************************************
+*                         C O M P I L E R   F L A G S
+***********************************************************************
 */
 #ifndef _RESET_H
 #define _RESET_H
 
-#include "reset_ko.h"
-
-/*******************************************************************************
-*                              C O N S T A N T S
-********************************************************************************
+/**********************************************************************
+*                    E X T E R N A L   R E F E R E N C E S
+***********************************************************************
 */
+#include "reset_fsm.h"
+#include "reset_fsm_def.h"
+#include "reset_hif.h"
 
-/*******************************************************************************
-*                             D A T A   T Y P E S
-********************************************************************************
-*/
-enum ENUM_RST_MODULE_TYPE_T {
-	RST_MODULE_BT = 0,
-	RST_MODULE_WIFI,
-	RST_MODULE_MAX
-};
-
-enum ENUM_RST_MODULE_STATE_TYPE_T {
-	RST_MODULE_STATE_PRERESET = 0,
-	RST_MODULE_STATE_KO_INSMOD,
-	RST_MODULE_STATE_KO_RMMOD,
-	RST_MODULE_STATE_PROBE_START,
-	RST_MODULE_STATE_PROBE_DONE,
-	RST_MODULE_STATE_DUMP_START,
-	RST_MODULE_STATE_DUMP_END,
-	RST_MODULE_STATE_MAX
-};
-
-enum ENUM_RST_MODULE_RET_TYPE_T {
-	RST_MODULE_RET_SUCCESS = 0,
-	RST_MODULE_RET_FAIL,
-	RST_MODULE_RET_MAX
-};
-
-struct WIFI_NOTIFY_DESC {
-	bool (*BtNotifyWifiSubResetStep1)(u_int8_t);
-};
-
-struct BT_NOTIFY_DESC {
-	int32_t (*WifiNotifyBtSubResetStep1)(int32_t);
-	int32_t (*WifiNotifyReadBtMcuPc)(uint32_t *);
-	int32_t (*WifiNotifyReadWifiMcuPc)(uint8_t, uint32_t *);
-};
-
-/*******************************************************************************
-*                            P U B L I C   D A T A
-********************************************************************************
-*/
-
-/*******************************************************************************
-*                           P R I V A T E   D A T A
-********************************************************************************
-*/
-
-/*******************************************************************************
+/**********************************************************************
 *                                 M A C R O S
-********************************************************************************
+***********************************************************************
 */
-#define MR_Dbg(_Fmt...)  pr_info("[reset] " _Fmt)
-#define MR_Info(_Fmt...)  pr_info("[reset] " _Fmt)
-#define MR_Err(_Fmt...) pr_info("[reset] " _Fmt)
+#define RESETKO_API_VERSION 2
+#define RESETKO_SUPPORT_WAIT_TIMEOUT 0
+
+/**********************************************************************
+*                              C O N S T A N T S
+***********************************************************************
+*/
+
+/**********************************************************************
+*                             D A T A   T Y P E S
+***********************************************************************
+*/
+enum ReturnStatus {
+	RESET_RETURN_STATUS_SUCCESS = 0,
+	RESET_RETURN_STATUS_FAIL,
+
+	RESET_RETURN_STATUS_MAX
+};
 
 
-/*******************************************************************************
-*                   F U N C T I O N   D E C L A R A T I O N S
-********************************************************************************
+enum ModuleMsgId {
+	BT_TO_WIFI_SET_WIFI_DRIVER_OWN = 0,
+
+	WIFI_TO_BT_SET_DRIVER_OWN,
+	WIFI_TO_BT_READ_WIFI_MCU_PC,
+
+	RESET_MODULE_MSG_ID_MAX
+};
+
+enum HifInfoType {
+	HIF_INFO_SDIO_HOST = 0,
+
+	HIF_INFO_MAX
+};
+
+struct ModuleMsg {
+	enum ModuleMsgId msgId;
+	void *input;  // pointer to the function's input parameters
+	void *output; // pointer to the function's return value
+};
+
+/**********************************************************************
+*                  F U N C T I O N   D E C L A R A T I O N S
+***********************************************************************
 */
-enum ENUM_RST_MODULE_RET_TYPE_T rstNotifyWholeChipRstStatus(
-				enum ENUM_RST_MODULE_TYPE_T module,
-				enum ENUM_RST_MODULE_STATE_TYPE_T status,
-				void *data);
-void register_bt_notify_callback(struct BT_NOTIFY_DESC *bt_notify_cb);
-void unregister_bt_notify_callback(void);
-struct BT_NOTIFY_DESC *get_bt_notify_callback(void);
-void register_wifi_notify_callback(struct WIFI_NOTIFY_DESC *wifi_notify_cb);
-void unregister_wifi_notify_callback(void);
-struct WIFI_NOTIFY_DESC *get_wifi_notify_callback(void);
+enum ReturnStatus resetko_register_module(enum ModuleType module,
+					char *name,
+#if (RESETKO_API_VERSION == 1)
+					enum TriggerResetApiType resetApiType,
+					void *resetFunc,
+#endif
+					void *notifyFunc);
+enum ReturnStatus resetko_unregister_module(enum ModuleType module);
+
+enum ReturnStatus send_reset_event(enum ModuleType module,
+				enum ResetFsmEvent event);
+
+enum ReturnStatus send_msg_to_module(enum ModuleType srcModule,
+				    enum ModuleType dstModule,
+				    struct ModuleMsg *msg);
+
+enum ReturnStatus update_hif_info(enum HifInfoType type, void *info);
+
+
+/**********************************************************************
+*                            P U B L I C   D A T A
+***********************************************************************
+*/
+
+/**********************************************************************
+*                           P R I V A T E   D A T A
+***********************************************************************
+*/
+
+/**********************************************************************
+*                              F U N C T I O N S
+**********************************************************************/
 
 #endif /* _RESET_H */
+

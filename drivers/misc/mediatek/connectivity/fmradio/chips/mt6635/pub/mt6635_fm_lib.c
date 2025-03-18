@@ -956,6 +956,15 @@ static signed int mt6635_PowerUp(unsigned short *chip_id, unsigned short *device
 		return ret;
 	}
 
+	/* double check if FM ok after DSP switch clock to ADPLL */
+	fm_reg_read(0x62, &tmp_reg);
+	if (tmp_reg != mt6635_hw_info.chip_id) {
+		mt6635_show_reg();
+		WCN_DBG(FM_ALT | CHIP,
+			"A-die no clock after DSP auto control, please check VCN28.\n");
+		return -FM_ENOVCN28;
+	}
+
 	/* Wholechip FM Power Up: step 5, FM RF fine tune setting */
 	if (FM_LOCK(cmd_buf_lock))
 		return -FM_ELOCK;

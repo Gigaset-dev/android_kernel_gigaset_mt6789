@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3
  *     /include/mgmt/cnm_mem.h#1
@@ -498,7 +499,8 @@ struct STA_RECORD {
 	P_TX_BA_ENTRY_T aprTxBaTable[TID_NUM];
 #endif
 
-	struct FRAG_INFO rFragInfo[MAX_NUM_CONCURRENT_FRAGMENTED_MSDUS];
+	struct FRAG_INFO rFragInfo[TID_NUM + 1][
+			MAX_NUM_CONCURRENT_FRAGMENTED_MSDUS];
 
 #if 0 /* TODO: Remove this */
 	struct SEC_INFO rSecInfo; /* The security state machine */
@@ -620,7 +622,7 @@ struct STA_RECORD {
 
 	/* TX key is ready */
 	u_int8_t fgIsTxKeyReady;
-
+	u_int8_t fg1xKey4Done;
 	/* When the STA is connected or TX key is ready */
 	u_int8_t fgIsTxAllowed;
 

@@ -50,15 +50,24 @@ LOCAL_PATH := $(call my-dir)
 
 ifeq ($(MTK_BT_SUPPORT),yes)
 ifneq ($(filter MTK_MT76%, $(MTK_BT_CHIP)),)
-
+ifeq ($(MTK_BT_CHIP), MTK_MT7668)
+BT_CHIP := BT_CHIP_ID=MT7668
+else
+BT_CHIP := BT_CHIP_ID=MT7663
+endif
 include $(CLEAR_VARS)
 LOCAL_MODULE := btmtksdio.ko
-#LOCAL_REQUIRED_MODULES := wlan_drv_gen4_mt7663_reset.ko
+ifneq ($(MTK_BT_CHIP), MTK_MT7668)
+LOCAL_REQUIRED_MODULES := wlan_drv_gen4_mt7663_reset.ko
+endif
 LOCAL_PROPRIETARY_MODULE := true
 LOCAL_MODULE_OWNER := mtk
 LOCAL_INIT_RC := init.btmtksdio.rc
 
+
 include $(MTK_KERNEL_MODULE)
+$(info $(LOG_TAG) BT_CHIP = $(BT_CHIP))
+$(linked_module): OPTS += $(BT_CHIP)
 
 endif
 endif

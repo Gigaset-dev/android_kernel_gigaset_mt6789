@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   gl_qa_agent.h
  *    \brief  This file includes private ioctl support.
  */
@@ -51,6 +52,7 @@
 #define HQA_CMD_MAGIC_NO 0x18142880
 #define HQA_CHIP_ID_6632	0x6632
 #define HQA_CHIP_ID_7668	0x7668
+#define HQA_CMD_FRAME_DATA_MAX_LEN 2048
 
 /* mt7922 toucan UMAC size for icap use = 512KB, 1 Sample Count (IQ) =4B (32bit) */
 #define MAX_ICAP_IQ_DATA_CNT					(512 * 256)
@@ -68,7 +70,7 @@
 #endif
 
 #if defined MT7915 || defined MT7961 || defined MT7933 || defined MT7922 \
-		   || defined MT7902
+		   || defined MT7902 || defined MT7926
 #define MAX_EEPROM_BUFFER_SIZE	0xe00
 #else
 #define MAX_EEPROM_BUFFER_SIZE	1200
@@ -78,7 +80,7 @@
 #undef BUFFER_BIN_PAGE_SIZE
 #endif
 #if defined MT7915 || defined MT7961 || defined MT7933 || defined MT7922 \
-		   || defined MT7902
+		   || defined MT7902 || defined MT7926
 #define BUFFER_BIN_PAGE_SIZE	0x400
 #else
 #define BUFFER_BIN_PAGE_SIZE	(MAX_EEPROM_BUFFER_SIZE)
@@ -259,7 +261,7 @@ struct HQA_CMD_FRAME {
 	uint16_t Id;
 	uint16_t Length;
 	uint16_t Sequence;
-	uint8_t Data[2048];
+	uint8_t Data[HQA_CMD_FRAME_DATA_MAX_LEN];
 } __KAL_ATTRIB_PACKED__;
 
 typedef int32_t(*HQA_CMD_HANDLER) (struct net_device

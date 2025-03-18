@@ -8,6 +8,12 @@ ifneq ($(KERNEL_OUT),)
     ccflags-y += -imacros $(KERNEL_OUT)/include/generated/autoconf.h
 endif
 
+ifeq ($(DEVICE_MODULES_PATH),)
+DEVICE_MODULES_PATH = $(srctree)
+else
+LINUXINCLUDE := $(DEVCIE_MODULES_INCLUDE) $(LINUXINCLUDE)
+endif
+
 ifndef TOP
     TOP := $(srctree)/..
 endif
@@ -32,7 +38,7 @@ endif
 # platform
 ccflags-y += -D CONNAC1X_CHIPID=$(BT_PLATFORM)
 $(info $(LOG_TAG) BT_PLATFORM = $(BT_PLATFORM))
-$(info $(LOG_TAG) srctree = $(srctree))
+$(info $(LOG_TAG) srctree = $(srctree), DEVICE_MODULES_PATH = $(DEVICE_MODULES_PATH))
 
 
 ###############################################################################
@@ -45,8 +51,8 @@ else
 endif
 
 ccflags-y += -D MTK_WCN_WMT_STP_EXP_SYMBOL_ABSTRACT
-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include
-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat
+ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/include
+ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/include/mt-plat
 #ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/mt$(BT_PLATFORM)/include
 
 ifeq ($(CONFIG_MTK_CONN_LTE_IDC_SUPPORT),y)

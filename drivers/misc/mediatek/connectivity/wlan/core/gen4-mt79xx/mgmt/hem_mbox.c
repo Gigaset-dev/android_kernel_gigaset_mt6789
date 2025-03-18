@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: mgmt/hem_mbox.c
  */
@@ -294,8 +295,9 @@ static struct MSG_HNDL_ENTRY arMsgMapTable[] = {
 	{MID_TWT_RESP_TEARDOWN_TO_FW, twtHotspotPlannerTeardownToFW},
 #endif
 #if (CFG_SUPPORT_NAN == 1)
-	{MID_CNM_NAN_CH_GRANT, nanDevSendEnableRequest}
+	{MID_CNM_NAN_CH_GRANT, nanDevSendEnableRequest},
 #endif
+
 };
 
 /*******************************************************************************

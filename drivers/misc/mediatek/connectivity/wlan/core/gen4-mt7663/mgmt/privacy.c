@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
  * Id: mgmt/privacy.c#1
  */
@@ -242,13 +196,15 @@ void secInit(IN struct ADAPTER *prAdapter, IN uint8_t ucBssIndex)
 	cnmTimerInitTimer(prAdapter,
 			  &prAisSpecBssInfo->rPreauthenticationTimer,
 			  (PFN_MGMT_TIMEOUT_FUNC) rsnIndicatePmkidCand,
-			  (unsigned long)NULL);
+			  (unsigned long)NULL,
+			  TIMER_WAKELOCK_AUTO);
 
 #if CFG_SUPPORT_802_11W
 	cnmTimerInitTimer(prAdapter,
 			  &prAisSpecBssInfo->rSaQueryTimer,
 			  (PFN_MGMT_TIMEOUT_FUNC) rsnStartSaQueryTimer,
-			  (unsigned long)NULL);
+			  (unsigned long)NULL,
+			  TIMER_WAKELOCK_AUTO);
 #endif
 
 	prAisSpecBssInfo->fgCounterMeasure = FALSE;
@@ -933,6 +889,57 @@ void secPrivacyFreeSta(IN struct ADAPTER *prAdapter,
 	}
 }
 
+
+/*----------------------------------------------------------------------------*/
+/*!
+ * \brief This routine is used to clear the group WEP key
+ *
+ * \param[in] prAdapter Pointer to the Adapter structure
+ * \param[in] ucBssIndex The BSS index
+ * \param[in] u4KeyId The key index
+ *
+ * \note
+ */
+/*----------------------------------------------------------------------------*/
+static inline uint32_t secRemoveBmcWepKey(IN struct ADAPTER *prAdapter,
+					  IN uint8_t ucBssIndex,
+					  IN uint32_t u4KeyId)
+{
+	struct PARAM_REMOVE_KEY rRemoveKey;
+	uint32_t u4SetLen = 0;
+	uint32_t u4Ret;
+
+	DBGLOG(RSN, INFO, "BssIdx=%d, KeyId=%d\n", ucBssIndex, u4KeyId);
+
+	if (prAdapter->rAcpiState == ACPI_STATE_D3) {
+		DBGLOG(REQ, WARN,
+		       "Fail in set remove WEP! (Adapter not ready). ACPI=D%d, Radio=%d\n",
+		       prAdapter->rAcpiState, prAdapter->fgIsRadioOff);
+		return WLAN_STATUS_ADAPTER_NOT_READY;
+	}
+
+	if (u4KeyId > MAX_KEY_NUM - 1) {
+		DBGLOG(REQ, ERROR, "invalid WEP key ID %u\n", u4KeyId);
+		return WLAN_STATUS_INVALID_DATA;
+	}
+
+	kalMemZero(&rRemoveKey, sizeof(struct PARAM_REMOVE_KEY));
+	rRemoveKey.u4Length = sizeof(struct PARAM_REMOVE_KEY);
+	rRemoveKey.u4KeyIndex = u4KeyId;
+	rRemoveKey.ucBssIdx = ucBssIndex;
+	/* Should set FLAG_RM_KEY_CTRL_WO_OID for not OID operation */
+	rRemoveKey.ucCtrlFlag = FLAG_RM_KEY_CTRL_WO_OID;
+
+	u4Ret = wlanoidSetRemoveKey(prAdapter, (void *)&rRemoveKey,
+			    sizeof(struct PARAM_REMOVE_KEY), &u4SetLen);
+
+	if (u4Ret != WLAN_STATUS_PENDING)
+		DBGLOG(RSN, WARN, "Can't send remove bmc wep key cmd\n");
+
+	return u4Ret;
+}
+
+
 /*----------------------------------------------------------------------------*/
 /*!
  * \brief This routine is used for remove the BC entry of the BSS
@@ -996,11 +1003,23 @@ void secRemoveBssBcEntry(IN struct ADAPTER *prAdapter,
 		}
 #endif
 		for (i = 0; i < MAX_KEY_NUM; i++) {
-			if (prBssInfo->wepkeyUsed[i])
-				secPrivacyFreeForEntry(prAdapter,
-					       prBssInfo->wepkeyWlanIdx);
+			if (prBssInfo->wepkeyUsed[i] == FALSE)
+				continue;
+			/* remove key to avoid that cfg80211_del_key is called
+			 * after nicDeactivateNetwork.
+			 */
+			secRemoveBmcWepKey(prAdapter, prBssInfo->ucBssIndex, i);
 			prBssInfo->wepkeyUsed[i] = FALSE;
 		}
+		/* wlanoidSetRemoveKey would clear prBssInfo->wepkeyUsed[],
+		 * but won't call secPrivacyFreeForEntry.
+		 * For the case that the cfg80211_del_key is called before
+		 * nicDeactivateNetwork, check wepkeyWlanIdx to do
+		 * secPrivacyFreeForEntry.
+		 */
+		if (prBssInfo->wepkeyWlanIdx != WTBL_RESERVED_ENTRY)
+			secPrivacyFreeForEntry(prAdapter,
+					       prBssInfo->wepkeyWlanIdx);
 		prBssInfo->wepkeyWlanIdx = WTBL_RESERVED_ENTRY;
 		prBssInfo->fgBcDefaultKeyExist = FALSE;
 		prBssInfo->ucBcDefaultKeyIdx = 0xff;
@@ -1055,12 +1074,6 @@ secPrivacySeekForBcEntry(IN struct ADAPTER *prAdapter,
 
 	if (prBSSInfo->eCurrentOPMode == OP_MODE_ACCESS_POINT)
 		fgCheckKeyId = FALSE;
-
-	if (prBSSInfo->eCurrentOPMode == OP_MODE_INFRASTRUCTURE &&
-		  prBSSInfo->eNetworkType == NETWORK_TYPE_AIS) {
-		fgCheckKeyId = FALSE;
-		DBGLOG(RSN, WARN, "Always install gtk in same wtbl\n");
-	}
 
 	/*entry 0 for IGTK, GTK start from entry 1*/
 	ucStartIDX = 1;
@@ -1371,13 +1384,17 @@ enum ENUM_EAPOL_KEY_TYPE_T secGetEapolKeyType(uint8_t *pucPkt)
 			break;
 		u2KeyInfo = *((uint16_t *) (&pucEthBody[5]));
 		switch (u2KeyInfo) {
-		case 0x8a00:
+		case 0x8a00:	/*HMAC-SHA1*/
+		case 0x8b00:   /*AES-128-CMAC*/
 			return EAPOL_KEY_1_OF_4;
 		case 0x0a01:
+		case 0x0b01:   /*AES-128-CMAC*/
 			return EAPOL_KEY_2_OF_4;
 		case 0xca13:
+		case 0xcb13:   /*AES-128-CMAC*/
 			return EAPOL_KEY_3_OF_4;
 		case 0x0a03:
+		case 0x0b03:   /*AES-128-CMAC*/
 			return EAPOL_KEY_4_OF_4;
 		}
 	} while (FALSE);

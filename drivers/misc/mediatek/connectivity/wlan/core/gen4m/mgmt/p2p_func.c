@@ -72,6 +72,8 @@ struct APPEND_VAR_IE_ENTRY txProbeRspIETable[] = {
 			rlmRspGenerateHtCapIE}	/* 45 */
 	, {(ELEM_HDR_LEN + ELEM_MAX_LEN_HT_OP), NULL,
 			rlmRspGenerateHtOpIE}	/* 61 */
+	, {(ELEM_HDR_LEN + ELEM_MAX_LEN_TPE), NULL,
+			rlmGenerateHtTPEIE}	/* 34 */
 	, {(ELEM_HDR_LEN + ELEM_MAX_LEN_RSN), NULL,
 			rsnGenerateRSNIE}	/* 48 */
 	, {(ELEM_HDR_LEN + ELEM_MAX_LEN_OBSS_SCAN), NULL,
@@ -2691,8 +2693,9 @@ p2pFuncBeaconUpdate(IN struct ADAPTER *prAdapter,
 			(uint8_t *) prBcnFrame->aucInfoElem,
 			(prBcnMsduInfo->u2FrameLength -
 			OFFSET_OF(struct WLAN_BEACON_FRAME, aucInfoElem)));
-
-		p2pFuncParseH2E(prP2pBssInfo);
+		if (prP2pBssInfo->ucAllSupportedRatesLen <=
+			RATE_NUM_SW)
+			p2pFuncParseH2E(prP2pBssInfo);
 
 #if 1
 		/* bssUpdateBeaconContent(prAdapter, NETWORK_TYPE_P2P_INDEX); */
@@ -6550,6 +6553,8 @@ p2pFuncComposeNoaAttribute(IN struct ADAPTER *prAdapter,
 	uint32_t i = 0;
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIndex);
+	if (!prBssInfo)
+		return;
 	prP2pSpecificBssInfo =
 		prAdapter->rWifiVar
 			.prP2pSpecificBssInfo[prBssInfo->u4PrivateData];
@@ -6637,7 +6642,7 @@ void p2pFuncGenerateP2P_IE_NoA(IN struct ADAPTER *prAdapter,
 {
 	struct IE_P2P *prIeP2P;
 	uint8_t aucWfaOui[] = VENDOR_OUI_WFA_SPECIFIC;
-	uint32_t u4AttributeLen;
+	uint32_t u4AttributeLen = 0;
 	struct BSS_INFO *prBssInfo;
 
 	prBssInfo = prAdapter->aprBssInfo[prMsduInfo->ucBssIndex];
@@ -7955,6 +7960,9 @@ p2pFunDetermineChnlSwitchPolicy(IN struct ADAPTER *prAdapter,
 		return ePolicy;
 	}
 
+	if (IS_FEATURE_DISABLED(prAdapter->rWifiVar.ucCsaDeauthClient))
+		return ePolicy;
+
 #if CFG_SEND_DEAUTH_DURING_CHNL_SWITCH
 	/* Send deauth frame to clients:
 	 * 1. Cross band
@@ -7984,6 +7992,8 @@ p2pFunNotifyChnlSwitch(IN struct ADAPTER *prAdapter,
 	DBGLOG(P2P, INFO, "bss index: %d, policy: %d\n", ucBssIdx, ePolicy);
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIdx);
+	if (!prBssInfo)
+		return;
 	prClientList = &prBssInfo->rStaRecOfClientList;
 
 	switch (ePolicy) {

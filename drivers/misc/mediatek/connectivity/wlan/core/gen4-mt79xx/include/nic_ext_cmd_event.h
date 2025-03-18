@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   "nic_ext_cmd_event.h"
  *  \brief This file contains the declairation file of the WLAN OID processing
  *	 routines of Windows driver for MediaTek Inc.

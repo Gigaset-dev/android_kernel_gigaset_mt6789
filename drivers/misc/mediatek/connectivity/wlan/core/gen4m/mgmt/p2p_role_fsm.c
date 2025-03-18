@@ -436,8 +436,9 @@ p2pRoleFsmStateTransition(IN struct ADAPTER *prAdapter,
 	prChnlReqInfo = &(prP2pRoleFsmInfo->rChnlReqInfo);
 
 	do {
-		if (!prP2pRoleBssInfo ||
-			!IS_BSS_ACTIVE(prP2pRoleBssInfo)) {
+		if (!prP2pRoleBssInfo)
+			return;
+		if (!IS_BSS_ACTIVE(prP2pRoleBssInfo)) {
 			if (!cnmP2PIsPermitted(prAdapter))
 				return;
 
@@ -1876,10 +1877,13 @@ void p2pRoleFsmRunEventRadarDet(IN struct ADAPTER *prAdapter,
 	prP2pBssInfo =
 		GET_BSS_INFO_BY_INDEX(prAdapter,
 			prMsgP2pRddDetMsg->ucBssIndex);
-
+	if (!prP2pBssInfo)
+		goto error;
 	prP2pRoleFsmInfo =
 		P2P_ROLE_INDEX_2_ROLE_FSM_INFO(prAdapter,
 			prP2pBssInfo->u4PrivateData);
+	if (!prP2pRoleFsmInfo)
+		goto error;
 
 	DBGLOG(P2P, INFO,
 		"p2pRoleFsmRunEventRadarDet with Role(%d)\n",
@@ -4296,8 +4300,11 @@ void p2pRoleFsmRunEventTxCancelWait(IN struct ADAPTER *prAdapter,
 	prCancelTxWaitMsg = (struct MSG_CANCEL_TX_WAIT_REQUEST *) prMsgHdr;
 	prP2pRoleBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter,
 			prCancelTxWaitMsg->ucBssIdx);
+	if (!prP2pRoleBssInfo)
+		goto exit;
 	prP2pRoleFsmInfo = P2P_ROLE_INDEX_2_ROLE_FSM_INFO(prAdapter,
 			prP2pRoleBssInfo->u4PrivateData);
+
 	prP2pMgmtTxInfo = prP2pRoleFsmInfo != NULL ?
 			&(prP2pRoleFsmInfo->rMgmtTxInfo) : NULL;
 

@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/mgmt/assoc.c#5
  */
@@ -167,6 +168,10 @@ struct APPEND_VAR_IE_ENTRY txAssocRespIETable[] = {
 	 heRlmRspGenerateHeCapIE},			/* 255, EXT 35 */
 	{0, heRlmCalculateHeOpIELen,
 	 heRlmRspGenerateHeOpIE},			/* 255, EXT 36 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+	{(ELEM_HDR_LEN + ELEM_MAX_LEN_HE_6G_CAP), NULL,
+	 heRlmReqGenerateHe6gBandCapIE},		/* 255, EXT 59 */
+#endif
 #endif
 #if CFG_ENABLE_WIFI_DIRECT
 	{(0), p2pFuncCalculateP2p_IELenForAssocRsp,
@@ -183,6 +188,11 @@ struct APPEND_VAR_IE_ENTRY txAssocRespIETable[] = {
 #if CFG_SUPPORT_MTK_SYNERGY
 	{(ELEM_HDR_LEN + ELEM_MIN_LEN_MTK_OUI), NULL,
 	 rlmGenerateMTKOuiIE},				/* 221 */
+#endif
+#if (CFG_SAP_SUPPORT_WPA3_H2E == 1)
+	{(ELEM_HDR_LEN + ELEM_MAX_LEN_RSN), NULL,
+		rsnGenerateRSNXIE},
+			/* 244 */
 #endif
 };
 #endif /* CFG_SUPPORT_AAA */
@@ -263,7 +273,11 @@ uint16_t assocBuildCapabilityInfo(IN struct ADAPTER *prAdapter,
 		 * In TGn 5.2.22, spectrum management bit should set to 1
 		 * to pass the UCC's check.
 		 */
-		if (prBssInfo && prBssInfo->eBand == BAND_5G)
+		if (prBssInfo && (prBssInfo->eBand == BAND_5G
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			|| prBssInfo->eBand == BAND_6G
+#endif
+		))
 			u2CapInfo |= CAP_INFO_SPEC_MGT;
 #endif
 
@@ -693,6 +707,10 @@ uint32_t assocSendReAssocReqFrame(IN struct ADAPTER *prAdapter,
 	 *       in MSDU_INfO_T.
 	 */
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, prStaRec->ucBssIndex);
+	if (!prBssInfo) {
+		DBGLOG(AAA, ERROR, "prBssInfo is null\n");
+		return WLAN_STATUS_FAILURE;
+	}
 
 	/* Compose Header and Fixed Field */
 	assocComposeReAssocReqFrameHeaderAndFF(prAdapter,
@@ -1345,6 +1363,71 @@ assocProcessRxDisassocFrame(IN struct ADAPTER *prAdapter,
 
 }				/* end of assocProcessRxDisassocFrame() */
 
+uint32_t
+wlanSetDisassociate(IN struct ADAPTER *prAdapter, IN void *pvSetBuffer,
+		IN uint32_t u4SetBufferLen, IN uint8_t ucBssIndex)
+{
+	struct MSG_AIS_ABORT *prAisAbortMsg;
+	uint32_t u4DisconnectReason;
+	struct CONNECTION_SETTINGS *prConnSettings;
+
+	if (prAdapter->rAcpiState == ACPI_STATE_D3) {
+		DBGLOG(REQ, WARN,
+		       "Fail in set disassociate! (Adapter not ready). ACPI=D%d, Radio=%d\n",
+		       prAdapter->rAcpiState, prAdapter->fgIsRadioOff);
+		return WLAN_STATUS_ADAPTER_NOT_READY;
+	}
+
+	DBGLOG(REQ, INFO, "ucBssIndex %d\n", ucBssIndex);
+
+	prConnSettings =
+		aisGetConnSettings(prAdapter, ucBssIndex);
+
+	/* prepare message to AIS */
+	prConnSettings->fgIsConnReqIssued = FALSE;
+	prConnSettings->eReConnectLevel =
+		RECONNECT_LEVEL_USER_SET;
+
+	/* Send AIS Abort Message */
+	prAisAbortMsg = (struct MSG_AIS_ABORT *) cnmMemAlloc(
+						prAdapter, RAM_TYPE_MSG,
+						sizeof(struct MSG_AIS_ABORT));
+	if (!prAisAbortMsg) {
+		DBGLOG(REQ, ERROR, "Fail in creating AisAbortMsg.\n");
+		return WLAN_STATUS_FAILURE;
+	}
+
+	prAisAbortMsg->rMsgHdr.eMsgId = MID_OID_AIS_FSM_JOIN_REQ;
+
+	if (pvSetBuffer == NULL)
+		prAisAbortMsg->ucReasonOfDisconnect =
+			DISCONNECT_REASON_CODE_NEW_CONNECTION;
+	else {
+		u4DisconnectReason = *((uint32_t *)pvSetBuffer);
+		prAisAbortMsg->ucReasonOfDisconnect =
+			u4DisconnectReason;
+	}
+
+	prAisAbortMsg->fgDelayIndication = FALSE;
+	prAisAbortMsg->ucBssIndex = ucBssIndex;
+	mboxSendMsg(prAdapter, MBOX_ID_0,
+		    (struct MSG_HDR *) prAisAbortMsg, MSG_SEND_METHOD_BUF);
+
+	/* indicate for disconnection */
+	if (kalGetMediaStateIndicated(prAdapter->prGlueInfo,
+		ucBssIndex) ==
+	    MEDIA_STATE_CONNECTED)
+		kalIndicateStatusAndComplete(prAdapter->prGlueInfo,
+			     WLAN_STATUS_MEDIA_DISCONNECT_LOCALLY, NULL,
+			     0, ucBssIndex);
+#if !defined(LINUX)
+	prAdapter->fgIsRadioOff = TRUE;
+#endif
+
+	return WLAN_STATUS_SUCCESS;
+}
+
+
 #if CFG_SUPPORT_AAA
 /*----------------------------------------------------------------------------*/
 /*!
@@ -1370,8 +1453,8 @@ uint32_t assocProcessRxAssocReqFrame(IN struct ADAPTER *prAdapter,
 	struct BSS_INFO *prBssInfo;
 	struct IE_SSID *prIeSsid = (struct IE_SSID *)NULL;
 	struct RSN_INFO_ELEM *prIeRsn = (struct RSN_INFO_ELEM *)NULL;
-	struct IE_SUPPORTED_RATE *prIeSupportedRate =
-	    (struct IE_SUPPORTED_RATE *)NULL;
+	struct IE_SUPPORTED_RATE_IOT *prIeSupportedRate =
+	    (struct IE_SUPPORTED_RATE_IOT *)NULL;
 	struct IE_EXT_SUPPORTED_RATE *prIeExtSupportedRate =
 	    (struct IE_EXT_SUPPORTED_RATE *)NULL;
 	struct WIFI_VAR *prWifiVar = NULL;
@@ -1427,6 +1510,10 @@ uint32_t assocProcessRxAssocReqFrame(IN struct ADAPTER *prAdapter,
 	}
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, prStaRec->ucBssIndex);
+	if (!prBssInfo) {
+		DBGLOG(SAA, ERROR, "prBssInfo is null\n");
+		return WLAN_STATUS_INVALID_DATA;
+	}
 
 	/* Check if this Disassoc Frame is coming from Target BSSID */
 	if (UNEQUAL_MAC_ADDR(prAssocReqFrame->aucBSSID, prBssInfo->aucBSSID))
@@ -1487,7 +1574,7 @@ uint32_t assocProcessRxAssocReqFrame(IN struct ADAPTER *prAdapter,
 		case ELEM_ID_SUP_RATES:
 			if ((!prIeSupportedRate)
 			    && (IE_LEN(pucIE) <= RATE_NUM_SW))
-				prIeSupportedRate = SUP_RATES_IE(pucIE);
+				prIeSupportedRate = SUP_RATES_IOT_IE(pucIE);
 
 			break;
 		case ELEM_ID_PWR_CAP:
@@ -1511,8 +1598,12 @@ uint32_t assocProcessRxAssocReqFrame(IN struct ADAPTER *prAdapter,
 			break;
 		case ELEM_ID_RSN:
 #if CFG_ENABLE_WIFI_DIRECT && CFG_ENABLE_HOTSPOT_PRIVACY_CHECK
+			/* Check only SAP clients */
 			if (prAdapter->fgIsP2PRegistered
-			    && IS_STA_IN_P2P(prStaRec)) {
+			    && IS_STA_IN_P2P(prStaRec) &&
+				p2pFuncIsAPMode(
+					prAdapter->rWifiVar.prP2PConnSettings
+					[prBssInfo->u4PrivateData])) {
 				prIeRsn = RSN_IE(pucIE);
 				rsnParserCheckForRSNCCMPPSK(prAdapter, prIeRsn,
 							    prStaRec,
@@ -1562,12 +1653,13 @@ uint32_t assocProcessRxAssocReqFrame(IN struct ADAPTER *prAdapter,
 				return WLAN_STATUS_FAILURE;
 			}
 			break;
-#if (CFG_SUPPORT_802_11AX == 1)
 		case ELEM_ID_RESERVED:
+#if (CFG_SUPPORT_802_11AX == 1)
 			if (IE_ID_EXT(pucIE) == ELEM_EXT_ID_HE_CAP)
 				prStaRec->ucPhyTypeSet |= PHY_TYPE_SET_802_11AX;
-			break;
 #endif
+			break;
+
 		default:
 			for (i = 0;
 			     i <
@@ -1911,7 +2003,7 @@ assocComposeReAssocRespFrameHeaderAndFF(IN struct STA_RECORD *prStaRec,
  * @retval WLAN_STATUS_SUCCESS   Successfully send frame to TX Module
  */
 /*----------------------------------------------------------------------------*/
-uint32_t assocSendReAssocRespFrame(IN struct ADAPTER *prAdapter,
+struct MSDU_INFO *assocComposeReAssocRespFrame(IN struct ADAPTER *prAdapter,
 				   IN struct STA_RECORD *prStaRec)
 {
 	struct BSS_INFO *prBssInfo;
@@ -1966,7 +2058,7 @@ uint32_t assocSendReAssocRespFrame(IN struct ADAPTER *prAdapter,
 	if (prMsduInfo == NULL) {
 		DBGLOG(AAA, WARN,
 		       "No PKT_INFO_T for sending (Re)Assoc Response.\n");
-		return WLAN_STATUS_RESOURCES;
+		return NULL;
 	}
 	/* 4 <2> Compose (Re)Association Request frame header and fixed fields
 	 *       in MSDU_INfO_T.
@@ -1974,6 +2066,10 @@ uint32_t assocSendReAssocRespFrame(IN struct ADAPTER *prAdapter,
 	ASSERT(!IS_BSS_INDEX_AIS(prAdapter, prStaRec->ucBssIndex));
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, prStaRec->ucBssIndex);
+	if (!prBssInfo) {
+		DBGLOG(AAA, ERROR, "prBssInfo is null\n");
+		return NULL;
+	}
 
 	/* Compose Header and Fixed Field */
 	assocComposeReAssocRespFrameHeaderAndFF(prStaRec,
@@ -2018,6 +2114,18 @@ uint32_t assocSendReAssocRespFrame(IN struct ADAPTER *prAdapter,
 	 */
 
 	nicTxConfigPktControlFlag(prMsduInfo, MSDU_CONTROL_FLAG_FORCE_TX, TRUE);
+
+	return prMsduInfo;
+} /* end of assocComposeReAssocRespFrame() */
+
+uint32_t assocSendReAssocRespFrame(IN struct ADAPTER *prAdapter,
+				  IN struct STA_RECORD *prStaRec)
+{
+	struct MSDU_INFO *prMsduInfo;
+
+	prMsduInfo = assocComposeReAssocRespFrame(prAdapter, prStaRec);
+	if (!prMsduInfo)
+		return WLAN_STATUS_RESOURCES;
 
 	/* 4 <6> Enqueue the frame to send this (Re)Association request frame.
 	 */
@@ -2125,7 +2233,7 @@ void assocGenerateMDIE(IN struct ADAPTER *prAdapter,
 	if (!prFtIEs->prMDIE) {
 		struct BSS_DESC *prBssDesc =
 		    aisGetTargetBssDesc(prAdapter, ucBssIndex);
-		uint8_t *pucIE = &prBssDesc->aucIEBuf[0];
+		uint8_t *pucIE = prBssDesc->pucIeBuf;
 		uint16_t u2IeLen = prBssDesc->u2IELength;
 		uint16_t u2IeOffSet = 0;
 

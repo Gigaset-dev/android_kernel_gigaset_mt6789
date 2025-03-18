@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
  * Copyright (c) 2021 MediaTek Inc.
  */
@@ -66,7 +66,8 @@ wpas_regCorrespondingTimer(IN eloop_timeout_handler handler,
 
 			cnmTimerInitTimer(g_prAdapter, &g_arWpasTimer[i].rTimer,
 					  (PFN_MGMT_TIMEOUT_FUNC)wpas_timeoutCb,
-					  (unsigned long)i);
+					  (unsigned long)i,
+					  TIMER_WAKELOCK_AUTO);
 			return i;
 		}
 	}

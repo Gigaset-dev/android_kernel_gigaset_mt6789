@@ -5336,6 +5336,16 @@ uint32_t wlanLoadManufactureData(IN struct ADAPTER
 			   index, u4NvramStartOffset,
 			   u1TypeID, u4NvramFragmentSize);
 
+			if (u4NvramFragmentSize >
+				sizeof(struct CMD_NVRAM_FRAGMENT)) {
+				DBGLOG(INIT, ERROR,
+				"ID[%d]copy size[%d]bigger than buf size[%d]\n",
+				u1TypeID,
+				u4NvramFragmentSize,
+				sizeof(struct CMD_NVRAM_FRAGMENT));
+				return WLAN_STATUS_FAILURE;
+			}
+
 			kalMemCopy(prCmdNvramFragment,
 					   (pu1Addr + u4NvramStartOffset),
 					   u4NvramFragmentSize);
@@ -7852,6 +7862,10 @@ void wlanInitFeatureOption(IN struct ADAPTER *prAdapter)
 					prAdapter, "DbdcMode",
 					ENUM_DBDC_MODE_DYNAMIC);
 #endif /*CFG_SUPPORT_DBDC*/
+	prWifiVar->ucCsaDeauthClient = (uint8_t) wlanCfgGetUint32(
+					prAdapter, "CsaDeauthClient",
+					FEATURE_ENABLED);
+
 #if (CFG_EFUSE_BUFFER_MODE_DELAY_CAL == 1)
 	prWifiVar->ucEfuseBufferModeCal = (uint8_t) wlanCfgGetUint32(
 					prAdapter, "EfuseBufferModeCal", 0);
@@ -8294,7 +8308,9 @@ void wlanInitFeatureOption(IN struct ADAPTER *prAdapter)
 		prAdapter, "CC2Region", FEATURE_ENABLED);
 
 	prWifiVar->u4ApChnlHoldTime = (uint32_t) wlanCfgGetUint32(
-		prAdapter, "ApChnlHoldTime", P2P_AP_CHNL_HOLD_TIME_MS);
+		prAdapter, "ApChnlHoldTime", SAP_CHNL_HOLD_TIME_MS);
+	prWifiVar->u4P2pChnlHoldTime = (uint32_t) wlanCfgGetUint32(
+		prAdapter, "P2pChnlHoldTime", P2P_CHNL_HOLD_TIME_MS);
 
 	prWifiVar->fgAllowSameBandDualSta = (uint8_t) wlanCfgGetUint32(
 		prAdapter, "AllowSameBandDualSta", FEATURE_ENABLED);

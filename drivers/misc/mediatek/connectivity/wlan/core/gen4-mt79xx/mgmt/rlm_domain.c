@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/mgmt/rlm_domain.c#2
  */
@@ -268,8 +269,10 @@ struct mtk_regd_control g_mtk_regd_control = {
 
 #if CFG_SUPPORT_BW160
 #define BW_5G 160
+#define BW_6G 160
 #else
 #define BW_5G 80
+#define BW_6G 80
 #endif
 
 #if (CFG_SUPPORT_SINGLE_SKU_LOCAL_DB == 1)
@@ -287,7 +290,7 @@ const struct ieee80211_regdomain default_regdom_ww = {
 	/* channel 100..165 */
 	REG_RULE_LIGHT(5470-10, 5850+10, BW_5G, 0),
 	/* 6G channel 1..17 */
-	REG_RULE_LIGHT(5935-10, 7135+10, BW_5G, 0),
+	REG_RULE_LIGHT(5935-10, 7135+10, BW_6G, 0),
 	}
 };
 #else
@@ -516,6 +519,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_MID_52_64 */
 			{121, BAND_5G, CHNL_SPAN_20, 100, 11, TRUE}
 			,			/* CH_SET_UNII_WW_100_140 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{125, BAND_NULL, 0, 0, 0, FALSE}
 				/* CH_SET_UNII_UPPER_NA */
 		}
@@ -535,6 +542,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_100_144 */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 5, FALSE}
 			,			/* CH_SET_UNII_UPPER_149_165 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -553,6 +564,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_100_144 */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 4, FALSE}
 			,			/* CH_SET_UNII_UPPER_149_161 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -571,6 +586,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_100_140 */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 5, FALSE}
 			,			/* CH_SET_UNII_UPPER_149_165 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -589,6 +608,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_100_140 */
 			{125, BAND_NULL, 0, 0, 0, FALSE}
 			,			/* CH_SET_UNII_UPPER_NA */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -608,7 +631,12 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			{121, BAND_5G, CHNL_SPAN_20, 132, 3, TRUE}
 			,			/* CH_SET_UNII_WW_132_140 */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 5, FALSE}
-				/* CH_SET_UNII_UPPER_149_165 */
+						/* CH_SET_UNII_UPPER_149_165 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			,
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+						/* 6G_CH_1_233 */
+#endif
 		}
 	}
 	,
@@ -626,6 +654,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_132_140 */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 5, FALSE}
 			,			/* CH_SET_UNII_UPPER_149_165 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -644,6 +676,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_NA */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 5, FALSE}
 			,			/* CH_SET_UNII_UPPER_149_165 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -662,6 +698,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_100_128 */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 5, FALSE}
 			,			/* CH_SET_UNII_UPPER_149_165 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -680,6 +720,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_NA */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 4, FALSE}
 			,			/* CH_SET_UNII_UPPER_149_161 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -698,6 +742,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_NA */
 			{125, BAND_NULL, 0, 0, 0, FALSE}
 			,			/* CH_SET_UNII_UPPER_NA */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -716,6 +764,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_NA */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 5, FALSE}
 			,			/* CH_SET_UNII_UPPER_149_165 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -734,6 +786,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_NA */
 			{125, BAND_NULL, 0, 0, 0, FALSE}
 			,			/* CH_SET_UNII_UPPER_NA */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -752,6 +808,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_100_140 */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 5, FALSE}
 			,			/* CH_SET_UNII_UPPER_149_165 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -770,6 +830,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_NA */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 5, FALSE}
 			,			/* CH_SET_UNII_UPPER_149_165 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -787,6 +851,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_NA */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 4, FALSE}
 			,			/* CH_SET_UNII_UPPER_149_161 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -804,6 +872,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_NA */
 			{125, BAND_NULL, 0, 0, 0, FALSE}
 			,			/* CH_SET_UNII_UPPER_NA */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -820,7 +892,12 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			{121, BAND_5G, CHNL_SPAN_20, 100, 12, TRUE}
 			,			/* CH_SET_UNII_WW_100_144 */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 5, FALSE}
-					/* CH_SET_UNII_UPPER_149_165 */
+			,		/* CH_SET_UNII_UPPER_149_165 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
+			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
 	,
@@ -839,6 +916,11 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_132_140 */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 5, FALSE}
 						/* CH_SET_UNII_UPPER_149_165 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			,
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+						/* 6G_CH_1_233 */
+#endif
 		}
 	}
 	,
@@ -855,6 +937,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_NA */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 5, FALSE}
 			,			/* CH_SET_UNII_UPPER_149_165 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -872,6 +958,10 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_100_144 */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 5, FALSE}
 			,			/* CH_SET_UNII_UPPER_149_165 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
+#endif
 			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
@@ -890,12 +980,11 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains[] = {
 			,			/* CH_SET_UNII_WW_100_144 */
 			{125, BAND_5G, CHNL_SPAN_20, 149, 5, FALSE}
 			,			/* CH_SET_UNII_UPPER_149_165 */
-			{0, BAND_NULL, 0, 0, 0, FALSE}
 #if (CFG_SUPPORT_WIFI_6G == 1)
-			,
-			{131, BAND_6G, CHNL_SPAN_80, 5, 15, FALSE}
-						/* 6G_PSC_CH_SET_5_229 */
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+			,			/* 6G_CH_1_233 */
 #endif
+			{0, BAND_NULL, 0, 0, 0, FALSE}
 		}
 	}
 };
@@ -924,8 +1013,8 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains_Passive[] = {
 						/* CH_SET_UNII_UPPER_NA */
 #if (CFG_SUPPORT_WIFI_6G == 1)
 			,
-			{131, BAND_6G, CHNL_SPAN_80, 5, 15, FALSE}
-						/* 6G_PSC_CH_SET_5_229 */
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+						/* 6G_CH_1_233 */
 #endif
 		}
 	}
@@ -950,8 +1039,8 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains_Passive[] = {
 						/* CH_SET_UNII_UPPER_NA */
 #if (CFG_SUPPORT_WIFI_6G == 1)
 			,
-			{131, BAND_6G, CHNL_SPAN_80, 5, 15, FALSE}
-						/* 6G_PSC_CH_SET_5_229 */
+			{131, BAND_6G, CHNL_SPAN_20, 1, 59, FALSE}
+						/* 6G_CH_1_233 */
 #endif
 		}
 	}
@@ -960,25 +1049,25 @@ struct DOMAIN_INFO_ENTRY arSupportedRegDomains_Passive[] = {
 #if (CFG_SUPPORT_PWR_LIMIT_COUNTRY == 1)
 struct SUBBAND_CHANNEL g_rRlmSubBand[] = {
 
-	{BAND_2G4_LOWER_BOUND, BAND_2G4_UPPER_BOUND, 1, 0}
+	{BAND_2G4, BAND_2G4_LOWER_BOUND, BAND_2G4_UPPER_BOUND, 1, 0}
 	,			/* 2.4G */
-	{UNII1_LOWER_BOUND, UNII1_UPPER_BOUND, 2, 0}
-	,			/* ch36,38,40,..,48 */
-	{UNII2A_LOWER_BOUND, UNII2A_UPPER_BOUND, 2, 0}
-	,			/* ch52,54,56,..,64 */
-	{UNII2C_LOWER_BOUND, UNII2C_UPPER_BOUND, 2, 0}
-	,			/* ch100,102,104,...,144 */
-	{UNII3_LOWER_BOUND, UNII3_UPPER_BOUND, 2, 0}
-				/* ch149,151,153,....,165 */
+	{BAND_5G, UNII1_LOWER_BOUND, UNII1_UPPER_BOUND, 2, 0}
+	,			/* 5G 36~48 */
+	{BAND_5G, UNII2A_LOWER_BOUND, UNII2A_UPPER_BOUND, 2, 0}
+	,			/* 5G 52~64 */
+	{BAND_5G, UNII2C_LOWER_BOUND, UNII2C_UPPER_BOUND, 2, 0}
+	,			/* 5G 100~144 */
+	{BAND_5G, UNII3_LOWER_BOUND, UNII3_UPPER_BOUND, 2, 0}
+				/* 5G 149~165 */
 #if (CFG_SUPPORT_WIFI_6G == 1)
 	,
-	{UNII5_LOWER_BOUND, UNII5_UPPER_BOUND, 2, 0}
+	{BAND_6G, UNII5_LOWER_BOUND, UNII5_UPPER_BOUND, 2, 0}
 	,
-	{UNII6_LOWER_BOUND, UNII6_UPPER_BOUND, 2, 0}
+	{BAND_6G, UNII6_LOWER_BOUND, UNII6_UPPER_BOUND, 2, 0}
 	,
-	{UNII7_LOWER_BOUND, UNII7_UPPER_BOUND, 2, 0}
+	{BAND_6G, UNII7_LOWER_BOUND, UNII7_UPPER_BOUND, 2, 0}
 	,
-	{UNII8_LOWER_BOUND, UNII8_UPPER_BOUND, 2, 0}
+	{BAND_6G, UNII8_LOWER_BOUND, UNII8_UPPER_BOUND, 2, 0}
 #endif
 };
 #endif
@@ -1196,7 +1285,7 @@ u_int8_t rlmIsValidChnl(struct ADAPTER *prAdapter, uint8_t ucNumOfChannel,
 	struct wiphy *prWiphy;
 
 	prGlueInfo = prAdapter->prGlueInfo;
-	prWiphy = priv_to_wiphy(prGlueInfo);
+	prWiphy = GLUE_GET_WIPHY(prGlueInfo);
 
 	if (eBand == BAND_5G) {
 		channelList = prWiphy->bands[KAL_BAND_5GHZ];
@@ -1315,6 +1404,51 @@ rlmDomainGetChnlList(struct ADAPTER *prAdapter,
  * \return none
  */
 /*----------------------------------------------------------------------------*/
+void rlmDomainGetDfsChnls_V2(struct ADAPTER *prAdapter,
+			  uint8_t ucMaxChannelNum, uint8_t *pucNumOfChannel,
+			  struct RF_CHANNEL_INFO *paucChannelList)
+{
+#if (CFG_SUPPORT_SINGLE_SKU == 1)
+	uint8_t idx, start_idx, end_idx, ucNum;
+	struct CMD_DOMAIN_CHANNEL *prCh;
+
+	/* 5G band */
+	start_idx = rlmDomainGetActiveChannelCount(KAL_BAND_2GHZ);
+	end_idx = rlmDomainGetActiveChannelCount(KAL_BAND_2GHZ) +
+			rlmDomainGetActiveChannelCount(KAL_BAND_5GHZ);
+
+	ucNum = 0;
+	for (idx = start_idx; idx < end_idx; idx++) {
+		prCh = rlmDomainGetActiveChannels() + idx;
+		if (!((prCh->eFlags & IEEE80211_CHAN_RADAR)
+				== IEEE80211_CHAN_RADAR))
+			continue;
+
+		paucChannelList[ucNum].eBand = BAND_5G;
+		paucChannelList[ucNum].ucChannelNum = prCh->u2ChNum;
+
+		ucNum++;
+		if (ucMaxChannelNum == ucNum)
+			break;
+	}
+
+	*pucNumOfChannel = ucNum;
+#else
+	*pucNumOfChannel = 0;
+#endif /* CFG_SUPPORT_SINGLE_SKU */
+}
+
+/*----------------------------------------------------------------------------*/
+/*!
+ * \brief Retrieve DFS channels from 5G band
+ *
+ * \param[in/out] ucMaxChannelNum: max array size
+ *                pucNumOfChannel: pointer to returned channel number
+ *                paucChannelList: pointer to returned channel list array
+ *
+ * \return none
+ */
+/*----------------------------------------------------------------------------*/
 void rlmDomainGetDfsChnls(struct ADAPTER *prAdapter,
 			  uint8_t ucMaxChannelNum, uint8_t *pucNumOfChannel,
 			  struct RF_CHANNEL_INFO *paucChannelList)
@@ -1326,6 +1460,10 @@ void rlmDomainGetDfsChnls(struct ADAPTER *prAdapter,
 	ASSERT(prAdapter);
 	ASSERT(paucChannelList);
 	ASSERT(pucNumOfChannel);
+
+	if (regd_is_single_sku_en())
+		return rlmDomainGetDfsChnls_V2(prAdapter, ucMaxChannelNum,
+				pucNumOfChannel, paucChannelList);
 
 	prDomainInfo = rlmDomainGetDomainInfo(prAdapter);
 	ASSERT(prDomainInfo);
@@ -1450,7 +1588,7 @@ void rlmDomainSendDomainInfoCmd_V2(struct ADAPTER *prAdapter)
 	struct wiphy *pWiphy;
 
 
-	pWiphy = priv_to_wiphy(prAdapter->prGlueInfo);
+	pWiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
 	if (pWiphy->bands[KAL_BAND_2GHZ] != NULL)
 		max_channel_count += pWiphy->bands[KAL_BAND_2GHZ]->n_channels;
 	if (pWiphy->bands[KAL_BAND_5GHZ] != NULL)
@@ -1812,12 +1950,45 @@ u_int8_t rlmDomainIsLegalChannel(struct ADAPTER *prAdapter,
 	return FALSE;
 }
 
+u_int8_t rlmDomainIsLegalDfsChannel_V2(struct ADAPTER *prAdapter,
+		enum ENUM_BAND eBand, uint8_t ucChannel)
+{
+#if (CFG_SUPPORT_SINGLE_SKU == 1)
+	uint8_t idx, start_idx, end_idx;
+	struct CMD_DOMAIN_CHANNEL *prCh;
+
+	if (eBand != BAND_5G)
+		return FALSE;
+
+	start_idx = rlmDomainGetActiveChannelCount(KAL_BAND_2GHZ);
+	end_idx = rlmDomainGetActiveChannelCount(KAL_BAND_2GHZ) +
+			rlmDomainGetActiveChannelCount(KAL_BAND_5GHZ);
+
+	for (idx = start_idx; idx < end_idx; idx++) {
+		prCh = rlmDomainGetActiveChannels() + idx;
+		if (prCh->u2ChNum == ucChannel &&
+			((prCh->eFlags & IEEE80211_CHAN_RADAR)
+				== IEEE80211_CHAN_RADAR)) {
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+#else
+	return FALSE;
+#endif
+}
+
 u_int8_t rlmDomainIsLegalDfsChannel(struct ADAPTER *prAdapter,
 		enum ENUM_BAND eBand, uint8_t ucChannel)
 {
 	uint8_t i, j;
 	struct DOMAIN_SUBBAND_INFO *prSubband;
 	struct DOMAIN_INFO_ENTRY *prDomainInfo;
+
+	if (regd_is_single_sku_en())
+		return rlmDomainIsLegalDfsChannel_V2(
+				prAdapter, eBand, ucChannel);
 
 	prDomainInfo = rlmDomainGetDomainInfo(prAdapter);
 	ASSERT(prDomainInfo);
@@ -1906,7 +2077,7 @@ uint32_t rlmDomainSupOperatingClassIeFill(uint8_t *pBuf)
  */
 /*----------------------------------------------------------------------------*/
 u_int8_t rlmDomainCheckChannelEntryValid(struct ADAPTER *prAdapter,
-					 uint8_t ucCentralCh)
+		enum ENUM_BAND eBand, uint8_t ucCentralCh)
 {
 	u_int8_t fgValid = FALSE;
 	uint8_t ucTemp = 0xff;
@@ -1916,14 +2087,15 @@ u_int8_t rlmDomainCheckChannelEntryValid(struct ADAPTER *prAdapter,
 	/* CH50 is not located in any FCC subbands
 	 * but it's a valid central channel for 160C
 	 */
-	if (ucCentralCh == 50) {
+	if (eBand == BAND_5G && ucCentralCh == 50) {
 		fgValid = TRUE;
 		return fgValid;
 	}
 
 	for (i = POWER_LIMIT_2G4; i < POWER_LIMIT_SUBAND_NUM; i++) {
-		if ((ucCentralCh >= g_rRlmSubBand[i].ucStartCh) &&
-				    (ucCentralCh <= g_rRlmSubBand[i].ucEndCh))
+		if ((eBand == BAND_NULL || eBand == g_rRlmSubBand[i].eBand) &&
+				(ucCentralCh >= g_rRlmSubBand[i].ucStartCh) &&
+				(ucCentralCh <= g_rRlmSubBand[i].ucEndCh))
 			ucTemp = (ucCentralCh - g_rRlmSubBand[i].ucStartCh) %
 				 g_rRlmSubBand[i].ucInterval;
 		if (ucTemp == 0)
@@ -1994,7 +2166,7 @@ rlmDomainIsValidRfSetting(struct ADAPTER *prAdapter,
 
 		/* Check Central Channel Valid or Not */
 		fgValidChannel = rlmDomainCheckChannelEntryValid(prAdapter,
-								 ucCenterCh);
+							eBand, ucCenterCh);
 		if (fgValidChannel == FALSE)
 			DBGLOG(RLM, WARN, "Rf20: CentralCh=%d\n", ucCenterCh);
 
@@ -2015,15 +2187,21 @@ rlmDomainIsValidRfSetting(struct ADAPTER *prAdapter,
 		}
 
 		fgUpperChannel = rlmDomainCheckChannelEntryValid(prAdapter,
-								ucUpperChannel);
+			eBand, ucUpperChannel);
 		if (fgUpperChannel == FALSE)
 			DBGLOG(RLM, WARN, "Rf20: UpperCh=%d\n", ucUpperChannel);
 
 		fgLowerChannel = rlmDomainCheckChannelEntryValid(prAdapter,
-								ucLowerChannel);
+			eBand, ucLowerChannel);
 		if (fgLowerChannel == FALSE)
 			DBGLOG(RLM, WARN, "Rf20: LowerCh=%d\n", ucLowerChannel);
 
+		/* Check S2 */
+		if (ucChannelS2 != 0) {
+			fgValidChannel = FALSE;
+			DBGLOG(RLM, WARN, "Rf20: S1=%d, S2=%d\n",
+				ucChannelS1, ucChannelS2);
+		}
 	} else if ((eChannelWidth == CW_80MHZ) ||
 		   (eChannelWidth == CW_160MHZ)) {
 		ucCenterCh = ucChannelS1;
@@ -2035,7 +2213,7 @@ rlmDomainIsValidRfSetting(struct ADAPTER *prAdapter,
 			 */
 			fgValidChannel =
 				rlmDomainCheckChannelEntryValid(prAdapter,
-								ucCenterCh);
+						eBand, ucCenterCh);
 		}
 
 		if (fgValidChannel == FALSE)
@@ -2045,7 +2223,7 @@ rlmDomainIsValidRfSetting(struct ADAPTER *prAdapter,
 		ucCenterCh = ucChannelS1;
 
 		fgValidChannel = rlmDomainCheckChannelEntryValid(prAdapter,
-								 ucCenterCh);
+			eBand, ucCenterCh);
 
 		if (fgValidChannel == FALSE)
 			DBGLOG(RLM, WARN, "Rf160NC: CentralCh1=%d\n",
@@ -2054,7 +2232,7 @@ rlmDomainIsValidRfSetting(struct ADAPTER *prAdapter,
 		ucCenterCh = ucChannelS2;
 
 		fgValidChannel = rlmDomainCheckChannelEntryValid(prAdapter,
-								 ucCenterCh);
+			eBand, ucCenterCh);
 
 		if (fgValidChannel == FALSE)
 			DBGLOG(RLM, WARN, "Rf160NC: CentralCh2=%d\n",
@@ -2110,6 +2288,37 @@ rlmDomainIsValidRfSetting(struct ADAPTER *prAdapter,
 
 }
 
+u_int8_t
+rlmDomainCheckChannelValidForP2pCsa(struct ADAPTER *prAdapter,
+				   enum ENUM_BAND eBand,
+				   u_int8_t ucChl)
+{
+	struct ieee80211_channel *prChannel = NULL;
+	u_int8_t ucBand = KAL_BAND_2GHZ;
+	u_int8_t ucValid = FALSE;
+
+	if (eBand == BAND_5G)
+		ucBand = KAL_BAND_5GHZ;
+#if (CFG_SUPPORT_WIFI_6G == 1)
+	else if (eBand == BAND_6G)
+		ucBand = KAL_BAND_6GHZ;
+#endif
+
+	prChannel = ieee80211_get_channel(
+		GLUE_GET_WIPHY(
+			prAdapter->prGlueInfo),
+		ieee80211_channel_to_frequency(
+			ucChl,
+			ucBand));
+
+	if (prChannel)
+		ucValid = (prChannel->flags &
+			(IEEE80211_CHAN_NO_IR|IEEE80211_CHAN_RADAR)) ?
+			FALSE : TRUE;
+
+	return ucValid;
+}
+
 #if (CFG_SUPPORT_SINGLE_SKU == 1)
 /*
  * This function coverts country code from alphabet chars to u32,
@@ -2132,10 +2341,9 @@ u_int32_t rlmDomainAlpha2ToU32(char *pcAlpha2, u_int8_t ucAlpha2Size)
 	return u4CountryCode;
 }
 
-#if (CFG_SUPPORT_SINGLE_SKU_LOCAL_DB == 1)
 #if CFG_SUPPORT_CFG80211_QUEUE
-static void wlanRegSetAddToCfg80211Queue(struct wiphy *pWiphy,
-				const struct ieee80211_regdomain *pRegdom)
+void rlmDomainRegSetAddToQueue(struct wiphy *pWiphy,
+					u_int32_t u4CountryCode)
 {
 	struct GLUE_INFO *prGlueInfo = NULL;
 	struct net_device *prDev = gPrDev;
@@ -2146,16 +2354,22 @@ static void wlanRegSetAddToCfg80211Queue(struct wiphy *pWiphy,
 	prGlueInfo = (prDev != NULL) ? *((struct GLUE_INFO **)
 					 netdev_priv(prDev)) : NULL;
 	if (!prGlueInfo) {
-		DBGLOG(SCN, INFO, "prGlueInfo == NULL unexpected\n");
+		DBGLOG(RLM, WARN, "prGlueInfo == NULL unexpected\n");
 		return;
 	}
+#if CFG_CHIP_RESET_SUPPORT
+	if (!wlanIsDriverReady(prGlueInfo, WLAN_DRV_READY_CHCECK_RESET)) {
+		DBGLOG(RLM, WARN, "driver is not ready\n");
+		return;
+	}
+#endif
 
 	prCfg80211Req = (struct PARAM_CFG80211_REQ *) kalMemAlloc(
 			sizeof(struct PARAM_CFG80211_REQ), PHY_MEM_TYPE);
-	DBGLOG(REQ, TRACE, "Alloc prCfg80211Req %p\n", prCfg80211Req);
+	DBGLOG(RLM, TRACE, "Alloc prCfg80211Req %p\n", prCfg80211Req);
 
 	if (prCfg80211Req == NULL) {
-		DBGLOG(REQ, ERROR, "prCfg80211Req Alloc Failed\n");
+		DBGLOG(RLM, WARN, "prCfg80211Req Alloc Failed\n");
 		return;
 	}
 
@@ -2163,7 +2377,7 @@ static void wlanRegSetAddToCfg80211Queue(struct wiphy *pWiphy,
 	prCfg80211Req->prFrame = NULL;
 	prCfg80211Req->ucFlagTx = REG_SET;
 	prCfg80211Req->prWiphy = pWiphy;
-	prCfg80211Req->prRegdom = pRegdom;
+	prCfg80211Req->u4CountryCode = u4CountryCode;
 
 	GLUE_ACQUIRE_SPIN_LOCK(prGlueInfo, SPIN_LOCK_CFG80211_QUE);
 	QUEUE_INSERT_TAIL(&prGlueInfo->prAdapter->rCfg80211Queue,
@@ -2174,13 +2388,14 @@ static void wlanRegSetAddToCfg80211Queue(struct wiphy *pWiphy,
 		DBGLOG(RLM, INFO, "work is already in cfg80211_workq\n");
 }
 #else
-static void wlanRegSetAddToCfg80211Queue(struct wiphy *pWiphy,
-				const struct ieee80211_regdomain *pRegdom)
+void rlmDomainRegSetAddToQueue(struct wiphy *pWiphy,
+				u_int32_t u4CountryCode)
 {
 	DBGLOG(RLM, WARN, "NOT SUPPORT CFG80211 QUEUE\n");
 }
 #endif /* CFG_SUPPORT_CFG80211_QUEUE */
 
+#if (CFG_SUPPORT_SINGLE_SKU_LOCAL_DB == 1)
 u_int32_t rlmDomainUpdateRegdomainFromaLocalDataBaseByCountryCode(
 	struct wiphy *pWiphy,
 	u_int32_t u4CountryCode
@@ -2201,8 +2416,7 @@ u_int32_t rlmDomainUpdateRegdomainFromaLocalDataBaseByCountryCode(
 		u4FinalCountryCode = COUNTRY_CODE_WW;
 	}
 
-	wlanRegSetAddToCfg80211Queue(pWiphy, pRegdom);
-	DBGLOG(RLM, INFO, "add reg set to CFG80211 QUEUE\n");
+	kalApplyCustomRegulatory(pWiphy, pRegdom);
 
 	return u4FinalCountryCode;
 }
@@ -2349,9 +2563,8 @@ rlmDomainSetCountry(struct ADAPTER *prAdapter)
 		return;
 	}
 
-	rlmDomainCountryCodeUpdate(
-		prBaseAdapter, prBaseWiphy,
-		rlmDomainGetCountryCode());
+	rlmDomainRegSetAddToQueue(prBaseWiphy, rlmDomainGetCountryCode());
+	DBGLOG(RLM, INFO, "add reg set to CFG80211 QUEUE\n");
 }
 
 uint8_t rlmDomainTxPwrLimitGetTableVersion(
@@ -2403,26 +2616,36 @@ u_int8_t rlmDomainTxPwrLimitGetCountryRange(
 	uint32_t u4TmpPos = 0;
 	char pcrCountryStr[TX_PWR_LIMIT_COUNTRY_STR_MAX_LEN + 1] = {0};
 	uint8_t cIdx = 0;
+	int8_t search_next = FALSE;
 
 	while (1) {
-		while (u4TmpPos < u4BufLen && pucBuf[u4TmpPos] != '[')
-			u4TmpPos++;
+		if (!search_next) {
+			/* Search country code entry */
+			while (u4TmpPos < u4BufLen && pucBuf[u4TmpPos] != '[')
+				u4TmpPos++;
 
-		u4TmpPos++; /* skip the '[' char */
+			u4TmpPos++; /* skip the '[' char */
+		}
 
 		cIdx = 0;
 		while ((u4TmpPos < u4BufLen) &&
-			   (cIdx < TX_PWR_LIMIT_COUNTRY_STR_MAX_LEN) &&
-			   (pucBuf[u4TmpPos] != ']')) {
+			(cIdx < TX_PWR_LIMIT_COUNTRY_STR_MAX_LEN) &&
+			(pucBuf[u4TmpPos] != ']')
+			&& (pucBuf[u4TmpPos] != ',')) {
 			pcrCountryStr[cIdx++] = pucBuf[u4TmpPos];
 			u4TmpPos++;
 		}
 
-		u4TmpPos++; /* skip the ']' char */
-
 		if ((u4TmpPos >= u4BufLen) ||
 		    (cIdx > TX_PWR_LIMIT_COUNTRY_STR_MAX_LEN))
 			return FALSE;
+
+		if (pucBuf[u4TmpPos] == ',')
+			search_next = TRUE;
+		else
+			search_next = FALSE;
+		/* skip the ']' or ',' char */
+		u4TmpPos++;
 
 		if (u4CountryCode ==
 			rlmDomainAlpha2ToU32(pcrCountryStr, cIdx)) {
@@ -3861,7 +4084,8 @@ void rlmDomainCheckCountryPowerLimitTable(struct ADAPTER *prAdapter)
 		/*<2>Channel Number Interval Check */
 		fgChannelValid =
 		    rlmDomainCheckChannelEntryValid(prAdapter,
-						    PwrLmtConf[i].ucCentralCh);
+				BAND_NULL,
+				PwrLmtConf[i].ucCentralCh);
 
 		/*<3>Power Limit Range Check */
 		fgPowerLimitValid =
@@ -3987,9 +4211,11 @@ rlmDomainBuildCmdByDefaultTable(struct CMD_SET_COUNTRY_CHANNEL_POWER_LIMIT
 				*prCmd,
 				uint16_t u2DefaultTableIndex)
 {
-	uint8_t i, k;
+	uint8_t i, k, j;
 	struct COUNTRY_POWER_LIMIT_TABLE_DEFAULT *prPwrLimitSubBand;
 	struct CMD_CHANNEL_POWER_LIMIT *prCmdPwrLimit;
+	int8_t cLmtBand = 0;
+	int8_t *picPwrLmt;
 
 	prCmdPwrLimit = &prCmd->rChannelPowerLimit[0];
 	prPwrLimitSubBand = &g_rRlmPowerLimitDefault[u2DefaultTableIndex];
@@ -4001,13 +4227,20 @@ rlmDomainBuildCmdByDefaultTable(struct CMD_SET_COUNTRY_CHANNEL_POWER_LIMIT
 			for (k = g_rRlmSubBand[i].ucStartCh;
 			     k <= g_rRlmSubBand[i].ucEndCh;
 			     k += g_rRlmSubBand[i].ucInterval) {
+
+			     /* cLmtBand need reset by each channel */
+				cLmtBand = prPwrLimitSubBand->
+						aucPwrLimitSubBand[i];
 				if ((prPwrLimitSubBand->ucPwrUnit
 							& BIT(i)) == 0) {
+
 					prCmdPwrLimit->ucCentralCh = k;
-					kalMemSet(&prCmdPwrLimit->cPwrLimitCCK,
-						  prPwrLimitSubBand->
-							aucPwrLimitSubBand[i],
-						  PWR_LIMIT_NUM);
+					picPwrLmt =
+						&prCmdPwrLimit->cPwrLimitCCK;
+
+					for (j = 0; j < PWR_LIMIT_NUM; j++)
+						*(picPwrLmt + j) = cLmtBand;
+
 				} else {
 					/* ex: 40MHz power limit(mW\MHz)
 					 *	= 20MHz power limit(mW\MHz) * 2
@@ -4094,6 +4327,25 @@ rlmDomainBuildCmdByDefaultTable(struct CMD_SET_COUNTRY_CHANNEL_POWER_LIMIT
 	}
 }
 
+static void PwrLmtTblArbitrator(int8_t *target,
+	int8_t *compare,
+	uint32_t size)
+{
+	uint8_t i = 0;
+
+	/* Choose min value from target & compare */
+	for (i = 0; i < size; i++) {
+		if (target[i] > compare[i])
+			target[i] = compare[i];
+
+		/* Sanity check power boundary */
+		if (target[i] > MAX_TX_POWER)
+			target[i] = MAX_TX_POWER;
+		else if (target[i] < MIN_TX_POWER)
+			target[i] = MIN_TX_POWER;
+	}
+}
+
 /*----------------------------------------------------------------------------*/
 /*!
  * @brief Fill power limit CMD by Power Limit Configurartion Table
@@ -4123,8 +4375,10 @@ void rlmDomainBuildCmdByConfigTable(struct ADAPTER *prAdapter,
 				    &u2CountryCodeTable);
 
 		fgChannelValid =
-		    rlmDomainCheckChannelEntryValid(prAdapter,
-						    PwrLmtConf[i].ucCentralCh);
+		    rlmDomainCheckChannelEntryValid(
+				prAdapter,
+				BAND_NULL,
+				PwrLmtConf[i].ucCentralCh);
 
 		if (u2CountryCodeTable == COUNTRY_CODE_NULL) {
 			break;	/*end of configuration table */
@@ -4149,11 +4403,12 @@ void rlmDomainBuildCmdByConfigTable(struct ADAPTER *prAdapter,
 						 * Cmd final setting --> ch1 =
 						 *      22dBm, ch2~14 = 20dBm
 						 */
-						kalMemCopy(&prCmdPwrLimit->
+						PwrLmtTblArbitrator(
+							&prCmdPwrLimit->
 								cPwrLimitCCK,
-							   &PwrLmtConf[i].
-								aucPwrLimit,
-							   PWR_LIMIT_NUM);
+							&PwrLmtConf[i].
+								aucPwrLimit[0],
+							PWR_LIMIT_NUM);
 
 						DBGLOG(RLM, LOUD,
 						       "Domain: CC=%c%c,ReplaceCh=%d,Limit=%d,%d,%d,%d,%d,%d,%d,%d,%d,Fg=%d\n",
@@ -4203,9 +4458,11 @@ void rlmDomainBuildCmdByConfigTable(struct ADAPTER *prAdapter,
 					 */
 					prCmdPwrLimit->ucCentralCh =
 						PwrLmtConf[i].ucCentralCh;
-					kalMemCopy(&prCmdPwrLimit->cPwrLimitCCK,
-					      &PwrLmtConf[i].aucPwrLimit,
-					      PWR_LIMIT_NUM);
+
+					PwrLmtTblArbitrator(&prCmdPwrLimit->
+						cPwrLimitCCK,
+						&PwrLmtConf[i].aucPwrLimit[0],
+						PWR_LIMIT_NUM);
 					/* Add this channel setting in
 					 * rChannelPowerLimit[k]
 					 */
@@ -4241,9 +4498,11 @@ void rlmDomainBuildCmdByConfigTable(struct ADAPTER *prAdapter,
 				 */
 				prCmdPwrLimit->ucCentralCh =
 						PwrLmtConf[i].ucCentralCh;
-				kalMemCopy(&prCmdPwrLimit->cPwrLimitCCK,
-					   &PwrLmtConf[i].aucPwrLimit,
-					   PWR_LIMIT_NUM);
+				PwrLmtTblArbitrator(&prCmdPwrLimit->
+						cPwrLimitCCK,
+						&PwrLmtConf[i].aucPwrLimit[0],
+						PWR_LIMIT_NUM);
+
 				/* Add this channel setting in
 				 * rChannelPowerLimit[k]
 				 */
@@ -5328,7 +5587,7 @@ rlmDomainSendTxPwrLimitPerRateCmd_6G(struct ADAPTER *prAdapter,
 	uint8_t ch_idx = 0;
 	const int8_t *prChannelList = &gTx_Pwr_Limit_6g_Ch[0];
 
-	wiphy = priv_to_wiphy(prAdapter->prGlueInfo);
+	wiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
 
 	u4SetCmdTableMaxSize = u4SetCountryTxPwrLimitCmdSize +
 	ch_cnt * u4ChPwrLimitSize;
@@ -5387,7 +5646,7 @@ rlmDomainSendTxLegacyPwrLimitPerRateCmd_6G(struct ADAPTER *prAdapter,
 	uint8_t ch_idx = 0;
 	const int8_t *prChannelList = &gTx_Pwr_Limit_6g_Ch[0];
 
-	wiphy = priv_to_wiphy(prAdapter->prGlueInfo);
+	wiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
 
 	u4SetCmdTableMaxSize = u4SetCountryTxLegacyPwrLimitCmdSize +
 	ch_cnt * u4ChLegacyPwrLimitSize;
@@ -5440,7 +5699,7 @@ rlmDomainSendTxPwrLimitPerRateCmd(struct ADAPTER *prAdapter,
 		*prTxPwrLimitPerRateCmd[KAL_NUM_BANDS] = {0};
 	uint32_t prTxPwrLimitPerRateCmdSize[KAL_NUM_BANDS] = {0};
 
-	wiphy = priv_to_wiphy(prAdapter->prGlueInfo);
+	wiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
 
 	if (rlmDomainInitTxPwrLimitPerRateCmd(
 		prAdapter, wiphy, prTxPwrLimitPerRateCmd,
@@ -5473,7 +5732,7 @@ rlmDomainSendTxLegacyPwrLimitPerRateCmd(struct ADAPTER *prAdapter,
 		*prTxLegacyPwrLimitPerRateCmd[KAL_NUM_BANDS] = {0};
 	uint32_t prTxLegacyPwrLimitPerRateCmdSize[KAL_NUM_BANDS] = {0};
 
-	wiphy = priv_to_wiphy(prAdapter->prGlueInfo);
+	wiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
 
 	if (rlmDomainInitTxLegacyPwrLimitPerRateCmd(
 		prAdapter, wiphy, prTxLegacyPwrLimitPerRateCmd,
@@ -5507,7 +5766,7 @@ rlmDomainSendTxBfBackoffCmd(struct ADAPTER *prAdapter,
 	struct CMD_TXPWR_TXBF_SET_BACKOFF
 		*prTxBfBackoffCmd = NULL;
 
-	wiphy = priv_to_wiphy(prAdapter->prGlueInfo);
+	wiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
 
 	if (rlmDomainInitTxBfBackoffCmd(
 		prAdapter, wiphy, &prTxBfBackoffCmd) !=
@@ -7647,6 +7906,7 @@ void rlmDomainParsingChannel(IN struct wiphy *pWiphy)
 			chan = &sband->channels[ch_idx];
 			pCh = (rlmDomainGetActiveChannels() + ch_count);
 			/* Parse flags and get readable string */
+			kalMemZero(chan_flag_string, sizeof(chan_flag_string));
 			rlmDomainChannelFlagString(chan->flags,
 						   chan_flag_string,
 						   sizeof(chan_flag_string));
@@ -7811,6 +8071,9 @@ uint8_t rlmDomainGetChannelBw(enum ENUM_BAND eBand, uint8_t channelNum)
 		if ((eChBand != eBand) || (pCh->u2ChNum != channelNum))
 			continue;
 
+		DBGLOG(RLM, TRACE, "band=%d, ch=%d, flags=%x\n",
+			eBand, channelNum, pCh->eFlags);
+
 		/* Max BW */
 		if ((pCh->eFlags & IEEE80211_CHAN_NO_160MHZ)
 						== IEEE80211_CHAN_NO_160MHZ)
@@ -7819,8 +8082,108 @@ uint8_t rlmDomainGetChannelBw(enum ENUM_BAND eBand, uint8_t channelNum)
 						== IEEE80211_CHAN_NO_80MHZ)
 			channelBw = MAX_BW_40MHZ;
 		if ((pCh->eFlags & IEEE80211_CHAN_NO_HT40)
-						== IEEE80211_CHAN_NO_HT40)
+						== IEEE80211_CHAN_NO_HT40) {
 			channelBw = MAX_BW_20MHZ;
+			break;
+		}
+
+		/* To prevent using illegal max bandwidth by channel
+		 * flag in reg domain : IEEE80211_CHAN_NO_HT40PLUS、
+		 * IEEE80211_CHAN_NO_HT40MINUS
+		 *
+		 * IEEE80211_CHAN_NO_HT40 = IEEE80211_CHAN_NO_HT40PLUS |
+		 * IEEE80211_CHAN_NO_HT40MINUS
+		 *
+		 * For example,
+		 * IEEE80211_CHAN_NO_HT40 can not limit max bandwidth for
+		 * 5G chnl 116 in CA to MAX_BW_20MHZ, because this channel
+		 * flag only has IEEE80211_CHAN_NO_HT40PLUS not
+		 * IEEE80211_CHAN_NO_HT40
+		 */
+		if (ch_idx >= rlmDomainGetActiveChannelCount(KAL_BAND_2GHZ)) {
+			uint16_t u2ChnlSeq;
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			/* For example,
+			 * 5G chnl 116、6G chnl 33 -> case 1
+			 * 5G chnl 120、6G chnl 37 -> case 2
+			 * 5G chnl 124、6G chnl 41 -> case 3
+			 * 5G chnl 128、6G chnl 45 -> case 0
+			 * For 6G band : +1 is to align the cases with 5G band
+			 */
+			if (eChBand == BAND_6G)
+				u2ChnlSeq = ((pCh->u2ChNum >> 2) + 1) & 0x3;
+			else
+#endif
+			{
+				u2ChnlSeq = (pCh->u2ChNum >> 2) & 0x3;
+			}
+
+			/* Limit MAX_BW_40MHz and above to MAX_BW_20MHZ */
+			if (channelBw > MAX_BW_20MHZ) {
+				/* Check flag for 5G chnl 116 or 124 */
+				if ((u2ChnlSeq & 0x1) && (pCh->eFlags &
+					IEEE80211_CHAN_NO_HT40PLUS))
+					channelBw = MAX_BW_20MHZ;
+				/* Check flag for 5G chnl 120 or 128 */
+				else if ((!(u2ChnlSeq & 0x1)) && (pCh->eFlags &
+					IEEE80211_CHAN_NO_HT40MINUS))
+					channelBw = MAX_BW_20MHZ;
+			}
+
+			/* Limit MAX_BW_80MHz and above to MAX_BW_40MHZ */
+			if (channelBw > MAX_BW_40MHZ) {
+				struct CMD_DOMAIN_CHANNEL *pAdj20Chnl = NULL;
+				struct CMD_DOMAIN_CHANNEL *pAdj40Chnl = NULL;
+				uint32_t ch_idx_offset = 0;
+
+				switch (u2ChnlSeq) {
+				case 1:
+					/* 5G chnl 116 to check chnl 120 flag */
+					ch_idx_offset = 1;
+					if ((ch_idx + ch_idx_offset) < end_idx)
+						pAdj20Chnl = (
+						rlmDomainGetActiveChannels() +
+						(ch_idx + ch_idx_offset));
+					kal_fallthrough;
+				case 2:
+					/* 5G chnl 116 to check chnl 124 flag or
+					 * 5G chnl 120 to check chnl 124 flag
+					 */
+					ch_idx_offset++;
+					break;
+				case 0:
+					/* 5G chnl 128 to check chnl 124 flag */
+					ch_idx_offset = -1;
+					pAdj20Chnl = (
+						rlmDomainGetActiveChannels() +
+						(ch_idx + ch_idx_offset));
+					kal_fallthrough;
+				case 3:
+					/* 5G chnl 128 to check chnl 120 flag or
+					 * 5G chnl 124 to check chnl 120 flag
+					 */
+					ch_idx_offset--;
+					kal_fallthrough;
+				default:
+					break;
+				}
+
+				if ((ch_idx + ch_idx_offset) < end_idx)
+					pAdj40Chnl = (
+						rlmDomainGetActiveChannels() +
+						(ch_idx + ch_idx_offset));
+
+				if ((pAdj20Chnl) && (pAdj20Chnl->eFlags &
+					(IEEE80211_CHAN_NO_HT40PLUS |
+					IEEE80211_CHAN_NO_HT40MINUS)))
+					channelBw = MAX_BW_40MHZ;
+				else if ((pAdj40Chnl) && (pAdj40Chnl->eFlags &
+						(IEEE80211_CHAN_NO_HT40PLUS |
+						IEEE80211_CHAN_NO_HT40MINUS)))
+					channelBw = MAX_BW_40MHZ;
+			}
+		}
+		break;
 	}
 
 	DBGLOG(RLM, INFO, "ch=%d, BW=%d\n", channelNum, channelBw);
@@ -7953,7 +8316,7 @@ void rlmDomainOidSetCountry(IN struct ADAPTER *prAdapter, char *country,
 		DBGLOG(RLM, INFO,
 		       "%s(): Using driver hint to query CRDA getting regd.\n",
 		       __func__);
-		regulatory_hint(priv_to_wiphy(prAdapter->prGlueInfo), country);
+		regulatory_hint(GLUE_GET_WIPHY(prAdapter->prGlueInfo), country);
 	}
 #endif
 }

@@ -67,25 +67,58 @@
 
 LOCAL_PATH := $(call my-dir)
 ifeq ($(MTK_WLAN_SUPPORT), yes)
-ifneq (true,$(strip $(TARGET_NO_KERNEL)))
 ifeq (MT7663,$(strip $(MTK_COMBO_CHIP)))
+include $(CLEAR_VARS)
+LOCAL_MODULE := wlan_drv_gen4_mt7663_reset.ko
+LOCAL_PROPRIETARY_MODULE := true
+LOCAL_MODULE_OWNER := mtk
+LOCAL_INIT_RC := init.wlan_mt7663_drv.rc
+LOCAL_SRC_FILES := $(patsubst $(LOCAL_PATH)/%,%,$(shell find $(LOCAL_PATH) -type f -name '*.[cho]')) Makefile
+include $(MTK_KERNEL_MODULE)
+
+ifdef WIFI_DRIVER_BUS_TYPE
+	WIFI_OPTS := CONFIG_MTK_COMBO_WIFI_HIF=$(WIFI_DRIVER_BUS_TYPE)
+else
+	WIFI_OPTS := CONFIG_MTK_COMBO_WIFI_HIF=sdio
+endif
+WIFI_OPTS += MTK_COMBO_CHIP=MT7663
+WIFI_OPTS += CONFIG_MTK_PLATFORM=$(TARGET_BOARD_PLATFORM)
+$(linked_module): OPTS += $(WIFI_OPTS)
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := wlan_drv_gen4_mt7663_prealloc.ko
 LOCAL_PROPRIETARY_MODULE := true
 LOCAL_MODULE_OWNER := mtk
 LOCAL_INIT_RC := init.wlan_mt7663_drv.rc
 LOCAL_SRC_FILES := $(patsubst $(LOCAL_PATH)/%,%,$(shell find $(LOCAL_PATH) -type f -name '*.[cho]')) Makefile
-
 include $(MTK_KERNEL_MODULE)
+
+ifdef WIFI_DRIVER_BUS_TYPE
+	WIFI_OPTS := CONFIG_MTK_COMBO_WIFI_HIF=$(WIFI_DRIVER_BUS_TYPE)
+else
+	WIFI_OPTS := CONFIG_MTK_COMBO_WIFI_HIF=sdio
+endif
+WIFI_OPTS += MTK_COMBO_CHIP=MT7663
+WIFI_OPTS += CONFIG_MTK_PLATFORM=$(TARGET_BOARD_PLATFORM)
+$(linked_module): OPTS += $(WIFI_OPTS)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := wlan_drv_gen4_mt7663.ko
+LOCAL_REQUIRED_MODULES := wlan_drv_gen4_mt7663_reset.ko
 LOCAL_PROPRIETARY_MODULE := true
 LOCAL_MODULE_OWNER := mtk
 LOCAL_INIT_RC := init.wlan_mt7663_drv.rc
 LOCAL_SRC_FILES := $(patsubst $(LOCAL_PATH)/%,%,$(shell find $(LOCAL_PATH) -type f -name '*.[cho]')) Makefile
-
 include $(MTK_KERNEL_MODULE)
+
+ifdef WIFI_DRIVER_BUS_TYPE
+	WIFI_OPTS := CONFIG_MTK_COMBO_WIFI_HIF=$(WIFI_DRIVER_BUS_TYPE)
+else
+	WIFI_OPTS := CONFIG_MTK_COMBO_WIFI_HIF=sdio
 endif
+WIFI_OPTS += MTK_COMBO_CHIP=MT7663
+WIFI_OPTS += CONFIG_MTK_PLATFORM=$(TARGET_BOARD_PLATFORM)
+$(linked_module): OPTS += $(WIFI_OPTS)
+
 endif
 endif

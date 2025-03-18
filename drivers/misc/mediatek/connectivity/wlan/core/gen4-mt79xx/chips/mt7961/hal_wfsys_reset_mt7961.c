@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2019 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   hal_wfsys_reset_mt7961.c
 *    \brief  WFSYS reset HAL API for MT7961
 *
@@ -9,7 +10,7 @@
      from MediaTek 802.11 Wireless LAN driver stack to GLUE Layer.
 */
 
-#if defined(MT7961) || defined(MT7922) || defined(MT7902)
+#if defined(MT7961) || defined(MT7922) || defined(MT7902) || defined(MT7926)
 
 /*******************************************************************************
 *                         C O M P I L E R   F L A G S
@@ -27,7 +28,7 @@
 #include "hal_wfsys_reset_mt7961.h"
 #if defined(MT7961) || defined(MT7922)
 #include "coda/mt7961/wf_wfdma_host_dma0.h"
-#elif defined(MT7902)
+#elif defined(MT7902) || defined(MT7926)
 #include "coda/mt7902/wf_wfdma_host_dma0.h"
 #endif
 
@@ -455,6 +456,30 @@ u_int8_t mt7961HalPollWfsysSwInitDone(struct ADAPTER *prAdapter)
 	return fgSwInitDone;
 }
 
+#if CFG_CHIP_RESET_KO_SUPPORT
+u_int8_t mt7961HalSetNoBTFwOwnEn(IN int32_t i4Enable)
+{
+	struct ModuleMsg msg;
+	int32_t enable = 0;
+	int ret = -EINVAL;
+
+	msg.msgId = WIFI_TO_BT_SET_DRIVER_OWN;
+	msg.input = &enable;
+	msg.output = &ret;
+
+	DBGLOG(INIT, STATE, "[SER][L0.5] i4Enable=%d\n", i4Enable);
+
+	enable = i4Enable;
+	if ((send_msg_to_module(RESET_MODULE_TYPE_WIFI, RESET_MODULE_TYPE_BT,
+				&msg) != RESET_RETURN_STATUS_SUCCESS) ||
+	    (ret < 0)) {
+		DBGLOG(INIT, ERROR,
+		       "btmtk_sdio_set_driver_own_for_subsys_reset fail\n");
+		return FALSE;
+	}
+	return TRUE;
+}
+#else
 u_int8_t mt7961HalSetNoBTFwOwnEn(IN int32_t i4Enable)
 {
 	typedef int32_t (*p_bt_fun_type) (int32_t);
@@ -468,12 +493,6 @@ u_int8_t mt7961HalSetNoBTFwOwnEn(IN int32_t i4Enable)
 						bt_func_name, i4Enable);
 	pvAddr = GLUE_SYMBOL_GET(bt_func_name);
 #else
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-	struct BT_NOTIFY_DESC *bt_notify_desc = NULL;
-
-	bt_notify_desc = get_bt_notify_callback();
-	pvAddr = bt_notify_desc->WifiNotifyBtSubResetStep1;
-#endif /* CFG_CHIP_RESET_KO_SUPPORT */
 #endif
 	if (pvAddr) {
 		bt_func = (p_bt_fun_type) pvAddr;
@@ -494,7 +513,7 @@ u_int8_t mt7961HalSetNoBTFwOwnEn(IN int32_t i4Enable)
 
 	return TRUE;
 }
-
+#endif /* CFG_CHIP_RESET_KO_SUPPORT */
 #endif /* defined(_HIF_SDIO) */
 
 
@@ -512,4 +531,6 @@ u_int8_t mt7961HalPollWfsysSwInitDone(struct ADAPTER *prAdapter)
 #endif
 
 #endif /* CFG_CHIP_RESET_SUPPORT */
-#endif /* defined(MT7961) || defined(MT7922) || defined(MT7902) */
+#endif /* defined(MT7961) || defined(MT7922) || defined(MT7902) ||
+	* defined(MT7926)
+	*/

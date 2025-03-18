@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/include/precomp.h#2
  */
@@ -254,6 +255,8 @@
 
 #include "rsn.h"
 
+#include "gcm.h"
+
 #if CFG_SUPPORT_WAPI
 #include "wapi.h"
 #endif
@@ -303,7 +306,7 @@
  * chip reset
  *------------------------------------------------------------------------------
  */
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
+#if CFG_CHIP_RESET_KO_SUPPORT
 #include "reset.h"
 #endif
 

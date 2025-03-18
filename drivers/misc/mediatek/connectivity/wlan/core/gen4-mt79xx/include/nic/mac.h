@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   "mac.h"
  *  \brief  Brief description.
  *
@@ -270,6 +271,9 @@
 
 /* BSS Selector - Hash to Element only */
 #define RATE_H2E_ONLY                           123
+#if (CFG_SAP_SUPPORT_WPA3_H2E == 1)
+#define RATE_H2E_ONLY_VAL                       (0x80 | 123)
+#endif
 /* BSS Selector - Clause 22. HT PHY */
 #define RATE_VHT_PHY                            126
 /* BSS Selector - Clause 20. HT PHY */
@@ -493,6 +497,9 @@
 #define MAC_FRAME_QOS_NULL                      (MAC_FRAME_TYPE_DATA | 0x00C0)
 #define MAC_FRAME_QOS_CF_POLL                   (MAC_FRAME_TYPE_DATA | 0x00E0)
 #define MAC_FRAME_QOS_CF_ACK_CF_POLL            (MAC_FRAME_TYPE_DATA | 0x00F0)
+
+#define MAC_FRAME_SUBTYPE_DISASSOC                10
+#define MAC_FRAME_SUBTYPE_DEAUTH                  12
 
 /* 7.1.3.2 Mask for the AID value in the Duration/ID field */
 #define MASK_DI_DURATION                        BITS(0, 14)
@@ -819,9 +826,11 @@
 #define STATUS_CODE_DESTINATION_STA_NOT_QSTA        50
 /* Association denied because the ListenInterval is too large */
 #define STATUS_CODE_ASSOC_DENIED_LARGE_LIS_INTERVAL 51
-#if CFG_SUPPORT_WPA3_H2E
+
+#if ((CFG_SUPPORT_WPA3_H2E == 1) || (CFG_SAP_SUPPORT_WPA3_H2E == 1))
 #define STATUS_CODE_SAE_HASH_TO_ELEMENT 126
 #endif
+
 /* proprietary definition of reserved field of Status Code */
 /* Join failure */
 #define STATUS_CODE_JOIN_FAILURE                    0xFFF0
@@ -989,7 +998,6 @@
 	57  /* Resource Information Container for 802.11 R */
 #define ELEM_ID_SUP_OPERATING_CLASS \
 	59	/* Supported Operating Classes */
-
 #define ELEM_ID_HT_OP \
 	61	/* HT Operation */
 #define ELEM_ID_SCO \
@@ -1044,10 +1052,18 @@
 	192	/* VHT Operation information */
 #define ELEM_ID_WIDE_BAND_CHANNEL_SWITCH \
 	194	/*Wide Bandwidth Channel Switch */
+#define ELEM_ID_TPE \
+	195 /* Transmit Power Envelope */
 #define ELEM_ID_OP_MODE \
 	199	/* Operation Mode Notification */
+#if (CFG_SAP_SUPPORT_WPA3_H2E == 1)
+#define ELEM_ID_RSNX \
+	244	/* RSN Extension */
+#endif
 #define ELEM_ID_RESERVED \
 	255	/* Reserved */
+#define ELEM_EXT_ID_DIFFIE_HELLMAN_PARAM \
+	32 /* OWE: Diffie-Hellman Parameter */
 
 #if CFG_SUPPORT_MBO
 /* MBO v0.0_r19, 4.2: MBO Attributes */
@@ -1074,6 +1090,8 @@ enum MBO_ATTR_ID {
 
 /* 7.3.2.2 Supported Rates */
 #define ELEM_MAX_LEN_SUP_RATES                      8
+
+#define ELEM_MAX_LEN_SUP_RATES_IOT                  16
 
 /* 7.3.2.4 DS Parameter Set */
 #define ELEM_MAX_LEN_DS_PARAMETER_SET               1
@@ -1318,6 +1336,9 @@ enum BEACON_REPORT_DETAIL {
 
 #define ELEM_MAX_LEN_VHT_OP_MODE_NOTIFICATION \
 	(3 - ELEM_HDR_LEN)	/* sizeof(IE_VHT_OP_MODE_T)-2 */
+
+#define ELEM_MAX_LEN_TPE \
+	(8 - ELEM_HDR_LEN)	/* sizeof(IE_VHT_TPE)-2 */
 
 /*8.4.2.160.3 VHT Supported MCS Set field*/
 
@@ -1757,6 +1778,7 @@ enum BEACON_REPORT_DETAIL {
 #define VENDOR_OUI_TYPE_WPS                         4
 #define VENDOR_OUI_TYPE_P2P                         9
 #define VENDOR_OUI_TYPE_WFD                         10
+#define VENDOR_OUI_TYPE_OWE                         28
 
 /* Epigram IE */
 #define VENDOR_IE_EPIGRAM_OUI                      0x00904c
@@ -1909,6 +1931,9 @@ enum BEACON_REPORT_DETAIL {
 #define TBTT_INFO_BSS_PARAM_SAME_SSID               BIT(1)
 /* 9.4.2.260 Short SSID List element */
 #define ELEM_EXT_ID_SHORT_SSID_LIST                 58
+
+#define BIP_GMAC_256_MIC_LEN 16
+#define BIP_AAD_LEN 20
 
 /*******************************************************************************
  *                             D A T A   T Y P E S
@@ -2216,6 +2241,13 @@ struct IE_SUPPORTED_RATE {
 	uint8_t ucId;
 	uint8_t ucLength;
 	uint8_t aucSupportedRates[ELEM_MAX_LEN_SUP_RATES];
+} __KAL_ATTRIB_PACKED__;
+
+/* Some IOT AP will carry Rates > 8*/
+struct IE_SUPPORTED_RATE_IOT {
+	uint8_t ucId;
+	uint8_t ucLength;
+	uint8_t aucSupportedRates[ELEM_MAX_LEN_SUP_RATES_IOT];
 } __KAL_ATTRIB_PACKED__;
 
 /* 7.3.2.4 DS Parameter Set element */
@@ -2795,6 +2827,13 @@ struct _IE_TWT_T {
 	uint8_t ucReserved;	/* TWT Channel for 11ah. Reserved for 11ax */
 } __KAL_ATTRIB_PACKED__;
 #endif
+
+struct IE_VHT_TPE {
+	uint8_t ucId;
+	uint8_t ucLength;
+	uint8_t u8TxPowerInfo;
+	uint8_t u8TxPowerBw[4];
+} __KAL_ATTRIB_PACKED__;
 
 /* 3 7.4 Action Frame. */
 /* 7.4 Action frame format */
@@ -3582,6 +3621,39 @@ struct IE_SHORT_SSID_LIST {
 	uint8_t      aucShortSsidList[0];
 } __KAL_ATTRIB_PACKED__;
 
+struct WLAN_DEAUTH_FRAME_WITH_MIC {
+	/* Authentication MAC header */
+	uint16_t u2FrameCtrl;	/* Frame Control */
+	uint16_t u2DurationID;	/* Duration */
+	uint8_t aucDestAddr[MAC_ADDR_LEN];	/* DA */
+	uint8_t aucSrcAddr[MAC_ADDR_LEN];	/* SA */
+	uint8_t aucBSSID[MAC_ADDR_LEN];	/* BSSID */
+	uint16_t u2SeqCtrl;	/* Sequence Control */
+	/* Deauthentication frame body */
+	uint16_t u2ReasonCode;	/* Reason code */
+	uint8_t aucInfoElem[1]; /* ies */
+} __KAL_ATTRIB_PACKED__;
+
+struct IE_MGMT_MIC {
+	uint8_t ucId;
+	uint8_t ucLength;
+	uint16_t u2KeyId;
+	uint8_t aucIPN[6];
+	uint8_t aucMIC[16];
+} __KAL_ATTRIB_PACKED__;
+
+struct RSNX_INFO {
+	uint8_t ucElemId;
+	uint8_t ucLength;
+	uint16_t u2Cap;
+} __KAL_ATTRIB_PACKED__;
+
+struct RSNX_INFO_ELEM {
+	uint8_t ucElemId;
+	uint8_t ucLength;
+	uint8_t aucCap[0];
+} __KAL_ATTRIB_PACKED__;
+
 #if defined(WINDOWS_DDK) || defined(WINDOWS_CE)
 #pragma pack()
 #endif
@@ -3626,6 +3698,8 @@ struct IE_SHORT_SSID_LIST {
 
 #define SUP_RATES_IE(fp)        ((struct IE_SUPPORTED_RATE *) fp)
 
+#define SUP_RATES_IOT_IE(fp)    ((struct IE_SUPPORTED_RATE_IOT *) fp)
+
 #define DS_PARAM_IE(fp)         ((struct IE_DS_PARAM_SET *) fp)
 
 #define TIM_IE(fp)              ((struct IE_TIM *) fp)
@@ -3666,6 +3740,7 @@ struct IE_SHORT_SSID_LIST {
 
 #define MTK_OUI_IE(fp)          ((struct IE_MTK_OUI *) fp)
 
+#define EX_CSA_IE(fp)		((struct IE_EX_CHANNEL_SWITCH *) fp)
 #define CSA_IE(fp)              ((struct IE_CHANNEL_SWITCH *) fp)
 #define SEC_OFFSET_IE(fp)       ((struct IE_SECONDARY_OFFSET *) fp)
 #define WIDE_BW_IE(fp)          ((struct IE_WIDE_BAND_CHANNEL *) fp)

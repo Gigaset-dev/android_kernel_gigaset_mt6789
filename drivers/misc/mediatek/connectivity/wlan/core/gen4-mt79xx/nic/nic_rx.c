@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/nic/nic_rx.c#5
  */
@@ -89,6 +90,9 @@ apfnProcessRxMgtFrame[MAX_NUM_OF_FC_SUBTYPES] = {
 static struct RX_EVENT_HANDLER arEventTable[] = {
 	{EVENT_ID_RX_ADDBA,	qmHandleEventRxAddBa},
 #if CFG_SUPPORT_DBDC
+#if CFG_WIFI_RAM_COEX_SPDT_SHR_ANT_CTRL
+	{EVENT_ID_UPDATE_SHARED_ANTENNA_SWITCH, cnmUpdateSharedAntennaSwitch},
+#endif
 	{EVENT_ID_DBDC_SWITCH_DONE, cnmDbdcEventHwSwitchDone},
 #endif
 	{EVENT_ID_RX_DELBA,	qmHandleEventRxDelBa},
@@ -167,10 +171,14 @@ static struct RX_EVENT_HANDLER arEventTable[] = {
 #endif
 	{ EVENT_ID_OPMODE_CHANGE, cnmOpmodeEventHandler },
 #if CFG_SUPPORT_NAN
-	{ EVENT_ID_NAN_EXT_EVENT, nicNanEventDispatcher }
+	{ EVENT_ID_NAN_EXT_EVENT, nicNanEventDispatcher },
 #endif
 #if CONFIG_WIFI_RAM_MQM_BA_DELAY_SUPPORT
 	{ EVENT_ID_BAOFFLOAD_INDICATION, qmHandleEventBaOffloadIndication},
+#endif
+	{EVENT_ID_LP_DBG_CTRL, nicEventLpDbgCtrl},
+#if CFG_SUPPORT_MDNS_OFFLOAD
+	{ EVENT_ID_MDNS_RECORD, nicEventMdnsStats},
 #endif
 };
 
@@ -545,15 +553,18 @@ void nicRxFillChksumStatus(IN struct ADAPTER *prAdapter,
 void nicRxClearFrag(IN struct ADAPTER *prAdapter,
 	IN struct STA_RECORD *prStaRec)
 {
-	int j;
+	int i, j;
 	struct FRAG_INFO *prFragInfo;
 
-	for (j = 0; j < MAX_NUM_CONCURRENT_FRAGMENTED_MSDUS; j++) {
-		prFragInfo = &prStaRec->rFragInfo[j];
+	for (i = 0; i < TID_NUM; i++) {
+		for (j = 0; j < MAX_NUM_CONCURRENT_FRAGMENTED_MSDUS; j++) {
+			prFragInfo = &prStaRec->rFragInfo[i][j];
 
-		if (prFragInfo->pr1stFrag) {
-			nicRxReturnRFB(prAdapter, prFragInfo->pr1stFrag);
-			prFragInfo->pr1stFrag = (struct SW_RFB *)NULL;
+			if (prFragInfo->pr1stFrag) {
+				nicRxReturnRFB(prAdapter,
+					prFragInfo->pr1stFrag);
+				prFragInfo->pr1stFrag = (struct SW_RFB *)NULL;
+			}
 		}
 	}
 
@@ -587,8 +598,12 @@ struct SW_RFB *nicRxDefragMPDU(IN struct ADAPTER *prAdapter,
 	u_int8_t fgLast = FALSE;
 	OS_SYSTIME rCurrentTime;
 	struct WLAN_MAC_HEADER *prWlanHeader = NULL;
+	struct WLAN_MAC_HEADER_QOS *prWlanHeaderQos = NULL;
+	struct WLAN_MAC_HEADER_A4_QOS *prWlanHeaderA4Qos = NULL;
 	void *prRxStatus = NULL;
 	struct HW_MAC_RX_STS_GROUP_4 *prRxStatusGroup4 = NULL;
+	struct STA_RECORD *prStaRec;
+	uint8_t ucTid = 0;
 #if CFG_SUPPORT_FRAG_ATTACK_DETECTION
 	uint8_t ucSecMode = CIPHER_SUITE_NONE;
 	uint64_t u8PN;
@@ -600,25 +615,46 @@ struct SW_RFB *nicRxDefragMPDU(IN struct ADAPTER *prAdapter,
 	ASSERT(prSWRfb);
 
 	prRxCtrl = &prAdapter->rRxCtrl;
+	prStaRec = prSWRfb->prStaRec;
 
 	prRxStatus = prSWRfb->prRxStatus;
 	ASSERT(prRxStatus);
 
 	if (prSWRfb->fgHdrTran == FALSE) {
-		prWlanHeader = (struct WLAN_MAC_HEADER *) prSWRfb->pvHeader;
+		prWlanHeader = (struct WLAN_MAC_HEADER *)
+					prSWRfb->pvHeader;
+		prWlanHeaderQos = (struct WLAN_MAC_HEADER_QOS *)
+					prSWRfb->pvHeader;
+		prWlanHeaderA4Qos = (struct WLAN_MAC_HEADER_A4_QOS *)
+					prSWRfb->pvHeader;
 		prSWRfb->u2SequenceControl = prWlanHeader->u2SeqCtrl;
 		u2FrameCtrl = prWlanHeader->u2FrameCtrl;
+		if (RXM_IS_QOS_DATA_FRAME(u2FrameCtrl)) {
+			if (RXM_IS_FROM_DS_TO_DS(u2FrameCtrl)) {
+				ucTid = (prWlanHeaderA4Qos->
+					u2QosCtrl & MASK_QC_TID);
+			} else {
+				ucTid = (prWlanHeaderQos->
+					u2QosCtrl & MASK_QC_TID);
+			}
+		} else
+			ucTid = TID_NUM;
 	} else {
 		prRxStatusGroup4 = prSWRfb->prRxStatusGroup4;
 		prSWRfb->u2SequenceControl = HAL_RX_STATUS_GET_SEQFrag_NUM(
 						     prRxStatusGroup4);
 		u2FrameCtrl = HAL_RX_STATUS_GET_FRAME_CTL_FIELD(
 				      prRxStatusGroup4);
+		if (RXM_IS_QOS_DATA_FRAME(u2FrameCtrl))
+			ucTid = prSWRfb->ucTid;
+		else
+			ucTid = TID_NUM;
 	}
 	u2SeqCtrl = prSWRfb->u2SequenceControl;
 	u2SeqNo = u2SeqCtrl >> MASK_SC_SEQ_NUM_OFFSET;
 	ucFragNo = (uint8_t) (u2SeqCtrl & MASK_SC_FRAG_NUM);
 	prSWRfb->u2FrameCtrl = u2FrameCtrl;
+	prSWRfb->ucTid = ucTid;
 
 	if (!(u2FrameCtrl & MASK_FC_MORE_FRAG)) {
 		/* The last fragment frame */
@@ -656,6 +692,7 @@ struct SW_RFB *nicRxDefragMPDU(IN struct ADAPTER *prAdapter,
 	if (prSWRfb->ucSecMode == CIPHER_SUITE_TKIP
 		|| prSWRfb->ucSecMode == CIPHER_SUITE_TKIP_WO_MIC
 		|| prSWRfb->ucSecMode == CIPHER_SUITE_CCMP
+		|| prSWRfb->ucSecMode == CIPHER_SUITE_CCMP_W_CCX
 		|| prSWRfb->ucSecMode == CIPHER_SUITE_CCMP_256
 		|| prSWRfb->ucSecMode == CIPHER_SUITE_GCMP_128
 		|| prSWRfb->ucSecMode == CIPHER_SUITE_GCMP_256) {
@@ -670,7 +707,7 @@ struct SW_RFB *nicRxDefragMPDU(IN struct ADAPTER *prAdapter,
 #endif /* CFG_SUPPORT_FRAG_ATTACK_DETECTION */
 
 	for (j = 0; j < MAX_NUM_CONCURRENT_FRAGMENTED_MSDUS; j++) {
-		prFragInfo = &prSWRfb->prStaRec->rFragInfo[j];
+		prFragInfo = &prStaRec->rFragInfo[prSWRfb->ucTid][j];
 		if (prFragInfo->pr1stFrag) {
 			/* I. If the receive timer for the MSDU or MMPDU that
 			 * is stored in the fragments queue exceeds
@@ -694,7 +731,7 @@ struct SW_RFB *nicRxDefragMPDU(IN struct ADAPTER *prAdapter,
 
 	for (i = 0; i < MAX_NUM_CONCURRENT_FRAGMENTED_MSDUS; i++) {
 
-		prFragInfo = &prSWRfb->prStaRec->rFragInfo[i];
+		prFragInfo = &prStaRec->rFragInfo[prSWRfb->ucTid][i];
 
 		if (fgFirst) {	/* looking for timed-out frag buffer */
 
@@ -1056,6 +1093,45 @@ u_int8_t nicRxIsDuplicateFrame(IN OUT struct SW_RFB
 
 /*----------------------------------------------------------------------------*/
 /*!
+ * @brief Rx path indicate packets to Network Stack
+ *
+ * @param prAdapter pointer to the Adapter handler
+ * @param prRxCtrl pointer to Rx path controller
+ *
+ * @return (none)
+ *
+ */
+/*----------------------------------------------------------------------------*/
+void nicRxIndicatePkts(IN struct ADAPTER *prAdapter,
+	IN struct RX_CTRL *prRxCtrl)
+{
+	ASSERT(prAdapter);
+	ASSERT(prRxCtrl);
+
+#if !CFG_SUPPORT_MULTITHREAD
+#if CFG_NATIVE_802_11
+	RX_ADD_CNT(prRxCtrl, RX_DATA_RETAINED_COUNT,
+		   prRxCtrl->ucNumRetainedPacket);
+	kalRxIndicatePkts(prAdapter->prGlueInfo,
+		(uint32_t) prRxCtrl->apvRetainedPacket,
+		(uint32_t)
+		prRxCtrl->ucNumRetainedPacket);
+	/*flush retained packet buff*/
+	prRxCtrl->ucNumRetainedPacket = 0;
+#else
+	RX_ADD_CNT(prRxCtrl, RX_DATA_INDICATION_COUNT,
+		   prRxCtrl->ucNumIndPacket);
+	kalRxIndicatePkts(prAdapter->prGlueInfo,
+		prRxCtrl->apvIndPacket,
+	(uint32_t) prRxCtrl->ucNumIndPacket);
+	/*flush retained packet buff*/
+	prRxCtrl->ucNumIndPacket = 0;
+#endif
+#endif
+}
+
+/*----------------------------------------------------------------------------*/
+/*!
  * @brief Process packet doesn't need to do buffer reordering
  *
  * @param prAdapter pointer to the Adapter handler
@@ -1159,7 +1235,7 @@ void nicRxProcessPktWithoutReorder(IN struct ADAPTER
 					  prSwRfb->pvPacket));
 		KAL_RELEASE_SPIN_LOCK(prAdapter, SPIN_LOCK_RX_TO_OS_QUE);
 
-		prRxCtrl->ucNumIndPacket++;
+		prRxCtrl->u2NumIndPacket++;
 		kalSetTxEvent2Rx(prAdapter->prGlueInfo);
 	}
 #else
@@ -1173,16 +1249,20 @@ void nicRxProcessPktWithoutReorder(IN struct ADAPTER
 			RX_ADD_CNT(prRxCtrl, RX_DATA_RETAINED_COUNT, 1);
 	}
 #endif
-	prRxCtrl->apvIndPacket[prRxCtrl->ucNumIndPacket] =
+	if (prRxCtrl->u2NumIndPacket >= CFG_RX_MAX_PKT_NUM)
+		nicRxIndicatePkts(prAdapter, prRxCtrl);
+
+	prRxCtrl->apvIndPacket[prRxCtrl->u2NumIndPacket] =
 		prSwRfb->pvPacket;
-	prRxCtrl->ucNumIndPacket++;
+	prRxCtrl->u2NumIndPacket++;
+
 #endif
 
 #ifndef LINUX
 	if (fgIsRetained) {
-		prRxCtrl->apvRetainedPacket[prRxCtrl->ucNumRetainedPacket] =
+		prRxCtrl->apvRetainedPacket[prRxCtrl->u2NumRetainedPacket] =
 			prSwRfb->pvPacket;
-		prRxCtrl->ucNumRetainedPacket++;
+		prRxCtrl->u2NumRetainedPacket++;
 	} else
 #endif
 		prSwRfb->pvPacket = NULL;
@@ -1584,6 +1664,9 @@ void nicRxProcessDataPacket(IN struct ADAPTER *prAdapter,
 						   prSwRfb->ucWlanIdx);
 		GLUE_SET_PKT_BSS_IDX(prSwRfb->pvPacket, ucBssIndex);
 		STATS_RX_PKT_INFO_DISPLAY(prSwRfb);
+		if (IS_BSS_INDEX_AIS(prAdapter, ucBssIndex)) {
+			qmCheckRxEAPOLM3(prAdapter, prSwRfb, ucBssIndex);
+		}
 
 #if ((CFG_SUPPORT_802_11AX == 1) && (CFG_SUPPORT_WIFI_SYSDVT == 1))
 		if (prAdapter->fgEnShowHETrigger) {
@@ -1657,7 +1740,7 @@ void nicRxProcessDataPacket(IN struct ADAPTER *prAdapter,
 #endif /* CFG_SUPPORT_WIFI_SYSDVT */
 					if (prStaRec &&
 					prStaRec->ucBssIndex < MAX_BSSID_NUM) {
-						GET_CURRENT_SYSTIME(
+						GET_BOOT_SYSTIME(
 							&prRxCtrl->u4LastRxTime
 							[prStaRec->ucBssIndex]);
 					}
@@ -3142,7 +3225,8 @@ void nicRxProcessMgmtPacket(IN struct ADAPTER *prAdapter,
 #endif
 #if CFG_SUPPORT_802_11W
 	if (prSwRfb->fgIcvErr) {
-		if (prSwRfb->ucSecMode == CIPHER_SUITE_BIP)
+		if (prSwRfb->ucSecMode == CIPHER_SUITE_BIP ||
+			prSwRfb->ucSecMode == CIPHER_SUITE_BIP_GMAC_256)
 			DBGLOG(RSN, INFO, "[MFP] RX with BIP ICV ERROR\n");
 		else
 			DBGLOG(RSN, INFO, "[MFP] RX with ICV ERROR\n");
@@ -3150,6 +3234,26 @@ void nicRxProcessMgmtPacket(IN struct ADAPTER *prAdapter,
 		nicRxReturnRFB(prAdapter, prSwRfb);
 		RX_INC_CNT(&prAdapter->rRxCtrl, RX_DROP_TOTAL_COUNT);
 		return;
+	}
+#endif
+
+#if CFG_SUPPORT_SW_BIP_GMAC
+	/* BIP-GMAC checking for BMC mgmt frame (deauth/disassoc) */
+	if (rsnCheckBipGmacKeyInstall(prAdapter, prSwRfb->prStaRec)
+		&& (prSwRfb->fgIsBC || prSwRfb->fgIsMC) &&
+		(ucSubtype == MAC_FRAME_SUBTYPE_DISASSOC ||
+		 ucSubtype == MAC_FRAME_SUBTYPE_DEAUTH)) {
+		/* HW doesn't support BIP-GMAC, will set fgIsCipherMS, driver
+		 * should reset this flag and let rsnCheckBipGmac do the check
+		 */
+		prSwRfb->fgIsCipherMS = FALSE;
+		if (rsnCheckBipGmac(prAdapter, prSwRfb) != TRUE) {
+			prSwRfb->fgIsCipherMS = TRUE;
+			DBGLOG(RX, WARN,
+				"BIP-GMAC integrity check fail! Drop it\n");
+			nicRxReturnRFB(prAdapter, prSwRfb);
+			return;
+		}
 	}
 #endif
 
@@ -3601,8 +3705,8 @@ void nicRxProcessRFBs(IN struct ADAPTER *prAdapter)
 	prRxCtrl = &prAdapter->rRxCtrl;
 	ASSERT(prRxCtrl);
 
-	prRxCtrl->ucNumIndPacket = 0;
-	prRxCtrl->ucNumRetainedPacket = 0;
+	prRxCtrl->u2NumIndPacket = 0;
+	prRxCtrl->u2NumRetainedPacket = 0;
 	u4RxLoopCount = prAdapter->rWifiVar.u4TxRxLoopCount;
 	u4Tick = kalGetTimeTick();
 
@@ -3646,23 +3750,8 @@ void nicRxProcessRFBs(IN struct ADAPTER *prAdapter)
 				nicRxProcessPacketType(prAdapter, prSwRfb);
 			}
 
-			if (prRxCtrl->ucNumIndPacket > 0) {
-				RX_ADD_CNT(prRxCtrl, RX_DATA_INDICATION_COUNT,
-					   prRxCtrl->ucNumIndPacket);
-				RX_ADD_CNT(prRxCtrl, RX_DATA_RETAINED_COUNT,
-					   prRxCtrl->ucNumRetainedPacket);
-#if !CFG_SUPPORT_MULTITHREAD
-#if CFG_NATIVE_802_11
-				kalRxIndicatePkts(prAdapter->prGlueInfo,
-					(uint32_t) prRxCtrl->ucNumIndPacket,
-					(uint32_t)
-						prRxCtrl->ucNumRetainedPacket);
-#else
-				kalRxIndicatePkts(prAdapter->prGlueInfo,
-				  prRxCtrl->apvIndPacket,
-				  (uint32_t) prRxCtrl->ucNumIndPacket);
-#endif
-#endif
+			if (prRxCtrl->u2NumIndPacket > 0) {
+				nicRxIndicatePkts(prAdapter, prRxCtrl);
 #if (CFG_SUPPORT_PERMON == 1)
 				kalPerMonStart(prAdapter->prGlueInfo);
 #endif
@@ -4138,6 +4227,12 @@ uint32_t nicRxNANPMFCheck(IN struct ADAPTER *prAdapter,
 					       prActionFrame->aucSrcAddr[4],
 					       prActionFrame->aucSrcAddr[5],
 					       prActionFrame->ucOUISubtype);
+
+					DBGLOG(NAN, LOUD,
+					       "[PMF] Rx NON-PROTECT NAF, StaIdx:%d, Wtbl:%d\n",
+					       prSwRfb->prStaRec->ucIndex,
+					       prSwRfb->ucWlanIdx);
+
 					return WLAN_STATUS_FAILURE;
 				}
 			}
@@ -4166,10 +4261,16 @@ uint32_t nicRxProcessNanPubActionFrame(IN struct ADAPTER *prAdapter,
 		return WLAN_STATUS_INVALID_DATA;
 
 	ucOuiType = prActionFrame->ucOUItype;
+	ucOuiSubtype = prActionFrame->ucOUISubtype;
 
-	if (prSwRfb->prStaRec && (ucOuiType == VENDOR_OUI_TYPE_NAN_NAF)) {
+	if (prSwRfb->prStaRec && (ucOuiType == VENDOR_OUI_TYPE_NAN_NAF) &&
+		ucOuiSubtype != NAN_ACTION_SCHEDULE_UPDATE_NOTIFICATION) {
 		prBssInfo = GET_BSS_INFO_BY_INDEX(
 			prAdapter, prSwRfb->prStaRec->ucBssIndex);
+
+		if (!prBssInfo)
+			return WLAN_STATUS_FAILURE;
+
 		if (nicRxNANPMFCheck(prAdapter, prBssInfo, prSwRfb) ==
 		    WLAN_STATUS_FAILURE)
 			return WLAN_STATUS_FAILURE;
@@ -4177,7 +4278,6 @@ uint32_t nicRxProcessNanPubActionFrame(IN struct ADAPTER *prAdapter,
 
 	if (ucOuiType == VENDOR_OUI_TYPE_NAN_NAF ||
 	    ucOuiType == VENDOR_OUI_TYPE_NAN_SDF) {
-		ucOuiSubtype = prActionFrame->ucOUISubtype;
 		DBGLOG(NAN, INFO,
 		       "Rx NAN Pub Action, StaIdx:%d, Wtbl:%d, Key:%d, OUISubtype:%d\n",
 		       prSwRfb->ucStaRecIdx, prSwRfb->ucWlanIdx,
@@ -4517,6 +4617,13 @@ uint32_t nicRxProcessActionFrame(IN struct ADAPTER *
 #endif
 	case CATEGORY_WME_MGT_NOTIFICATION:
 		wmmParseQosAction(prAdapter, prSwRfb);
+		break;
+	case CATEGORY_PROTECTED_DUAL_OF_PUBLIC_ACTION:
+#if CFG_SUPPORT_NAN
+		if (prAdapter->fgIsNANRegistered)
+			nicRxProcessNanPubActionFrame(prAdapter, prSwRfb);
+#endif
+		aisFuncValidateRxActionFrame(prAdapter, prSwRfb);
 		break;
 	default:
 		break;

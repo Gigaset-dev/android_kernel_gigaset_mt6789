@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: /os/linux/include/gl_kal.h
  */
@@ -73,7 +74,11 @@ extern struct delayed_work cfg80211_workq;
 /* Define how many concurrent operation networks. */
 #define KAL_BSS_NUM             4
 
-#define KAL_AIS_NUM           1
+#ifdef CFG_STA_NUM
+#define KAL_AIS_NUM             CFG_STA_NUM
+#else
+#define KAL_AIS_NUM             1
+#endif
 
 #if CFG_DUAL_P2PLIKE_INTERFACE
 #define KAL_P2P_NUM             2
@@ -89,9 +94,20 @@ extern struct delayed_work cfg80211_workq;
 
 #define GLUE_FLAG_HIF_PROCESS \
 	(GLUE_FLAG_HALT | GLUE_FLAG_INT | GLUE_FLAG_HIF_TX | \
-	GLUE_FLAG_HIF_TX_CMD | GLUE_FLAG_HIF_FW_OWN)
+	GLUE_FLAG_HIF_TX_CMD | GLUE_FLAG_HIF_FW_OWN | \
+	GLUE_FLAG_UPDATE_WMM_QUOTA)
 
 #define GLUE_FLAG_RX_PROCESS (GLUE_FLAG_HALT | GLUE_FLAG_RX_TO_OS)
+
+#if defined(_HIF_SDIO)
+#define KAL_IS_NEED_WAKEUP(_prGlueInfo) \
+	(((_prGlueInfo->ulFlag & GLUE_FLAG_HIF_PROCESS) \
+		!= 0 && (_prGlueInfo->rHifInfo.fgForceFwOwn == FALSE)) \
+		|| (_prGlueInfo->ulFlag & GLUE_FLAG_HALT))
+#else
+#define KAL_IS_NEED_WAKEUP(_prGlueInfo) \
+	((_prGlueInfo->ulFlag & GLUE_FLAG_HIF_PROCESS) != 0)
+#endif
 #else
 /* All flags for single thread driver */
 #define GLUE_FLAG_MAIN_PROCESS  0xFFFFFFFF
@@ -121,6 +137,9 @@ extern struct delayed_work cfg80211_workq;
  *                             D A T A   T Y P E S
  *******************************************************************************
  */
+
+#define WORK_ALL_CPU_OK 999
+
 enum ENUM_SPIN_LOCK_CATEGORY_E {
 	SPIN_LOCK_FSM = 0,
 
@@ -191,6 +210,8 @@ enum ENUM_SPIN_LOCK_CATEGORY_E {
 #if CFG_SUPPORT_NAN
 	SPIN_LOCK_NAN_NEGO_CRB,
 #endif
+	SPIN_LOCK_MSDUIFO,
+	SPIN_LOCK_START_AP_QUE,
 	SPIN_LOCK_NUM
 };
 
@@ -322,7 +343,7 @@ struct PARAM_CFG80211_REQ {
 	uint8_t ucFlagTx;
 	uint8_t ucFrameType; /* auth deauth disassoc assoc and so on */
 	struct wiphy *prWiphy; /* just use cfg80211 queue */
-	const struct ieee80211_regdomain *prRegdom;
+	u_int32_t u4CountryCode;
 };
 
 enum ENUM_CFG80211_TX_FLAG {
@@ -705,6 +726,12 @@ kalCfg80211VendorEventAlloc(struct wiphy *wiphy, struct wireless_dev *wdev,
 #define KAL_FIFO_OUT(_prFiFoQ, _rObj) \
 	kfifo_out((_prFiFoQ), &(_rObj), sizeof(_rObj))
 
+#define KAL_FIFO_IN_LOCKED(_prFiFoQ, _rObj, lock) \
+	kfifo_in_locked((_prFiFoQ), &(_rObj), sizeof(_rObj), (lock))
+
+#define KAL_FIFO_OUT_LOCKED(_prFiFoQ, _rObj, lock) \
+	kfifo_out_locked((_prFiFoQ), &(_rObj), sizeof(_rObj), (lock))
+
 #define KAL_FIFO_LEN(_prFiFoQ) \
 	kfifo_len((_prFiFoQ))
 
@@ -1047,6 +1074,7 @@ do { \
 #endif
 
 #if defined(_HIF_PCIE)
+#if	KERNEL_VERSION(5, 18, 0) > CFG80211_VERSION_CODE
 #define KAL_DMA_TO_DEVICE	PCI_DMA_TODEVICE
 #define KAL_DMA_FROM_DEVICE	PCI_DMA_FROMDEVICE
 
@@ -1060,6 +1088,25 @@ do { \
 	pci_unmap_single(_dev, _addr, _size, _dir)
 #define KAL_DMA_MAPPING_ERROR(_dev, _addr) \
 	pci_dma_mapping_error(_dev, _addr)
+#define KAL_DMA_SET_MASK(_dev, _mask) \
+	pci_set_dma_mask(_dev, _mask)
+#else
+#define KAL_DMA_TO_DEVICE	DMA_TO_DEVICE
+#define KAL_DMA_FROM_DEVICE	DMA_FROM_DEVICE
+
+#define KAL_DMA_ALLOC_COHERENT(_dev, _size, _handle) \
+	dma_alloc_coherent(&_dev->dev, _size, _handle, GFP_DMA)
+#define KAL_DMA_FREE_COHERENT(_dev, _size, _addr, _handle) \
+	dma_free_coherent(&_dev->dev, _size, _addr, _handle)
+#define KAL_DMA_MAP_SINGLE(_dev, _ptr, _size, _dir) \
+	dma_map_single(&_dev->dev, _ptr, _size, _dir)
+#define KAL_DMA_UNMAP_SINGLE(_dev, _addr, _size, _dir) \
+	dma_unmap_single(&_dev->dev, _addr, _size, _dir)
+#define KAL_DMA_MAPPING_ERROR(_dev, _addr) \
+	dma_mapping_error(&_dev->dev, _addr)
+#define KAL_DMA_SET_MASK(_dev, _mask) \
+	dma_set_mask(&_dev->dev, _mask)
+#endif
 #else
 #define KAL_DMA_TO_DEVICE	DMA_TO_DEVICE
 #define KAL_DMA_FROM_DEVICE	DMA_FROM_DEVICE
@@ -1074,6 +1121,8 @@ do { \
 	dma_unmap_single(_dev, _addr, _size, _dir)
 #define KAL_DMA_MAPPING_ERROR(_dev, _addr) \
 	dma_mapping_error(_dev, _addr)
+#define KAL_DMA_SET_MASK(_dev, _mask) \
+	dma_set_mask(_dev, _mask)
 #endif
 
 #if defined(_HIF_AXI)
@@ -1128,6 +1177,28 @@ do { \
 #define DEFINE_PROC_OPS_LSEEK(_n_)   .llseek  = _n_,
 #define DEFINE_PROC_OPS_RELEASE(_n_) .release  = _n_,
 #endif
+
+/*----------------------------------------------------------------------------*/
+/* Macros of wiphy operations for using in Driver Layer                       */
+/*----------------------------------------------------------------------------*/
+static inline struct GLUE_INFO **kal_wiphy_priv(struct wiphy *wiphy)
+{
+	return (struct GLUE_INFO **) wiphy_priv(wiphy);
+}
+
+#define WIPHY_PRIV(_wiphy, _priv) \
+{ \
+	if (!_wiphy) \
+		_priv = NULL; \
+	else \
+		_priv = *kal_wiphy_priv(_wiphy); \
+}
+
+#define WIPHY_PRIV_REVERSE(_wiphy, _priv) \
+	(*kal_wiphy_priv(_wiphy) = _priv)
+
+#define wiphy_priv #error "Use WIPHY_PRIV instead of wiphy_priv"
+#define priv_to_wiphy #error "Use GLUE_GET_WIPHY instead of priv_to_wiphy"
 /*******************************************************************************
  *                  F U N C T I O N   D E C L A R A T I O N S
  *******************************************************************************
@@ -1178,7 +1249,7 @@ kalProcessRxPacket(IN struct GLUE_INFO *prGlueInfo,
 
 uint32_t kalRxIndicatePkts(IN struct GLUE_INFO *prGlueInfo,
 			   IN void *apvPkts[],
-			   IN uint8_t ucPktNum);
+			   IN uint16_t ucPktNum);
 
 uint32_t kalRxIndicateOnePkt(IN struct GLUE_INFO
 			     *prGlueInfo, IN void *pvPkt);
@@ -1508,6 +1579,10 @@ void kalTimeoutHandler(unsigned long arg);
 
 void kalSetEvent(struct GLUE_INFO *pr);
 
+void kalRxTaskSchedule(struct GLUE_INFO *pr);
+
+uint32_t kalRxTaskWorkDone(struct GLUE_INFO *pr, u_int8_t fgIsInt);
+
 void kalSetIntEvent(struct GLUE_INFO *pr);
 
 void kalSetWmmUpdateEvent(struct GLUE_INFO *pr);
@@ -1554,7 +1629,7 @@ u_int8_t kalCfgDataWrite8(IN struct GLUE_INFO *prGlueInfo,
 /*----------------------------------------------------------------------------*/
 void
 kalUpdateRSSI(IN struct GLUE_INFO *prGlueInfo,
-	      IN enum ENUM_KAL_NETWORK_TYPE_INDEX eNetTypeIdx,
+	      IN uint8_t ucBssIndex,
 	      IN int8_t cRssi,
 	      IN int8_t cLinkQuality);
 
@@ -1759,16 +1834,53 @@ void kalWowInit(IN struct GLUE_INFO *prGlueInfo);
 void kalWowProcess(IN struct GLUE_INFO *prGlueInfo,
 		   uint8_t enable);
 #if CFG_SUPPORT_MDNS_OFFLOAD
-void kalMdnsProcess(IN struct GLUE_INFO *prGlueInfo,
+uint32_t kalMdnsProcess(IN struct GLUE_INFO *prGlueInfo,
 		IN struct MDNS_INFO_UPLAYER_T *prMdnsUplayerInfo);
 void kalMdnsOffloadInit(IN struct ADAPTER *prAdapter);
 struct MDNS_PARAM_ENTRY_T *mdnsAllocateParamEntry(IN struct ADAPTER *prAdapter);
-void kalSendClearRecordToFw(struct GLUE_INFO *prGlueInfo);
-void kalSendMdnsRecordToFw(struct GLUE_INFO *prGlueInfo);
+
 void kalSendMdnsEnableToFw(struct GLUE_INFO *prGlueInfo);
-void kalAddMdnsRecord(struct GLUE_INFO *prGlueInfo,
+void kalSendMdnsDisableToFw(struct GLUE_INFO *prGlueInfo);
+uint32_t kalAddMdnsRecord(struct GLUE_INFO *prGlueInfo,
+		struct MDNS_INFO_UPLAYER_T *prMdnsUplayerInfo);
+void kalDelMdnsRecord(struct GLUE_INFO *prGlueInfo,
+		struct MDNS_INFO_UPLAYER_T *prMdnsUplayerInfo);
+void kalDelMdnsRecordWithRecordKey(struct GLUE_INFO *prGlueInfo,
 		struct MDNS_INFO_UPLAYER_T *prMdnsUplayerInfo);
 void kalShowMdnsRecord(struct GLUE_INFO *prGlueInfo);
+struct MDNS_PASSTHROUGH_ENTRY_T *mdnsAllocatePassthroughEntry(
+	IN struct ADAPTER *prAdapter);
+uint32_t kalAddMdnsPassthrough(struct GLUE_INFO *prGlueInfo,
+		struct MDNS_INFO_UPLAYER_T *prMdnsUplayerPassthroughInfo);
+void kalDelMdnsPassthrough(struct GLUE_INFO *prGlueInfo,
+		struct MDNS_INFO_UPLAYER_T *prMdnsUplayerPassthroughInfo);
+void kalDelMdnsPassthroughWithRecordKey(struct GLUE_INFO *prGlueInfo,
+		struct MDNS_INFO_UPLAYER_T *prMdnsUplayerPassthroughInfo);
+void kalShowMdnsPassthrough(struct GLUE_INFO *prGlueInfo);
+uint32_t kalGetAndResetHitCounterToFw(struct GLUE_INFO *prGlueInfo,
+		int recordKey);
+uint32_t kalGetAndResetMissCounterToFw(struct GLUE_INFO *prGlueInfo);
+void kalClearMdnsRecord(struct GLUE_INFO *prGlueInfo);
+void kalClearMdnsPassthrough(struct GLUE_INFO *prGlueInfo);
+void kalSendMdnsFlagsToFw(struct GLUE_INFO *prGlueInfo);
+
+uint16_t kalGetMdnsUsedSize(struct GLUE_INFO *prGlueInfo);
+uint16_t kalGetMaxAvailMdnsSize(void);
+
+uint16_t kalGetMdnsUplRecSz(struct MDNS_INFO_UPLAYER_T *prMdnsUplayerInfo);
+uint16_t kalGetMdnsUplPTSz(struct MDNS_INFO_UPLAYER_T *prMdnsUplayerInfo);
+
+uint16_t kalMdnsConvettoDataBlock(struct GLUE_INFO *prGlueInfo);
+uint16_t kalMdnsAddToDataBlock(struct MDNS_DATABLOCK_T  *dataBlock,
+	uint8_t *data, uint16_t dataLength);
+uint16_t kalMdnsCopyPassToPayload(struct MDNS_PASSTHROUGH_T *passrthrough,
+	uint8_t *payload, uint16_t start);
+uint16_t kalMdnsCopyRecordToPayload(struct MDNS_RECORD_T *prMdnsRecordIndices,
+	uint16_t indexCount, uint8_t *payload, uint16_t start);
+uint16_t kalMdnsCopyDataToPayload(struct MDNS_DATABLOCK_T  *dataBlock,
+	uint8_t *payload, uint16_t start);
+uint8_t KalMdnsIncreTopHalf(uint8_t value);
+
 #if CFG_SUPPORT_MDNS_OFFLOAD_GVA
 void kalProcessMdnsRespPkt(struct GLUE_INFO *prGlueInfo, uint8_t *pucMdnsHdr);
 #endif
@@ -1887,11 +1999,13 @@ kalChannelFormatSwitch(IN struct cfg80211_chan_def *channel_def,
 		IN struct RF_CHANNEL_INFO *prRfChnlInfo);
 
 #if CFG_SUPPORT_RX_GRO
+uint8_t kalRxGroInit(struct net_device *prDev);
 uint32_t kal_is_skb_gro(struct ADAPTER *prAdapter, uint8_t ucBssIdx);
 void kal_gro_flush(struct ADAPTER *prAdapter, struct net_device *prDev);
 void kal_napi_schedule(struct napi_struct *n);
 int kalNapiPoll(struct napi_struct *napi, int budget);
 uint8_t kalNapiInit(struct net_device *prDev);
+uint8_t kalNapiUnInit(struct net_device *prDev);
 uint8_t kalNapiRxDirectInit(struct net_device *prDev);
 uint8_t kalNapiRxDirectUninit(struct net_device *prDev);
 uint8_t kalNapiEnable(struct net_device *prDev);
@@ -1953,6 +2067,17 @@ static inline void kal_eth_hw_addr_set(struct net_device *dev,
 	kalMemCopy(dev->dev_addr, addr, ETH_ALEN);
 #endif
 }
+
+void kalTxDirectInit(struct GLUE_INFO *prGlueInfo);
+void kalTxDirectUninit(struct GLUE_INFO *prGlueInfo);
+
+#if CFG_SUPPORT_RX_WORK
+void kalRxWork(struct work_struct *work);
+void kalRxWorkSetCpu(struct GLUE_INFO *pr, int32_t i4CpuIdx);
+void kalRxWorkInit(struct GLUE_INFO *pr);
+void kalRxWorkUninit(struct GLUE_INFO *pr);
+void kalRxWorkSchedule(struct GLUE_INFO *pr);
+#endif /* CFG_SUPPORT_RX_WORK */
 
 #endif /* _GL_KAL_H */
 

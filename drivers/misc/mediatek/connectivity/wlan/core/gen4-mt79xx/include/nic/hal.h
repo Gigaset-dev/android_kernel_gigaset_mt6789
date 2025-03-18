@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   "hal.h"
  *  \brief  The declaration of hal functions
  *
@@ -39,6 +40,8 @@
 #define WIFI_SER_SYNC_TIMER_NORMAL_TIMEOUT_IN_MS	(100)
 
 #define WIFI_SER_L1_RST_DONE_TIMEOUT    200 /* in unit of ms */
+#define WIFI_SUSPEND_WAIT_PROBE_TIMEOUT    2000 /* in unit of ms */
+#define WIFI_PRESUSPEND_DONE_TIMEOUT    500 /* in unit of ms */
 
 #if (CFG_SUPPORT_CONNAC3X == 1)
 #define CFG_DUMP_TXDMAD         0
@@ -1226,6 +1229,7 @@ uint32_t halAllocateIOBuffer(IN struct ADAPTER *prAdapter);
 uint32_t halReleaseIOBuffer(IN struct ADAPTER *prAdapter);
 void halDeAggRxPktWorker(struct work_struct *work);
 void halRxTasklet(unsigned long data);
+void halRxWork(struct GLUE_INFO *prGlueInfo);
 void halTxCompleteTasklet(unsigned long data);
 void halPrintHifDbgInfo(IN struct ADAPTER *prAdapter);
 u_int8_t halIsTxResourceControlEn(IN struct ADAPTER *prAdapter);
@@ -1265,6 +1269,13 @@ bool halWpdmaAllocRxRing(struct GLUE_INFO *prGlueInfo, uint32_t u4Num,
 uint8_t halRingDataSelectByWmmIndex(
 	IN struct ADAPTER *prAdapter,
 	IN uint8_t ucWmmIndex);
+#if CFG_SUPPORT_PCIE_WFDMA_WMM
+uint8_t halRingDataSelectByWmm(
+	IN struct ADAPTER *prAdapter,
+	IN uint8_t ucTC,
+	IN uint8_t ucWmmQueSet);
+#endif /* CFG_SUPPORT_PCIE_WFDMA_WMM */
+
 #endif /* defined(_HIF_PCIE) || defined(_HIF_AXI) */
 
 #endif /* _HAL_H */

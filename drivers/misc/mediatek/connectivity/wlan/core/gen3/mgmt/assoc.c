@@ -359,9 +359,18 @@ __KAL_INLINE__ VOID assocBuildReAssocReqFrameCommonIEs(IN P_ADAPTER_T prAdapter,
 		}
 	}
 	if (IS_STA_IN_AIS(prStaRec) && prConnSettings->assocIeLen != 0) {
-		kalMemCopy(pucBuffer, prConnSettings->pucAssocIEs, prConnSettings->assocIeLen);
-		prMsduInfo->u2FrameLength += prConnSettings->assocIeLen;
-		pucBuffer += prConnSettings->assocIeLen;
+		PUINT_8 pucIE = prConnSettings->pucAssocIEs;
+		UINT_16 u2IELength = prConnSettings->assocIeLen;
+		UINT_16 u2Offset = 0;
+
+		IE_FOR_EACH(pucIE, u2IELength, u2Offset) {
+			if (IE_ID(pucIE) == ELEM_ID_EXTENDED_CAP ||
+			   IE_ID(pucIE) == ELEM_ID_RSN)
+				continue;
+			kalMemCopy(pucBuffer, pucIE, IE_SIZE(pucIE));
+			prMsduInfo->u2FrameLength += IE_SIZE(pucIE);
+			pucBuffer += IE_SIZE(pucIE);
+		}
 	}
 
 }				/* end of assocBuildReAssocReqFrameCommonIEs() */
@@ -596,6 +605,8 @@ WLAN_STATUS assocSendReAssocReqFrame(IN P_ADAPTER_T prAdapter, IN P_STA_RECORD_T
 			txAssocReqIETable[i].pfnAppendIE(prAdapter, prMsduInfo);
 	}
 #endif
+
+	sortAssocReqIE(prAdapter, prMsduInfo, fgIsReAssoc);
 
 	/* 4 <6> Update the (Re)association request information */
 	if (IS_STA_IN_AIS(prStaRec)) {

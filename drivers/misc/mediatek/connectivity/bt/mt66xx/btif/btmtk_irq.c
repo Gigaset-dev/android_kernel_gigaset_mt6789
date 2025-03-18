@@ -8,6 +8,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
 #include <linux/of.h>
+#include <linux/sched/clock.h>
 
 #include "btmtk_chip_if.h"
 #include "conninfra.h"
@@ -331,7 +332,7 @@ int32_t bt_request_irq(enum bt_irq_type irq_type)
 		BTMTK_ERR("enable_irq_wake %s (%u) failed! ret(%d)", pirq->name, irq_num, ret);
 	}
 
-	BTMTK_INFO("Request %s (%u) succeed, pirq = %p, flag = 0x%08x", pirq->name, irq_num, pirq, irq_flags);
+	BTMTK_INFO("Request %s (%u) succeed, pirq = %p, flag = 0x%08lx", pirq->name, irq_num, pirq, irq_flags);
 	bt_irq_table[irq_type] = pirq;
 
 	return 0;

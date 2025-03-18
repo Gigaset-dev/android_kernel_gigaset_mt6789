@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   gl_qa_agent.h
  *    \brief  This file includes private ioctl support.
  */
@@ -68,7 +69,7 @@
 #undef MAX_EEPROM_BUFFER_SIZE
 #endif
 #if defined MT7915 || defined MT7961 || defined MT7933 || defined MT7922 \
-		   || defined MT7902
+		   || defined MT7902 || defined MT7926
 #define MAX_EEPROM_BUFFER_SIZE	0xe00
 #else
 #define MAX_EEPROM_BUFFER_SIZE	1200
@@ -78,7 +79,7 @@
 #undef BUFFER_BIN_PAGE_SIZE
 #endif
 #if defined MT7915 || defined MT7961 || defined MT7933 || defined MT7922 \
-		   || defined MT7902
+		   || defined MT7902 || defined MT7926
 #define BUFFER_BIN_PAGE_SIZE	0x400
 #else
 #define BUFFER_BIN_PAGE_SIZE	(MAX_EEPROM_BUFFER_SIZE)

@@ -1,6 +1,6 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
 
 #include "precomp.h"
@@ -100,11 +100,13 @@ void wmmInit(IN struct ADAPTER *prAdapter)
 			&prTspecInfo->rAddTsTimer,
 			(PFN_MGMT_TIMEOUT_FUNC)
 			wmmSetupTspecTimeOut,
-			(unsigned long)prTspecInfo);
+			(unsigned long)prTspecInfo,
+			TIMER_WAKELOCK_AUTO);
 		}
 #if CFG_SUPPORT_SOFT_ACM
 		cnmTimerInitTimer(prAdapter, &prWmmInfo->rAcmDeqTimer,
-				wmmAcmDequeueTimeOut, i);
+				wmmAcmDequeueTimeOut, i,
+				TIMER_WAKELOCK_AUTO);
 		kalMemZero(&prWmmInfo->arAcmCtrl[0],
 				sizeof(prWmmInfo->arAcmCtrl));
 #endif
@@ -733,7 +735,8 @@ static void wmmQueryTsmResult(struct ADAPTER *prAdapter,
 			    (uint8_t *)&rGetTsmStatistics, NULL, 0);
 	cnmTimerInitTimer(prAdapter, &prWmmInfo->rTsmTimer,
 		wmmGetTsmRptTimeout,
-		ulParam);
+		ulParam,
+		TIMER_WAKELOCK_AUTO);
 	cnmTimerStartTimer(prAdapter, &prWmmInfo->rTsmTimer, 2000);
 
 }
@@ -926,7 +929,8 @@ void wmmStartTsmMeasurement(struct ADAPTER *prAdapter, unsigned long ulParam,
 		prActiveTsmReq->ucBssIdx = ucBssIndex;
 		cnmTimerInitTimer(prAdapter, &prWMMInfo->rTsmTimer,
 			wmmQueryTsmResult,
-			(unsigned long)prActiveTsmReq);
+			(unsigned long)prActiveTsmReq,
+			TIMER_WAKELOCK_AUTO);
 		cnmTimerStartTimer(prAdapter, &prWMMInfo->rTsmTimer,
 				   TU_TO_MSEC(prTsmReq->u2Duration));
 	} else {

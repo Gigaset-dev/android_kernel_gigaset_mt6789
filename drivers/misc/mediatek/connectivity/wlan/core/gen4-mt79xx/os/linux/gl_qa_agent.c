@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
 	Module Name:
 	gl_qa_agent.c
@@ -5563,6 +5564,14 @@ static int32_t HQA_GetDumpRecal(struct net_device *prNetDev,
 	    prReCalInfo->u4Count <= (CAL_ARRAY_SIZE - 6) /
 				    (3 * sizeof(u4Value))) {
 		for (i = 0; i < prReCalInfo->u4Count; i++) {
+
+			if ((6 + u4RespLen + (3 * sizeof(u4Value))) >
+				sizeof(HqaCmdFrame->Data)) {
+				DBGLOG(RFTEST, INFO,
+					"GetDumpRecal HQAFrame size limit reached");
+				break;
+			}
+
 			u4Value = ntohl(prCalArray[i].u4CalId);
 			kalMemCopy(HqaCmdFrame->Data + 6 + u4RespLen,
 					   &u4Value,
@@ -7133,8 +7142,15 @@ static int32_t HQA_MUSetMUTable(struct net_device *prNetDev,
 {
 	int32_t i4Ret = 0;
 	uint8_t *prTable;
-	uint16_t u2Len = 0;
+	uint32_t u2Len = 0;
 	uint32_t u4SuMu = 0;
+
+	u2Len = ntohl(HqaCmdFrame->Length) - sizeof(u4SuMu);
+	if (u2Len >= HQA_CMD_FRAME_DATA_MAX_LEN - sizeof(u4SuMu)) {
+		DBGLOG(RFTEST, ERROR,
+		       "HQA_MUSetMUTable HqaCmdFrame->Length error\n");
+		return i4Ret;
+	}
 
 	prTable = kmalloc_array(u2Len, sizeof(uint8_t), GFP_KERNEL);
 	if (prTable == NULL) {

@@ -4101,7 +4101,7 @@ void nicTxSetMngPacket(struct ADAPTER *prAdapter,
 #if CFG_SUPPORT_NAN
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIndex);
 
-	if (prBssInfo->eNetworkType == NETWORK_TYPE_NAN) {
+	if (prBssInfo && prBssInfo->eNetworkType == NETWORK_TYPE_NAN) {
 		prWifiHdr =
 			(struct WLAN_MAC_HEADER *)
 			((uint8_t *)(prMsduInfo->prPacket) +
@@ -4888,7 +4888,8 @@ static void nicTxDirectCheckBssAbsentQ(IN struct ADAPTER
 				DBGLOG(TX, INFO, "fgIsNetAbsent NoQuota\n");
 				break;
 			}
-			if (QUEUE_IS_NOT_EMPTY(
+			if ((ucBssIndex <= MAX_BSSID_NUM) &&
+				QUEUE_IS_NOT_EMPTY(
 				    &prAdapter->rBssAbsentQueue[ucBssIndex])) {
 				QUEUE_REMOVE_HEAD(
 					&prAdapter->rBssAbsentQueue[ucBssIndex],

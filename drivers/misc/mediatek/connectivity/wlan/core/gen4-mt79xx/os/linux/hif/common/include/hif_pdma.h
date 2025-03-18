@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  Module Name:
  hif_pdma.h
@@ -26,13 +27,17 @@
 #define NUM_OF_WFDMA1_RX_RING			5
 #endif /* CFG_SUPPORT_CONNAC2X == 1 || CFG_SUPPORT_CONNAC3X == 1 */
 
+#if CFG_SUPPORT_PCIE_WFDMA_WMM
+#define NUM_OF_TX_RING				(7+NUM_OF_WFDMA1_TX_RING)
+#else
 #define NUM_OF_TX_RING				(4+NUM_OF_WFDMA1_TX_RING)
+#endif
 #define NUM_OF_RX_RING				(2+NUM_OF_WFDMA1_RX_RING)
 
 /* Max Tx ring size */
 #if defined(MT7922)
 #define TX_RING_SIZE				2048
-#elif defined(MT7961) || defined(MT7902)
+#elif defined(MT7961) || defined(MT7902) || defined(MT7926)
 #define TX_RING_SIZE				512
 #elif (CFG_SUPPORT_CONNAC3X == 1)
 #define TX_RING_SIZE				1024
@@ -181,6 +186,11 @@
 enum ENUM_TX_RING_IDX {
 	TX_RING_DATA0_IDX_0 = 0,
 	TX_RING_DATA1_IDX_1,
+#if CFG_SUPPORT_PCIE_WFDMA_WMM
+	TX_RING_DATA2_IDX_2,
+	TX_RING_DATA3_IDX_3,
+	TX_RING_DATA4_IDX_4,
+#endif
 	TX_RING_CMD_IDX_2,
 	TX_RING_FWDL_IDX_3,
 	TX_RING_WA_CMD_IDX_4,
@@ -508,6 +518,18 @@ void halWpdmaFreeMsdu(struct GLUE_INFO *prGlueInfo,
 		      bool fgSetEvent);
 void halWpdmaFreeMsduTasklet(unsigned long data);
 
+#define KAL_HIF_OWN_LOCK(prAdapter) \
+	kalAcquireHifOwnLock(prAdapter)
+
+#define KAL_HIF_OWN_UNLOCK(prAdapter) \
+	kalReleaseHifOwnLock(prAdapter)
+
+void kalAcquireHifTxRingLock(struct RTMP_TX_RING *prTxRing,
+		unsigned long *plHifTxRingFlags);
+void kalReleaseHifTxRingLock(struct RTMP_TX_RING *prTxRing,
+		unsigned long ulHifTxRingFlags);
+void kalAcquireHifOwnLock(struct ADAPTER *prAdapter);
+void kalReleaseHifOwnLock(struct ADAPTER *prAdapter);
 
 bool kalDevReadData(struct GLUE_INFO *prGlueInfo, uint16_t u2Port,
 		    struct SW_RFB *prSwRfb);

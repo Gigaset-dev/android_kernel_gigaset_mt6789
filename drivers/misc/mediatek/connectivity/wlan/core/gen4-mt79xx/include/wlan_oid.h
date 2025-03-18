@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/include
  *      /wlan_oid.h#4
@@ -119,7 +120,7 @@
 #define EEPROM_SIZE			1184
 
 #if defined MT7915 || defined MT7961 || defined MT7933 || defined MT7922 \
-		   || defined MT7902
+		   || defined MT7902 || defined MT7926
 #define MAX_EEPROM_BUFFER_SIZE	0xe00
 #define BUFFER_BIN_PAGE_SIZE	0x400
 #else
@@ -290,6 +291,12 @@
 #define MAC_ICS_MODE		2
 #define PHY_ICS_MODE		3
 #endif /* #if ((CFG_SUPPORT_ICS == 1) || (CFG_SUPPORT_PHY_ICS == 1)) */
+
+#define LP_CMD_QUERY	0
+#define LP_CMD_SET	1
+
+#define LP_TAG_GET_SLP_CNT_INFO		0
+#define LP_TAG_SET_KEEP_PWR_CTRL	1
 
 #define CAL_ARRAY_SIZE		2048
 
@@ -538,6 +545,7 @@ struct PARAM_KEY {
 	uint8_t ucCipher;
 	uint8_t aucKeyMaterial[32];	/*!< Key content by above setting */
 	/* Following add to change the original windows structure */
+	uint8_t aucKeyPn[6];
 };
 
 /* for more remove key control (ucCtrlFlag) */
@@ -788,6 +796,13 @@ struct PARAM_CUSTOM_GET_TX_POWER {
 /*#endif*/
 
 #endif /* CFG_SUPPORT_BUFFER_MODE */
+
+#if (CONFIG_WIFI_ULTRA_RADIO_OFF_CTRL == 1)
+struct PARAM_CUSTOM_PM_STATE_CTRL {
+	uint8_t ucPmNumber;
+	uint8_t ucPmState;
+};
+#endif
 
 struct PARAM_CUSTOM_SET_TX_TARGET_POWER {
 	int8_t cTxPwr2G4Cck;	/* signed, in unit of 0.5dBm */
@@ -2728,10 +2743,10 @@ struct PARAM_SCAN_REQUEST_ADV {
 	uint8_t ucScnFuncMask;
 	uint8_t aucRandomMac[MAC_ADDR_LEN];
 	uint8_t ucBssIndex;
-	uint8_t aucBssid[CFG_SCAN_SSID_MAX_NUM][MAC_ADDR_LEN];
+	uint8_t aucBssid[CFG_SCAN_OOB_MAX_NUM][MAC_ADDR_LEN];
 	/* For 6G OOB discovery*/
-	uint8_t ucBssidMatchCh[CFG_SCAN_SSID_MAX_NUM];
-	uint8_t ucBssidMatchSsidInd[CFG_SCAN_SSID_MAX_NUM];
+	uint8_t ucBssidMatchCh[CFG_SCAN_OOB_MAX_NUM];
+	uint8_t ucBssidMatchSsidInd[CFG_SCAN_OOB_MAX_NUM];
 	u_int8_t fg6gOobRnrParseEn;
 };
 
@@ -2753,7 +2768,7 @@ struct PARAM_SCHED_SCAN_REQUEST {
 	uint8_t *pucIE;
 	uint16_t u2ScanInterval;	/* in second */
 	uint8_t ucChnlNum;
-	uint8_t *pucChannels;
+	struct CHANNEL_INFO aucChannel[MAXIMUM_OPERATION_CHANNEL_LIST];
 	uint8_t ucBssIndex;
 };
 #endif /* CFG_SUPPORT_SCHED_SCAN */
@@ -2775,7 +2790,7 @@ enum ENUM_SAFE_CH_MASK {
 	ENUM_SAFE_CH_MASK_BAND_2G4 = 0,
 	ENUM_SAFE_CH_MASK_BAND_5G_0 = 1,
 	ENUM_SAFE_CH_MASK_BAND_5G_1 = 2,
-	ENUM_SAFE_CH_MASK_BAND_5G_2 = 3,
+	ENUM_SAFE_CH_MASK_BAND_6G = 3,
 	ENUM_SAFE_CH_MASK_MAX_NUM = 4,
 };
 
@@ -3305,6 +3320,28 @@ struct WIFI_ON_TIME_STATISTICS {
 	OS_SYSTIME lastUpdateTime;
 };
 #endif
+
+struct PARAM_SLEEP_CNT_INFO {
+	uint32_t au4LmacSlpCnt[2];
+	uint32_t u4WfsysSlpCnt;
+	uint32_t u4ChipSlpCnt;
+};
+
+#if (CFG_SUPPORT_PKT_OFLD == 1)
+struct PARAM_OFLD_INFO {
+	/*restrict buffer size to 1500 bytes*/
+	/*because FW WFDMA MAX buf size is 1600 Byte*/
+	uint8_t ucType;
+	uint8_t ucOp;
+	uint8_t ucFragNum;
+	uint8_t ucFragSeq;
+	uint32_t u4TotalLen;
+	uint32_t u4BufLen;
+	uint8_t aucBuf[PKT_OFLD_BUF_SIZE];
+};
+#endif /* CFG_SUPPORT_PKT_OFLD */
+
+
 /*******************************************************************************
  *                            P U B L I C   D A T A
  *******************************************************************************
@@ -3652,6 +3689,15 @@ wlanoidQueryLinkSpeedEx(IN struct ADAPTER *prAdapter,
 			  IN uint32_t u4QueryBufferLen,
 			  OUT uint32_t *pu4QueryInfoLen);
 
+#if (CONFIG_WIFI_ULTRA_RADIO_OFF_CTRL == 1)
+uint32_t
+wlanoidSetRadioState(IN struct ADAPTER
+				   *prAdapter,
+				   IN void *pvSetBuffer,
+				   IN uint32_t u4SetBufferLen,
+				   OUT uint32_t *pu4SetInfoLen);
+#endif
+
 #if CFG_SUPPORT_QA_TOOL
 #if CFG_SUPPORT_BUFFER_MODE
 uint32_t wlanoidSetEfusBufferMode(IN struct ADAPTER
@@ -3747,6 +3793,20 @@ uint32_t wlanoidStaRecBFUpdate(IN struct ADAPTER *prAdapter,
 			       OUT uint32_t *pu4SetInfoLen);
 #endif /* CFG_SUPPORT_TX_BF */
 #endif /* CFG_SUPPORT_QA_TOOL */
+
+uint32_t
+wlanoidInitAisFsm(struct ADAPTER *prAdapter,
+		     void *pvSetBuffer,
+		     uint32_t u4SetBufferLen,
+		     uint32_t *pu4SetInfoLen);
+
+
+uint32_t
+wlanoidUninitAisFsm(struct ADAPTER *prAdapter,
+		     void *pvSetBuffer,
+		     uint32_t u4SetBufferLen,
+		     uint32_t *pu4SetInfoLen);
+
 
 #if CFG_SUPPORT_CAL_RESULT_BACKUP_TO_HOST
 uint32_t
@@ -4968,6 +5028,11 @@ uint32_t wlanoidSetMdnsCmdToFw(IN struct ADAPTER *prAdapter,
 				IN void *pvSetBuffer,
 				IN uint32_t u4SetBufferLen,
 				OUT uint32_t *pu4SetInfoLen);
+
+uint32_t wlanoidGetMdnsHitMiss(IN struct ADAPTER *prAdapter,
+				IN void *pvSetBuffer,
+				IN uint32_t u4SetBufferLen,
+				OUT uint32_t *pu4SetInfoLen);
 #endif
 
 #if (CFG_WIFI_ISO_DETECT == 1)
@@ -5027,5 +5092,28 @@ wlanoidQueryBandWidth(IN struct ADAPTER *prAdapter,
 			  IN uint32_t u4QueryBufferLen,
 			  OUT uint32_t *pu4QueryInfoLen);
 /*fos_change end*/
+
+uint32_t wlanoidGetSleepCntInfo(IN struct ADAPTER *prAdapter,
+			IN void *pvGetBuffer,
+			IN uint32_t u4GetBufferLen,
+			OUT uint32_t *pu4GetInfoLen);
+
+uint32_t wlanoidSetLpKeepPwrCtrl(IN struct ADAPTER *prAdapter,
+			IN void *pvSetBuffer,
+			IN uint32_t u4SetBufferLen,
+			OUT uint32_t *pu4SetInfoLen);
+#if (CFG_SUPPORT_PKT_OFLD == 1)
+uint32_t
+wlanoidSetOffloadInfo(IN struct ADAPTER *prAdapter,
+			   IN void *pvSetBuffer, IN uint32_t u4SetBufferLen,
+			   OUT uint32_t *pu4SetInfoLen);
+
+
+uint32_t
+wlanoidQueryOffloadInfo(IN struct ADAPTER *prAdapter,
+			   IN void *pvSetBuffer, IN uint32_t u4SetBufferLen,
+			   OUT uint32_t *pu4SetInfoLen);
+
+#endif /* CFG_SUPPORT_PKT_OFLD */
 
 #endif /* _WLAN_OID_H */

@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /******************************************************************************
  *[File]             axi.c
  *[Version]          v1.0
@@ -9,8 +10,6 @@
  *[Author]
  *[Description]
  *    The program provides AXI HIF driver
- *[Copyright]
- *    Copyright (C) 2010 MediaTek Incorporation. All Rights Reserved.
  ******************************************************************************/
 
 

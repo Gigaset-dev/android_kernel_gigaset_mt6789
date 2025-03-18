@@ -364,10 +364,14 @@ static __KAL_INLINE__ void assocBuildReAssocReqFrameCommonIEs(
 
 	}
 #if CFG_ENABLE_WIFI_DIRECT
-	else if ((prAdapter->fgIsP2PRegistered) && (IS_STA_IN_P2P(prStaRec)))
+	else if ((prAdapter->fgIsP2PRegistered) &&
+		(IS_STA_IN_P2P(prStaRec))) {
 		pucBuffer =
-		    p2pBuildReAssocReqFrameCommonIEs(prAdapter, prMsduInfo,
-						     pucBuffer);
+			p2pBuildReAssocReqFrameCommonIEs(prAdapter,
+			prMsduInfo, pucBuffer);
+		if (pucBuffer == NULL)
+			return;
+	}
 
 #endif
 #if CFG_ENABLE_BT_OVER_WIFI
@@ -1468,6 +1472,11 @@ uint32_t assocProcessRxAssocReqFrame(IN struct ADAPTER *prAdapter,
 	}
 
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, prStaRec->ucBssIndex);
+	if (prBssInfo == NULL) {
+		DBGLOG(SAA, ERROR, "prBssInfo is %d NULL!\n",
+			prStaRec->ucBssIndex);
+		return WLAN_STATUS_FAILURE;
+	}
 
 	/* Check if this Disassoc Frame is coming from Target BSSID */
 	if (UNEQUAL_MAC_ADDR(prAssocReqFrame->aucBSSID, prBssInfo->aucBSSID))
@@ -1992,6 +2001,13 @@ struct MSDU_INFO *assocComposeReAssocRespFrame(IN struct ADAPTER *prAdapter,
 	 */
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, prStaRec->ucBssIndex);
 
+	if (prBssInfo == NULL) {
+		DBGLOG(AAA, WARN, "prBssInfo is %d NULL\n",
+			prStaRec->ucBssIndex);
+		cnmMgtPktFree(prAdapter, prMsduInfo);
+		return NULL;
+	}
+
 	/* Compose Header and Fixed Field */
 	assocComposeReAssocRespFrameHeaderAndFF(prStaRec,
 			(uint8_t *) ((unsigned long)
@@ -2165,7 +2181,7 @@ void assocGenerateMDIE(IN struct ADAPTER *prAdapter,
 	if (!prFtIEs->prMDIE) {
 		struct BSS_DESC *prBssDesc =
 		    aisGetTargetBssDesc(prAdapter, ucBssIndex);
-		uint8_t *pucIE = &prBssDesc->aucIEBuf[0];
+		uint8_t *pucIE = prBssDesc->pucIeBuf;
 		uint16_t u2IeLen = prBssDesc->u2IELength;
 		uint16_t u2IeOffSet = 0;
 

@@ -115,6 +115,7 @@ typedef struct _CONNECTION_SETTINGS_T {
 
 	BOOLEAN fgIsConnByBssidIssued;
 	UINT_8 aucBSSID[MAC_ADDR_LEN];
+	UINT_8 aucBSSIDHint[MAC_ADDR_LEN];
 
 	ENUM_RECONNECT_LEVEL_T eReConnectLevel;
 

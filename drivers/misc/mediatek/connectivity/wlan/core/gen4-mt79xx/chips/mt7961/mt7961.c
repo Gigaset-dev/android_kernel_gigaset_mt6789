@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   mt7961.c
 *    \brief  Internal driver stack will export
 *    the required procedures here for GLUE Layer.
@@ -10,7 +11,7 @@
      from MediaTek 802.11 Wireless LAN driver stack to GLUE Layer.
 */
 
-#if defined(MT7961) || defined(MT7922) || defined(MT7902)
+#if defined(MT7961) || defined(MT7922) || defined(MT7902) || defined(MT7926)
 
 /*******************************************************************************
 *                         C O M P I L E R   F L A G S
@@ -159,6 +160,12 @@ void mt7961EnableInterrupt(
 	IntMask.field_conn2x_single.wfdma0_rx_done_4 = 1;
 	IntMask.field_conn2x_single.wfdma0_rx_done_5 = 1;
 	IntMask.field_conn2x_single.wfdma0_tx_done_0 = 1;
+#if CFG_SUPPORT_PCIE_WFDMA_WMM
+	IntMask.field_conn2x_single.wfdma0_tx_done_1 = 1;
+	IntMask.field_conn2x_single.wfdma0_tx_done_2 = 1;
+	IntMask.field_conn2x_single.wfdma0_tx_done_3 = 1;
+	IntMask.field_conn2x_single.wfdma0_tx_done_4 = 1;
+#endif
 	IntMask.field_conn2x_single.wfdma0_tx_done_16 = 1;
 	IntMask.field_conn2x_single.wfdma0_tx_done_17 = 1;
 	IntMask.field_conn2x_single.wfdma0_mcu2host_sw_int_en = 1;
@@ -169,10 +176,24 @@ void mt7961EnableInterrupt(
 	/* TX-done-int can be handled in TX-direct patch & TX-MSDU-report
 	 * Disable this for lower CPU usage under Tput test
 	 */
+#if CFG_SUPPORT_PCIE_WFDMA_WMM
+	if (HAL_IS_TX_DIRECT()) {
+		IntMask.field_conn2x_single.wfdma0_tx_done_0 =
+		kalIsTputMode(prAdapter, PKT_PATH_ALL, BSSID_0)?0:1;
+		IntMask.field_conn2x_single.wfdma0_tx_done_1 =
+		kalIsTputMode(prAdapter, PKT_PATH_ALL, BSSID_0)?0:1;
+		IntMask.field_conn2x_single.wfdma0_tx_done_2 =
+		kalIsTputMode(prAdapter, PKT_PATH_ALL, BSSID_0)?0:1;
+		IntMask.field_conn2x_single.wfdma0_tx_done_3 =
+		kalIsTputMode(prAdapter, PKT_PATH_ALL, BSSID_0)?0:1;
+		IntMask.field_conn2x_single.wfdma0_tx_done_4 =
+		kalIsTputMode(prAdapter, PKT_PATH_ALL, BSSID_1)?0:1;
+	}
+#else
 	if (HAL_IS_TX_DIRECT())
 		IntMask.field_conn2x_single.wfdma0_tx_done_0 =
 		kalIsTputMode(prAdapter, PKT_PATH_ALL, MAX_BSSID_NUM)?0:1;
-
+#endif
 	HAL_MCR_WR(prAdapter,
 		WF_WFDMA_HOST_DMA0_HOST_INT_ENA_ADDR, IntMask.word);
 
@@ -404,6 +425,35 @@ void mt7961Connac2xProcessTxInterrupt(
 			kalSetTxEvent2Hif(prAdapter->prGlueInfo);
 #endif
 	}
+
+#if CFG_SUPPORT_PCIE_WFDMA_WMM
+	if (rIntrStatus.field_conn2x_single.wfdma0_tx_done_2) {
+		halWpdmaProcessDataDmaDone(
+			prAdapter->prGlueInfo, TX_RING_DATA2_IDX_2);
+#if CFG_SUPPORT_MULTITHREAD
+		if (!HAL_IS_TX_DIRECT())
+			kalSetTxEvent2Hif(prAdapter->prGlueInfo);
+#endif
+	}
+	if (rIntrStatus.field_conn2x_single.wfdma0_tx_done_3) {
+		halWpdmaProcessDataDmaDone(
+			prAdapter->prGlueInfo, TX_RING_DATA3_IDX_3);
+#if CFG_SUPPORT_MULTITHREAD
+		if (!HAL_IS_TX_DIRECT())
+			kalSetTxEvent2Hif(prAdapter->prGlueInfo);
+#endif
+	}
+	if (rIntrStatus.field_conn2x_single.wfdma0_tx_done_4) {
+		halWpdmaProcessDataDmaDone(
+			prAdapter->prGlueInfo, TX_RING_DATA4_IDX_4);
+#if CFG_SUPPORT_MULTITHREAD
+		if (!HAL_IS_TX_DIRECT())
+			kalSetTxEvent2Hif(prAdapter->prGlueInfo);
+#endif
+	}
+
+#endif /* CFG_SUPPORT_PCIE_WFDMA_WMM */
+
 }
 
 void mt7961Connac2xProcessRxInterrupt(
@@ -466,7 +516,17 @@ void mt7961WfdmaTxRingExtCtrl(
 	case TX_RING_CMD_IDX_2:
 		u4Offset = HW_WFDMA0_TX_RING_IDX_17 * MT_RINGREG_EXT_DIFF;
 		break;
-
+#if CFG_SUPPORT_PCIE_WFDMA_WMM
+	case TX_RING_DATA2_IDX_2:
+		u4Offset = HW_WFDMA0_TX_RING_IDX_2 * MT_RINGREG_EXT_DIFF;
+		break;
+	case TX_RING_DATA3_IDX_3:
+		u4Offset = HW_WFDMA0_TX_RING_IDX_3 * MT_RINGREG_EXT_DIFF;
+		break;
+	case TX_RING_DATA4_IDX_4:
+		u4Offset = HW_WFDMA0_TX_RING_IDX_4 * MT_RINGREG_EXT_DIFF;
+		break;
+#endif
 	default:
 		return;
 	}
@@ -1215,7 +1275,7 @@ uint32_t wlanImageSectionGetBtPatchInfo(IN struct ADAPTER *prAdapter,
 		region->img_size =
 			le2cpu32(sec_map->bin_info_spec.dl_size) +
 			le2cpu32(sec_map->bin_info_spec.align_len);
-		if (!(region->img_size % 16))
+		if ((region->img_size % 16))
 			DBGLOG(INIT, WARN,
 			       "BT Patch is not 16-byte aligned\n");
 		region->img_ptr = pvFwImageMapFile +
@@ -1297,7 +1357,7 @@ uint32_t mt7961DownloadBtPatch(IN struct ADAPTER *prAdapter)
 	uint32_t u4DataMode;
 	uint32_t u4RemapAddr;
 	int32_t s4BtPatchCheck;
-	struct patch_dl_target target;
+	struct patch_dl_target target = {0};
 	struct patch_dl_buf *region = NULL;
 	void *prFwBuffer = NULL;
 
@@ -1880,4 +1940,6 @@ struct mt66xx_hif_driver_data mt66xx_driver_data_mt7961 = {
 };
 #endif /* MT7961 */
 
-#endif /* defined(MT7961) || defined(MT7922) || defined(MT7902) */
+#endif /* defined(MT7961) || defined(MT7922) || defined(MT7902) ||
+	* defined(MT7926)
+	*/

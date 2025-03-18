@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: @(#) gl_rst.c@@
  */
@@ -28,6 +29,18 @@
 
 #include "precomp.h"
 #include "gl_rst.h"
+
+/*******************************************************************************
+ *                              D A T A   T Y P E S
+ *******************************************************************************
+ */
+#define SER_RESET_WORK_IDLE_BIT 0
+struct SER_RESET_WORK_DATA {
+	unsigned long ulResetFlag;  /*bit0: 1-IDLE, 0-RUNNING*/
+	uint32_t u4RstFlag;
+	uint8_t *pucFile;
+	uint32_t u4Line;
+};
 
 /*******************************************************************************
  *                              C O N S T A N T S
@@ -72,6 +85,10 @@ u_int8_t g_IsWfsysResetOnFail = FALSE;
 u_int8_t g_IsWfsysRstDone = TRUE;
 u_int8_t g_fgRstRecover = FALSE;
 #endif
+#if CFG_ENABLE_WAKE_LOCK
+KAL_WAKE_LOCK_T *prWlanChipResetWakeLock;
+#endif
+static uint32_t u4ProbeCount;
 
 
 /*******************************************************************************
@@ -88,13 +105,20 @@ enum ENUM_BT_RESET_RETURN_STATE {
 	BT_RESET_NOT_OK,
 	BT_RESET_NOT_FOUND
 };
+static wlanRemoveFunc pfWlanRemove;
+#if CFG_CHIP_RESET_KO_SUPPORT
+static uint32_t u4RstCount;
+static uint32_t u4PowerOffCount;
 #endif
+#endif
+static struct SER_RESET_WORK_DATA g_serResetWorkData;
 
 /*******************************************************************************
  *                   F U N C T I O N   D E C L A R A T I O N S
  *******************************************************************************
  */
 #if CFG_CHIP_RESET_SUPPORT
+static void mtk_wifi_reset_main(struct RESET_STRUCT *rst);
 #if (CFG_SUPPORT_CONNINFRA == 0)
 static void mtk_wifi_reset(struct work_struct *work);
 #endif
@@ -106,11 +130,11 @@ static void *glResetCallback(enum ENUM_WMTDRV_TYPE eSrcType,
 			     enum ENUM_WMTMSG_TYPE eMsgType, void *prMsgBody,
 			     unsigned int u4MsgLength);
 #else
-#ifndef CFG_CHIP_RESET_KO_SUPPORT
+#if (0 == CFG_CHIP_RESET_KO_SUPPORT)
 static u_int8_t is_bt_exist(void);
 static u_int8_t rst_L0_notify_step1(void);
 static void wait_core_dump_end(void);
-#endif /* CFG_CHIP_RESET_KO_SUPPORT */
+#endif
 #endif
 #endif
 
@@ -175,7 +199,7 @@ u_int8_t kalIsResetting(void)
  * @retval none
  */
 /*----------------------------------------------------------------------------*/
-void glResetInit(struct GLUE_INFO *prGlueInfo)
+void glResetInit(struct GLUE_INFO *prGlueInfo, wlanRemoveFunc pfRemove)
 {
 #if (CFG_SUPPORT_CONNINFRA == 0)
 #if CFG_WMT_RESET_API_SUPPORT
@@ -187,26 +211,16 @@ void glResetInit(struct GLUE_INFO *prGlueInfo)
 		  mtk_wifi_trigger_reset);
 #endif /* CFG_WMT_RESET_API_SUPPORT */
 
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-#if defined(_HIF_SDIO)
-	struct WIFI_NOTIFY_DESC wifi_notify_desc;
-
-	wifi_notify_desc.BtNotifyWifiSubResetStep1 = NULL;
-	if (prGlueInfo == NULL || prGlueInfo->prAdapter == NULL
-		|| prGlueInfo->prAdapter->chip_info == NULL) {
-		DBGLOG(INIT, ERROR, "[SER][L0] reset init fail!\n");
-		return;
-	}
-	if (prGlueInfo->prAdapter->chip_info->asicSetNoBTFwOwnEn != NULL) {
-		wifi_notify_desc.BtNotifyWifiSubResetStep1 = halPreventFwOwnEn;
-		register_wifi_notify_callback(&wifi_notify_desc);
-	}
-#endif /* _HIF_SDIO */
-#endif /* CFG_CHIP_RESET_KO_SUPPORT */
-
+#if CFG_CHIP_RESET_KO_SUPPORT
+	u4RstCount = 0;
+	u4PowerOffCount = 0;
+#endif
+	KAL_SET_BIT(SER_RESET_WORK_IDLE_BIT, g_serResetWorkData.ulResetFlag);
 	INIT_WORK(&(wifi_rst.rst_work), mtk_wifi_reset);
 #endif /* CFG_SUPPORT_CONNINFRA == 0 */
 
+	pfWlanRemove = pfRemove;
+	u4ProbeCount = 0;
 	fgIsResetting = FALSE;
 	fgIsRstPreventFwOwn = FALSE;
 	wifi_rst.prGlueInfo = prGlueInfo;
@@ -223,6 +237,34 @@ void glResetInit(struct GLUE_INFO *prGlueInfo)
 	g_SubsysRstCnt = 0;
 
 #endif /* CFG_SUPPORT_CONNINFRA */
+#if CFG_ENABLE_WAKE_LOCK
+	KAL_WAKE_LOCK_INIT(NULL, prWlanChipResetWakeLock, "WLAN_ChipReset");
+#endif
+	wifi_rst.fgIsInitialized = TRUE;
+}
+
+void glReseProbeDone(struct GLUE_INFO *prGlueInfo, int32_t i4Status)
+{
+	if (!prGlueInfo)
+		return;
+#if CFG_CHIP_RESET_KO_SUPPORT
+	if (i4Status == WLAN_STATUS_SUCCESS) {
+		send_reset_event(RESET_MODULE_TYPE_WIFI, RFSM_EVENT_PROBED);
+#if defined(_HIF_SDIO)
+		update_hif_info(HIF_INFO_SDIO_HOST, prGlueInfo->rHifInfo.func);
+#endif
+	}
+#endif
+
+	u4ProbeCount++;
+	DBGLOG(INIT, WARN,
+		"[SER][L0] %s: probe count %d, status %d\n",
+		__func__, u4ProbeCount, i4Status);
+
+#if CFG_ENABLE_WAKE_LOCK
+	if (KAL_WAKE_LOCK_ACTIVE(NULL, prWlanChipResetWakeLock))
+		KAL_WAKE_UNLOCK(NULL, prWlanChipResetWakeLock);
+#endif
 }
 
 /*----------------------------------------------------------------------------*/
@@ -237,6 +279,8 @@ void glResetInit(struct GLUE_INFO *prGlueInfo)
 /*----------------------------------------------------------------------------*/
 void glResetUninit(void)
 {
+	wifi_rst.fgIsInitialized = FALSE;
+	wifi_rst.prGlueInfo = NULL;
 #if CFG_WMT_RESET_API_SUPPORT
 	/* 1. Deregister reset callback */
 #if (CFG_SUPPORT_CONNINFRA == 0)
@@ -248,13 +292,11 @@ void glResetUninit(void)
 #endif /* CFG_SUPPORT_CONNINFRA == 0 */
 #endif /* CFG_WMT_RESET_API_SUPPORT */
 
-#if (CFG_SUPPORT_CONNINFRA == 0)
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-#if defined(_HIF_SDIO)
-	unregister_wifi_notify_callback();
-#endif /* _HIF_SDIO */
-#endif /* CFG_CHIP_RESET_KO_SUPPORT */
-#endif /* CFG_SUPPORT_CONNINFRA == 0 */
+#if CFG_ENABLE_WAKE_LOCK
+	if (KAL_WAKE_LOCK_ACTIVE(NULL, prWlanChipResetWakeLock))
+		KAL_WAKE_UNLOCK(NULL, prWlanChipResetWakeLock);
+	KAL_WAKE_LOCK_DESTROY(NULL, prWlanChipResetWakeLock);
+#endif
 }
 /*----------------------------------------------------------------------------*/
 /*!
@@ -517,6 +559,11 @@ uint32_t glResetSelectActionCe(IN struct ADAPTER *prAdapter)
 		       "[SER][L0.5] Try L0 reset instead\n");
 
 		u4RstFlag = RST_FLAG_DO_WHOLE_RESET;
+	} else if ((u4RstFlag & RST_FLAG_DO_L0P5_RESET) &&
+		HAL_TEST_FLAG(prAdapter, ADAPTER_FLAG_HW_ERR)) {
+		DBGLOG(INIT, INFO,
+			"[SER][L0.5] change to L0 RST when hw err flag has been set\n");
+		u4RstFlag = RST_FLAG_DO_WHOLE_RESET;
 	}
 
 	if ((u4RstFlag & RST_FLAG_DO_WHOLE_RESET) &&
@@ -543,17 +590,29 @@ uint32_t glResetSelectActionCe(IN struct ADAPTER *prAdapter)
 void glResetTriggerCe(IN struct ADAPTER *prAdapter, IN uint32_t u4RstFlag)
 {
 	if (u4RstFlag & RST_FLAG_DO_WHOLE_RESET) {
+#if CFG_ENABLE_WAKE_LOCK
+		if ((prWlanChipResetWakeLock) &&
+		    (!KAL_WAKE_LOCK_ACTIVE(NULL, prWlanChipResetWakeLock)))
+			__pm_stay_awake(prWlanChipResetWakeLock);
+#endif
 		fgIsResetting = TRUE;
 		fgSimplifyResetFlow = FALSE;
-		wifi_rst.prGlueInfo = prAdapter->prGlueInfo;
-		schedule_work(&(wifi_rst.rst_work));
+#if CFG_CHIP_RESET_KO_SUPPORT
+		if (RESET_RETURN_STATUS_SUCCESS !=
+			send_reset_event(RESET_MODULE_TYPE_WIFI,
+					 RFSM_EVENT_TRIGGER_RESET))
+#endif
+		{
+			wifi_rst.prGlueInfo = prAdapter->prGlueInfo;
+			mtk_wifi_reset_main(&wifi_rst);
+		}
 	} else if ((u4RstFlag & RST_FLAG_DO_L0P5_RESET) &&
 		   prAdapter->chip_info->fgIsSupportL0p5Reset) {
 		spin_lock_bh(&prAdapter->rWfsysResetLock);
-		fgIsResetting = TRUE;
-		fgIsRstPreventFwOwn = TRUE;
 
 		if (prAdapter->eWfsysResetState == WFSYS_RESET_STATE_IDLE) {
+			fgIsResetting = TRUE;
+			fgIsRstPreventFwOwn = TRUE;
 			spin_unlock_bh(&prAdapter->rWfsysResetLock);
 
 			glSetWfsysResetState(prAdapter,
@@ -664,18 +723,8 @@ void glResetTriggerCommon(struct ADAPTER *prAdapter, uint32_t u4RstFlag,
 
 	if ((u4RstFlag & RST_FLAG_DO_CORE_DUMP)
 		&& (prChipDbg->show_mcu_debug_info != NULL)) {
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-		if (rstNotifyWholeChipRstStatus(RST_MODULE_WIFI,
-						RST_MODULE_STATE_DUMP_START,
-						NULL) == RST_MODULE_RET_FAIL)
-			return;
-#endif
 		prChipDbg->show_mcu_debug_info(prAdapter, NULL, 0,
 						       DBG_MCU_DBG_ALL, NULL);
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-		rstNotifyWholeChipRstStatus(RST_MODULE_WIFI,
-					RST_MODULE_STATE_DUMP_END, NULL);
-#endif
 	}
 }
 
@@ -694,11 +743,10 @@ void glResetTriggerCommon(struct ADAPTER *prAdapter, uint32_t u4RstFlag,
 void glResetTrigger(struct ADAPTER *prAdapter, uint32_t u4RstFlag,
 		    const uint8_t *pucFile, uint32_t u4Line)
 {
-	dump_stack();
+	uint32_t u4FileStrSize = (pucFile == NULL) ? 0 : kalStrLen(pucFile);
 
-	if (kalIsResetting())
+	if (wifi_rst.fgIsInitialized != TRUE)
 		return;
-
 	if (prAdapter == NULL) {
 		if (wifi_rst.prGlueInfo != NULL &&
 			wifi_rst.prGlueInfo->prAdapter != NULL)
@@ -708,9 +756,61 @@ void glResetTrigger(struct ADAPTER *prAdapter, uint32_t u4RstFlag,
 			return;
 		}
 	}
+	if (kalIsResetting()
+#if CFG_DC_USB_WOW_CALLBACK
+	|| prAdapter->prGlueInfo->rHifInfo.fgUsbShutdown
+#endif
+	)
+		return;
 
 	if (atomic_read(&g_wlanRemoving)) {
 		DBGLOG(INIT, ERROR, "wlanRemove in process, skip reset!\n");
+		return;
+	}
+
+	if ((u4RstFlag & RST_FLAG_DO_WHOLE_RESET) ||
+		(u4RstFlag & RST_FLAG_DO_L0P5_RESET)) {
+		spin_lock_bh(&prAdapter->rWfsysResetLock);
+		if (prAdapter->eWfsysResetState != WFSYS_RESET_STATE_IDLE) {
+			spin_unlock_bh(&prAdapter->rWfsysResetLock);
+			DBGLOG(INIT, ERROR, "skip reset during L0.5\n");
+			return;
+		}
+		spin_unlock_bh(&prAdapter->rWfsysResetLock);
+		fgIsResetting = TRUE;
+	}
+
+	dump_stack();
+
+	if (in_interrupt()) {
+		DBGLOG(INIT, WARN, "in_atomic Trigger reset in %s line %u\n",
+				    pucFile, u4Line);
+
+		if (0 == KAL_TEST_AND_CLEAR_BIT(SER_RESET_WORK_IDLE_BIT,
+					   g_serResetWorkData.ulResetFlag)) {
+			DBGLOG(INIT, WARN, "reset work running, skip reset!\n");
+			return;
+		}
+
+		g_serResetWorkData.u4RstFlag = u4RstFlag;
+		g_serResetWorkData.pucFile = NULL;
+		g_serResetWorkData.u4Line = u4Line;
+
+		if (u4FileStrSize > 0) {
+			g_serResetWorkData.pucFile = cnmMemAlloc(
+							prAdapter,
+							RAM_TYPE_MSG,
+							u4FileStrSize + 1);
+			if (g_serResetWorkData.pucFile) {
+				kalMemZero(g_serResetWorkData.pucFile,
+					   u4FileStrSize + 1);
+				kalStrnCpy(g_serResetWorkData.pucFile,
+					   pucFile,
+					   u4FileStrSize);
+			}
+		}
+
+		schedule_work(&(wifi_rst.rst_work));
 		return;
 	}
 
@@ -875,8 +975,9 @@ POSTPONE:
 FAIL:
 	DBGLOG(INIT, ERROR, "\n[SER][L0.5] Reset fail !!!!\n\n");
 
+	glSetWfsysResetState(prAdapter, WFSYS_RESET_STATE_IDLE);
 	fgIsResetting = FALSE;
-
+	fgSimplifyResetFlow = FALSE;
 	GL_DEFAULT_RESET_TRIGGER(prAdapter, RST_SER_L0P5_FAIL);
 
 	return;
@@ -917,17 +1018,7 @@ static void mtk_wifi_reset_main(struct RESET_STRUCT *rst)
 	}
 #endif
 #else
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-#if defined(_HIF_USB)
-	rstNotifyWholeChipRstStatus(RST_MODULE_WIFI,
-				RST_MODULE_STATE_PRERESET, NULL);
-#endif
-#if defined(_HIF_SDIO)
-	rstNotifyWholeChipRstStatus(RST_MODULE_WIFI,
-				RST_MODULE_STATE_PRERESET,
-				rst->prGlueInfo->rHifInfo.func);
-#endif
-#else /* CFG_CHIP_RESET_KO_SUPPORT */
+#if (0 == CFG_CHIP_RESET_KO_SUPPORT)
 	fgResult = rst_L0_notify_step1();
 
 	if (fgResult == BT_RESET_NOT_OK) {
@@ -954,8 +1045,8 @@ static void mtk_wifi_reset_main(struct RESET_STRUCT *rst)
 		kalRemoveProbe(rst->prGlueInfo);
 
 #endif
+#endif
 
-#endif  /* CFG_CHIP_RESET_KO_SUPPORT */
 	if (fgSimplifyResetFlow) {
 		DBGLOG(INIT, INFO, "Force down the reset flag.\n");
 		fgSimplifyResetFlow = FALSE;
@@ -993,37 +1084,34 @@ static void mtk_wifi_reset(struct work_struct *work)
 {
 	struct RESET_STRUCT *rst = container_of(work,
 						struct RESET_STRUCT, rst_work);
-	struct ADAPTER *prAdapter;
-	struct CHIP_DBG_OPS *prChipDbg;
-	u_int8_t fgDrvOwn;
 
-	prAdapter = rst->prGlueInfo->prAdapter;
-	prChipDbg = prAdapter->chip_info->prDebugOps;
-	fgDrvOwn = TRUE;
-
-	/* Although we've already executed show_mcu_debug_info() in
-	 * glResetTriggerCommon(), it may not be a successful operation at that
-	 * time in USB mode due to the context is soft_irq which forbids the
-	 * execution of usb_control_msg(). Since we don't prefer to refactor it
-	 * at this stage, this is a workaround by performing it again here
-	 * where the context is kernel thread from workqueue.
-	 */
-	if (prChipDbg->show_mcu_debug_info) {
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-		if (rstNotifyWholeChipRstStatus(RST_MODULE_WIFI,
-						RST_MODULE_STATE_DUMP_START,
-						NULL) == RST_MODULE_RET_FAIL)
-			return;
-#endif
-		prChipDbg->show_mcu_debug_info(prAdapter, NULL, 0,
-						       DBG_MCU_DBG_ALL, NULL);
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-		rstNotifyWholeChipRstStatus(RST_MODULE_WIFI,
-					RST_MODULE_STATE_DUMP_END, NULL);
-#endif
+	if ((rst == NULL) ||
+	    (rst->prGlueInfo == NULL) ||
+	    (rst->prGlueInfo->prAdapter == NULL)) {
+		DBGLOG(INIT, ERROR, "prAdapter is NULL\n");
+		goto RESET_WORK_RETURN;
 	}
 
-	mtk_wifi_reset_main(rst);
+	if (0 != KAL_TEST_BIT(SER_RESET_WORK_IDLE_BIT,
+			      g_serResetWorkData.ulResetFlag))
+		return;
+
+	glResetTriggerCommon(rst->prGlueInfo->prAdapter,
+			     g_serResetWorkData.u4RstFlag,
+			     g_serResetWorkData.pucFile,
+			     g_serResetWorkData.u4Line);
+
+	glResetTriggerCe(rst->prGlueInfo->prAdapter,
+			 g_serResetWorkData.u4RstFlag);
+
+	if (g_serResetWorkData.pucFile) {
+		cnmMemFree(rst->prGlueInfo->prAdapter,
+			   g_serResetWorkData.pucFile);
+		g_serResetWorkData.pucFile = NULL;
+	}
+
+RESET_WORK_RETURN:
+	KAL_SET_BIT(SER_RESET_WORK_IDLE_BIT, g_serResetWorkData.ulResetFlag);
 }
 #endif
 
@@ -1209,7 +1297,7 @@ int glRstwlanPreWholeChipReset(enum consys_drv_type type, char *reason)
 	bool bRet = TRUE;
 	struct GLUE_INFO *prGlueInfo;
 
-	prGlueInfo = (struct GLUE_INFO *) wiphy_priv(wlanGetWiphy());
+	WIPHY_PRIV(wlanGetWiphy(), prGlueInfo);
 	DBGLOG(INIT, INFO,
 			"Enter glRstwlanPreWholeChipReset.\n");
 	while (get_wifi_process_status() == 1) {
@@ -1232,8 +1320,7 @@ int glRstwlanPreWholeChipReset(enum consys_drv_type type, char *reason)
 		while ((!prGlueInfo) ||
 			(prGlueInfo->u4ReadyFlag == 0) ||
 			(g_IsWfsysRstDone == FALSE)) {
-			prGlueInfo =
-				(struct GLUE_INFO *) wiphy_priv(wlanGetWiphy());
+			WIPHY_PRIV(wlanGetWiphy(), prGlueInfo);
 			DBGLOG(REQ, WARN, "wifi driver is not ready\n");
 			if (g_IsWfsysResetOnFail == TRUE) {
 				DBGLOG(REQ, WARN,
@@ -1449,7 +1536,8 @@ int wlan_reset_thread_main(void *data)
 			KAL_WAKE_LOCK(NULL,
 				      prWlanRstThreadWakeLock);
 #endif
-		prGlueInfo = (struct GLUE_INFO *) wiphy_priv(wlanGetWiphy());
+		WIPHY_PRIV(wlanGetWiphy(), prGlueInfo);
+
 		if (test_and_clear_bit(GLUE_FLAG_RST_START_BIT, &g_ulFlag) &&
 			 ((prGlueInfo) && (prGlueInfo->u4ReadyFlag))) {
 			if (KAL_WAKE_LOCK_ACTIVE(NULL, g_IntrWakeLock))
@@ -1513,7 +1601,63 @@ int wlan_reset_thread_main(void *data)
 }
 #endif
 #else
-#ifndef CFG_CHIP_RESET_KO_SUPPORT
+#if CFG_CHIP_RESET_KO_SUPPORT
+void resetkoNotifyFunc(unsigned int event, void *data)
+{
+	uint32_t u4Tick;
+	struct ModuleMsg *msg;
+#if defined(_HIF_SDIO)
+	bool *ret;
+#endif
+
+	DBGLOG(INIT, INFO, "%s: %d\n", __func__, event);
+	if (wifi_rst.fgIsInitialized == FALSE) {
+		DBGLOG(INIT, WARN, "%s: reset deinited\n", __func__);
+		return;
+	}
+	if (event == MODULE_NOTIFY_MESSAGE) {
+		msg = (struct ModuleMsg *)data;
+		if (msg == NULL || msg->input == NULL || msg->output == NULL)
+			return;
+#if defined(_HIF_SDIO)
+		if (msg->msgId == BT_TO_WIFI_SET_WIFI_DRIVER_OWN) {
+			ret = (bool *)(msg->output);
+			*ret = halPreventFwOwnEn(*((u_int8_t *)(msg->input)));
+		}
+#endif
+	} else if (event == MODULE_NOTIFY_PRE_POWER_OFF) {
+		fgIsResetting = TRUE;
+
+		u4Tick = kalGetTimeTick();
+		while ((wifi_rst.prGlueInfo == NULL) ||
+		       ((wifi_rst.prGlueInfo != NULL) &&
+			(wifi_rst.prGlueInfo->u4ReadyFlag != 1))) {
+			kalMsleep(10);
+			if (CHECK_FOR_TIMEOUT(kalGetTimeTick(), u4Tick,
+						MSEC_TO_SYSTIME(4000))) {
+				DBGLOG(HAL, ERROR,
+					"[SER][L0] wait probe done timeout\n");
+				return;
+			}
+		}
+
+#if defined(_HIF_SDIO)
+		if (pfWlanRemove)
+			pfWlanRemove();
+#endif
+		send_reset_event(RESET_MODULE_TYPE_WIFI, RFSM_EVENT_READY);
+	} else if (event == MODULE_NOTIFY_RESET_DONE) {
+		u4RstCount++;
+		DBGLOG(INIT, INFO, "%s: reset count %d\n",
+			__func__, u4RstCount);
+	} else if (event == MODULE_NOTIFY_POWER_OFF_DONE) {
+		u4PowerOffCount++;
+		DBGLOG(INIT, INFO, "%s: power off count %d\n",
+			__func__, u4PowerOffCount);
+	}
+}
+#endif
+#if (0 == CFG_CHIP_RESET_KO_SUPPORT)
 static u_int8_t is_bt_exist(void)
 {
 	char *bt_func_name = "btmtk_sdio_whole_reset";

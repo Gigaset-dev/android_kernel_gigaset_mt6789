@@ -148,7 +148,7 @@ static uint32_t inline bt_read_cr(uint32_t addr)
 	uint8_t *base = ioremap(addr, 0x10);
 
 	if (base == NULL) {
-		BTMTK_ERR("%s: remapping 0x%08x fail", addr);
+		BTMTK_ERR("%s: remapping 0x%08x fail", __func__, addr);
 	} else {
 		value = REG_READL(base);
 		iounmap(base);
@@ -161,7 +161,7 @@ static void inline bt_write_cr(uint32_t addr, uint32_t value, bool is_set_bit)
 	uint32_t *base = ioremap(addr, 0x10);
 
 	if (base == NULL) {
-		BTMTK_ERR("%s: remapping 0x%08x fail", addr);
+		BTMTK_ERR("%s: remapping 0x%08x fail", __func__, addr);
 	} else {
 		if (is_set_bit)
 			*base |= value; // set bit to CR

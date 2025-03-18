@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/
  *      MT6620_WIFI_DRIVER_V2_3/include/nic_cmd_event.h#1
@@ -871,11 +872,6 @@ struct CMD_RX_PACKET_FILTER {
 #define EXT_EVENT_ID_TX_POWER_FEATURE_CTRL  0x58
 #endif
 
-#define SCHED_SCAN_CHANNEL_TYPE_SPECIFIED      (0)
-#define SCHED_SCAN_CHANNEL_TYPE_DUAL_BAND      (1)
-#define SCHED_SCAN_CHANNEL_TYPE_2G4_ONLY       (2)
-#define SCHED_SCAN_CHANNEL_TYPE_5G_ONLY        (3)
-
 #if (CFG_SUPPORT_TWT == 1)
 /* TWT related definitions */
 #define TWT_AGRT_MAX_NUM        16
@@ -1165,6 +1161,27 @@ struct CMD_ACCESS_EEPROM {
 	uint16_t u2Offset;
 	uint16_t u2Data;
 };
+
+#if (CONFIG_WIFI_ULTRA_RADIO_OFF_CTRL == 1)
+struct CMD_PM_STATE_CTRL {
+	uint8_t ucPmNumber;
+	uint8_t ucPmState;
+	uint8_t aucBssid[6];
+	uint8_t ucDtimPeriod;
+	uint8_t u1WlanIdxL;
+	uint16_t u2BcnInterval;
+	uint32_t u4Aid;
+	uint32_t u4RxFilter;
+	uint8_t ucBand;
+	uint8_t u1WlanIdxHnVer;
+	uint8_t aucReserved[2];
+	uint32_t u4Feature;
+	uint8_t ucOwnMacIdx;
+	uint8_t ucWmmIdx;
+	uint8_t ucBcnLossCount;
+	uint8_t ucBcnSpDuration;
+};
+#endif
 
 /* EVENT_CONNECTION_STATUS */
 struct EVENT_CONNECTION_STATUS {
@@ -2497,7 +2514,7 @@ struct CMD_DBDC_SETTING {
 	uint8_t ucPrimaryChannel;
 	uint8_t ucWmmQueIdx;
 	uint8_t ucRfBand;
-	uint8_t aucPadding2[1];
+	uint8_t ucReason;
 	uint8_t aucPadding3[24];
 };
 
@@ -3212,6 +3229,20 @@ struct EVENT_GET_TXPWR_TBL {
 };
 #endif /* CFG_WIFI_TXPWR_TBL_DUMP */
 
+#if (CFG_SUPPORT_PKT_OFLD == 1)
+struct CMD_OFLD_INFO {
+	/* restrict buffer size to 1500 bytes */
+	/* because FW WFDMA MAX buf size is 1600 Byte */
+	uint8_t ucType;
+	uint8_t ucOp;
+	uint8_t ucFragNum;
+	uint8_t ucFragSeq;
+	uint32_t u4TotalLen;
+	uint32_t u4BufLen;
+	uint8_t aucBuf[PKT_OFLD_BUF_SIZE];
+};
+#endif /* CFG_SUPPORT_PKT_OFLD */
+
 #if (CFG_SUPPORT_TWT == 1)
 /*
  * Important: Used for Communication between Host and WM-CPU,
@@ -3647,6 +3678,34 @@ struct _NAN_CMD_UPDATE_ATTR_STRUCT {
 	uint8_t aucAttrBuf[1024];
 };
 
+struct _NAN_CMD_UPDATE_CONFIG {
+	uint8_t ucSupportVendorIoctl;
+	uint8_t aucReserved[3];
+};
+
+struct CMD_DFSP_CONFIG {
+	uint16_t version;
+	uint16_t length;
+	uint16_t flags; /* bit 0 = enable;no other defined */
+	/* duration of no beacon for suspension */
+	uint16_t max_bcn_miss_duration;
+	uint8_t mcsp_ttl;
+	uint8_t bcsa_cnt;
+	uint8_t max_empty_aw;
+	uint16_t mon_chan; /* passive monitor channel */
+	uint8_t mon_bssid[MAC_ADDR_LEN]; /* bssid of the AP */
+	uint16_t max_bcn_miss_af_duration;
+};
+
+struct NAN_EVENT_REPORT_DW_T {
+	uint32_t expected_tsf_h;
+	uint32_t expected_tsf_l;
+	uint32_t actual_tsf_h;
+	uint32_t actual_tsf_l;
+	uint16_t channel;
+	uint16_t dw_num;
+};
+
 enum _ENUM_NAN_SUB_CMD {
 	NAN_CMD_TEST, /* 0 */
 	NAN_TXM_TEST,
@@ -3673,8 +3732,17 @@ enum _ENUM_NAN_SUB_CMD {
 	NAN_CMD_UPDATE_POTENTIAL_CHNL_LIST,
 	NAN_CMD_UPDATE_AVAILABILITY_CTRL,
 	NAN_CMD_UPDATE_PEER_CAPABILITY,
-	NAN_CMD_ADD_CSID,
+	NAN_CMD_ADD_CSID, /* 25 */
 	NAN_CMD_MANAGE_SCID,
+	NAN_CMD_CHANGE_ADDRESS,
+	NAN_CMD_SET_SCHED_VERSION,
+	NAN_CMD_SET_NAN_CONFIG,
+	NAN_CMD_SET_DISC_BCN, /* 30 */
+	NAN_CMD_UPDATE_POTENTIAL_AVAILABILITY,
+
+	NAN_CMD_PUBLISH_EXT = 50,
+	NAN_CMD_SUBSCRIBE_EXT,
+	NAN_CMD_TRANSMIT_EXT,
 
 	NAN_CMD_NUM
 };
@@ -3703,10 +3771,40 @@ enum _ENUM_NAN_SUB_EVENT {
 	NAN_EVENT_ID_DE_EVENT_IND,  /* 20 */
 	NAN_EVENT_SELF_FOLLOW_EVENT,
 	NAN_EVENT_DISABLE_IND,
+	NAN_EVENT_NDL_FLOW_CTRL_V2,
+	NAN_EVENT_ID_DEVICE_CAPABILITY,
+	NAN_EVENT_DISC_BCN_PERIOD, /* 25 */
+	NAN_EVENT_DFSP_CSA = 26,
+	NAN_EVENT_DFSP_CSA_COMPLETE = 27,
+	NAN_EVENT_DFSP_SUSPEND_RESUME = 28,
+	NAN_EVENT_REPORT_DW_START,
+	NAN_EVENT_REPORT_DW_END, /* 30 */
+
+	NAN_EVENT_VENDOR_DISCOVERY_RESULT = 50, /* 50 */
+	NAN_EVENT_VENDOR_PUBLISH_REPLIED_EVENT,
+	NAN_EVENT_VENDOR_FOLLOW_UP_RX_EVENT,
+	NAN_EVENT_VENDOR_FOLLOW_UP_TX_EVENT,
 
 	NAN_EVENT_NUM
 };
 #endif
+
+enum ENUM_KEEP_PWR_PARA {
+	ENUM_KEEP_PWR_PHY_LMAC,
+	ENUM_KEEP_PWR_PHY,
+	ENUM_KEEP_PWR_LMAC,
+	ENUM_KEEP_PWR_RFDIG
+};
+
+struct CMD_LP_DBG_CTRL {
+	uint8_t ucSubCmdId;
+	uint8_t ucTag;
+	uint8_t ucBandIdx;
+	uint8_t ucKeepPwr;	/* 0: PHY+LMAC, 1:PHY, 2:LMAC, 3:RFDIG */
+	uint8_t ucRfdigStatus;
+	uint8_t aucReserved[3];
+};
+
 /*******************************************************************************
  *                            P U B L I C   D A T A
  *******************************************************************************
@@ -3938,6 +4036,11 @@ uint32_t nicCmdEventQueryNicCoexFeature(IN struct ADAPTER
 uint32_t nicCmdEventQueryNicCsumOffload(IN struct ADAPTER
 					*prAdapter, IN uint8_t *pucEventBuf);
 #endif
+#if (CFG_SUPPORT_PKT_OFLD == 1)
+void nicCmdEventQueryOfldInfo(IN struct ADAPTER
+				*prAdapter, IN struct CMD_INFO *prCmdInfo,
+				IN uint8_t *pucEventBuf);
+#endif
 uint32_t nicCfgChipCapHwVersion(IN struct ADAPTER
 				*prAdapter, IN uint8_t *pucEventBuf);
 uint32_t nicCfgChipCapSwVersion(IN struct ADAPTER
@@ -4043,6 +4146,15 @@ void nicEventGetOneTimeCalData(
 );
 #endif
 
+#if CFG_SUPPORT_MDNS_OFFLOAD
+void nicCmdEventQueryMdnsStats(struct ADAPTER *prAdapter,
+		struct CMD_INFO *prCmdInfo,
+		uint8_t *pucEventBuf);
+
+void nicEventMdnsStats(struct ADAPTER *prAdapter,
+		struct WIFI_EVENT *prEvent);
+#endif
+
 void nicEventHifCtrl(IN struct ADAPTER *prAdapter,
 		     IN struct WIFI_EVENT *prEvent);
 void nicEventRddSendPulse(IN struct ADAPTER *prAdapter,
@@ -4132,6 +4244,14 @@ void nicCmdEventQueryDpdCache(IN struct ADAPTER *prAdapter,
 void nicCmdEventLatchTSF(IN struct ADAPTER *prAdapter,
 	IN struct CMD_INFO *prCmdInfo, IN uint8_t *pucEventBuf);
 #endif
+
+void nicCmdEventGetSlpCntInfo(IN struct ADAPTER *prAdapter,
+	IN struct CMD_INFO *prCmdInfo, IN uint8_t *pucEventBuf);
+void nicCmdEventLpKeepPwrCtrl(IN struct ADAPTER *prAdapter,
+	IN struct CMD_INFO *prCmdInfo, IN uint8_t *pucEventBuf);
+void nicEventLpDbgCtrl(IN struct ADAPTER *prAdapter,
+	IN struct WIFI_EVENT *prEvent);
+
 /*******************************************************************************
  *                              F U N C T I O N S
  *******************************************************************************

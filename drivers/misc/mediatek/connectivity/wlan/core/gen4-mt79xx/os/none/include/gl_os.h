@@ -1,8 +1,8 @@
-
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   gl_os.h
  *    \brief  List the external reference to OS for GLUE Layer.
  *
@@ -517,7 +517,7 @@ struct GLUE_INFO {
 	/* struct net_device_stats rNetDevStats; */
 
 	/* Wireless statistics struct net_device */
-	struct iw_statistics rIwStats;
+	struct iw_statistics rIwStats[BSSID_NUM];
 
 	/* spinlock to sync power save mechanism */
 	spinlock_t rSpinLock[SPIN_LOCK_NUM];
@@ -735,8 +735,8 @@ struct GLUE_INFO {
 	uint16_t u2MetUdpPort;
 #endif
 
-	int32_t i4RssiCache;
-	uint32_t u4LinkSpeedCache;
+	int32_t i4RssiCache[BSSID_NUM];
+	uint32_t u4LinkSpeedCache[BSSID_NUM];
 
 
 	uint32_t u4InfType;

@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: mgmt/privacy.c#1
  */
@@ -191,7 +192,8 @@ void secInit(IN struct ADAPTER *prAdapter, IN uint8_t ucBssIndex)
 	cnmTimerInitTimer(prAdapter,
 			  &prAisSpecBssInfo->rSaQueryTimer,
 			  (PFN_MGMT_TIMEOUT_FUNC) rsnStartSaQueryTimer,
-			  (unsigned long)ucBssIndex);
+			  (unsigned long)ucBssIndex,
+			  TIMER_WAKELOCK_AUTO);
 #endif
 
 	prAisSpecBssInfo->fgCounterMeasure = FALSE;
@@ -1158,17 +1160,21 @@ secPrivacySeekForBcEntry(IN struct ADAPTER *prAdapter,
 	    || ucAlg == CIPHER_SUITE_WEP128 || ucAlg == CIPHER_SUITE_NONE)
 		fgCheckKeyId = FALSE;
 
-	if (ucKeyId == 0xFF || ucAlg == CIPHER_SUITE_BIP)
+	if (ucKeyId == 0xFF ||
+		ucAlg == CIPHER_SUITE_BIP ||
+		ucAlg == CIPHER_SUITE_BIP_GMAC_256)
 		fgCheckKeyId = FALSE;
 
 	if (prBSSInfo->eCurrentOPMode == OP_MODE_ACCESS_POINT)
 		fgCheckKeyId = FALSE;
 
+#if (CFG_SUPPORT_DUAL_WTBL_GTK_REKEY_OFFLOAD == 0)
 	if (prBSSInfo->eCurrentOPMode == OP_MODE_INFRASTRUCTURE &&
 		  prBSSInfo->eNetworkType == NETWORK_TYPE_AIS) {
 		fgCheckKeyId = FALSE;
 		DBGLOG(RSN, WARN, "Always install gtk in same wtbl\n");
 	}
+#endif
 
 	ucStartIDX = 0;
 	ucMaxIDX = prAdapter->ucTxDefaultWlanIndex - 1;
@@ -1212,7 +1218,8 @@ secPrivacySeekForBcEntry(IN struct ADAPTER *prAdapter,
 	}
 
 	if (ucEntry < prAdapter->ucTxDefaultWlanIndex) {
-		if (ucAlg != CIPHER_SUITE_BIP) {
+		if (ucAlg != CIPHER_SUITE_BIP &&
+			ucAlg != CIPHER_SUITE_BIP_GMAC_256) {
 			prWtbl[ucEntry].ucUsed = TRUE;
 			prWtbl[ucEntry].ucKeyId = ucKeyId;
 			prWtbl[ucEntry].ucBssIndex = ucBssIndex;
@@ -1523,13 +1530,17 @@ enum ENUM_EAPOL_KEY_TYPE_T secGetEapolKeyType(uint8_t *pucPkt)
 			break;
 		u2KeyInfo = *((uint16_t *) (&pucEthBody[5]));
 		switch (u2KeyInfo) {
-		case 0x8a00:
+		case 0x8a00:   /*HMAC-SHA1*/
+		case 0x8b00:   /*AES-128-CMAC*/
 			return EAPOL_KEY_1_OF_4;
-		case 0x0a01:
+		case 0x0a01:   /*HMAC-SHA1*/
+		case 0x0b01:   /*AES-128-CMAC*/
 			return EAPOL_KEY_2_OF_4;
-		case 0xca13:
+		case 0xca13:   /*HMAC-SHA1*/
+		case 0xcb13:   /*AES-128-CMAC*/
 			return EAPOL_KEY_3_OF_4;
-		case 0x0a03:
+		case 0x0a03:   /*HMAC-SHA1*/
+		case 0x0b03:   /*AES-128-CMAC*/
 			return EAPOL_KEY_4_OF_4;
 		}
 	} while (FALSE);

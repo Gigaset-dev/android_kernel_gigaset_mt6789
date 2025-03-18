@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/
  *			MT6620_WIFI_DRIVER_V2_3/include/nic/nic_tx.h#1
@@ -679,7 +680,7 @@ struct TX_CTRL {
 	uint32_t u4MaxCmdPageCntPerFrame;
 
 	/* Store SysTime of Last TxDone successfully */
-	uint32_t u4LastTxTime[MAX_BSSID_NUM];
+	uint64_t u4LastTxTime[MAX_BSSID_NUM];
 };
 
 enum ENUM_TX_PACKET_TYPE {
@@ -828,6 +829,8 @@ struct MSDU_INFO {
 
 #if CFG_SUPPORT_NAN
 	uint8_t ucTxToNafQueFlag;
+	uint8_t fgSecurity;
+	uint16_t ucTokenId;
 #endif
 
 #if defined(_HIF_PCIE) || defined(_HIF_AXI)
@@ -1990,7 +1993,7 @@ void nicTxSwTsoClearSkbQ(IN struct ADAPTER *prAdapter);
 #endif
 
 /* TX Direct functions : BEGIN */
-void nicTxDirectStartCheckQTimer(IN struct ADAPTER *prAdapter);
+void nicTxDirectStartCheckQTimer(IN struct ADAPTER *prAdapter, uint8_t fgWait);
 void nicTxDirectClearSkbQ(IN struct ADAPTER *prAdapter);
 void nicTxDirectClearHifQ(IN struct ADAPTER *prAdapter);
 void nicTxDirectClearStaPsQ(IN struct ADAPTER *prAdapter,
@@ -2005,9 +2008,11 @@ void nicTxDirectClearAllStaPendQ(IN struct ADAPTER *prAdapter);
 #if KERNEL_VERSION(4, 15, 0) <= LINUX_VERSION_CODE
 void nicTxDirectTimerCheckSkbQ(struct timer_list *timer);
 void nicTxDirectTimerCheckHifQ(struct timer_list *timer);
+void nicTxFwdCheckPendQ(struct timer_list *timer);
 #else
 void nicTxDirectTimerCheckSkbQ(unsigned long data);
 void nicTxDirectTimerCheckHifQ(unsigned long data);
+void nicTxFwdCheckPendQ(unsigned long data);
 #endif
 
 uint32_t nicTxDirectStartXmit(struct sk_buff *prSkb,

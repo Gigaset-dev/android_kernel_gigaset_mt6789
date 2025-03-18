@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/mgmt/cnm_timer.c#1
  */
@@ -42,7 +43,7 @@
  *                           P R I V A T E   D A T A
  *******************************************************************************
  */
-
+static u_int8_t gDoTimeOut = FALSE;
 /*******************************************************************************
  *                                 M A C R O S
  *******************************************************************************
@@ -367,6 +368,13 @@ void cnmTimerStartTimer(IN struct ADAPTER *prAdapter, IN struct TIMER *prTimer,
 	prRootTimer = &prAdapter->rRootTimer;
 	prTimerList = &prRootTimer->rLinkHead;
 
+	if (gDoTimeOut) {
+		log_dbg(CNM, TRACE,
+		"In DoTimeOut, timer %p func %ps %d ms timercount %d\n",
+		prTimer, prTimer->pfMgmtTimeOutFunc,
+		u4TimeoutMs, prTimerList->u4NumElem);
+	}
+
 	/* If timeout interval is larger than 1 minute, the mod value is set
 	 * to the timeout value first, then per minutue.
 	 */
@@ -445,12 +453,16 @@ void cnmTimerDoTimeOutCheck(IN struct ADAPTER *prAdapter)
 	prRootTimer->rNextExpiredSysTime
 		= rCurSysTime + MGMT_MAX_TIMEOUT_INTERVAL;
 
+	log_dbg(CNM, TRACE, "loop start [%d]\n", prTimerList->u4NumElem);
+	gDoTimeOut = TRUE;
+
 	LINK_FOR_EACH(prLinkEntry, prTimerList) {
 		if (prLinkEntry == NULL)
 			break;
 
 		prTimer = LINK_ENTRY(prLinkEntry, struct TIMER, rLinkEntry);
 		ASSERT(prTimer);
+
 		if (prLinkEntry->prNext == NULL)
 			log_dbg(CNM, WARN, "timer was re-inited, func %p\n",
 				prTimer->pfMgmtTimeOutFunc);
@@ -477,6 +489,9 @@ void cnmTimerDoTimeOutCheck(IN struct ADAPTER *prAdapter)
 						     pfMgmtTimeOutFunc,
 						     ulTimeoutDataPtr))
 			#endif
+			log_dbg(CNM, TRACE, "timer timeout, timer %p func %ps\n",
+				prTimer, prTimer->pfMgmtTimeOutFunc);
+
 				(pfMgmtTimeOutFunc) (prAdapter,
 					ulTimeoutDataPtr);
 				KAL_ACQUIRE_SPIN_LOCK(prAdapter,
@@ -503,6 +518,9 @@ void cnmTimerDoTimeOutCheck(IN struct ADAPTER *prAdapter)
 				eType = TIMER_WAKELOCK_AUTO;
 		}
 	}	/* end of for loop */
+
+	log_dbg(CNM, TRACE, "loop end");
+	gDoTimeOut = false;
 
 	/* Setup the prNext timeout event. It is possible the timer was already
 	 * set in the above timeout callback function.

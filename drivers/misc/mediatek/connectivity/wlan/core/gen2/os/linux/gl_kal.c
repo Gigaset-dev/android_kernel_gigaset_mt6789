@@ -3806,6 +3806,10 @@ int32_t kalRequestFirmware(const uint8_t *pucPath,
 		       pucPath, ret);
 		*ppucData = NULL;
 		*pu4ReadSize = 0;
+		if (fw) {
+			release_firmware(fw);
+			fw = NULL;
+		}
 		return ret;
 	}
 

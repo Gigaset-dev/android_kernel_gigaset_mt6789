@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /****************************************************************************
  *[File]             gl_dependency.c
  *[Version]          v1.0
@@ -10,8 +11,6 @@
  *[Description]
  *    The implementation for os-related API provided to common part.
  *    mainly Linux related code block in common part
- *[Copyright]
- *    Copyright (C) 2010 MediaTek Incorporation. All Rights Reserved.
  ****************************************************************************/
 
 

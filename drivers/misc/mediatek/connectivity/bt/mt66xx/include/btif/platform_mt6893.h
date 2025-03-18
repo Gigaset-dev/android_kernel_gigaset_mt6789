@@ -896,7 +896,7 @@ host_csr_only:
 
 static inline void bgfsys_dump_uart_pta_pready_status(void)
 {
-	uint8_t *base = NULL;
+	//uint8_t *base = NULL;
 
 	if (!conninfra_reg_readable()) {
 		BTMTK_ERR("%s: conninfra bus is not readable, discard", __func__);
@@ -909,7 +909,7 @@ static inline void bgfsys_dump_uart_pta_pready_status(void)
 
 	BTMTK_INFO("0x18001A00 = [0x%08x]",
 		REG_READL(CON_REG_INFRA_CFG_ADDR + 0xA00));
-
+        /*
 	base = ioremap(0x1800C00C, 4);
 	if (base == NULL) {
 		BTMTK_ERR("%s: remapping 0x18001A00 fail", __func__);
@@ -917,6 +917,7 @@ static inline void bgfsys_dump_uart_pta_pready_status(void)
 	}
 	BTMTK_INFO("0x1800C00C = [0x%08x]", *base);
 	iounmap(base);
+        */
 }
 
 static void bgfsys_dump_conn_wt_slp_ctrl_reg(void)

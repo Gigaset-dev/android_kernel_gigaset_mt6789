@@ -472,16 +472,16 @@ void cmd_workqueue_exit(void)
 {
 	struct btmtk_btif_dev *cif_dev = (struct btmtk_btif_dev *)g_sbdev->cif_dev;
 	int ret_a = 0, ret_b = 0;
+	down(&cif_dev->cmd_tout_sem);
 	if(workqueue_task != NULL) {
 		ret_b = cancel_delayed_work(&work);
 		flush_workqueue(workqueue_task);
 		ret_a = cancel_delayed_work(&work);
 		BTMTK_INFO("cancel workqueue before[%d] after[%d] flush", ret_b, ret_a);
-		down(&cif_dev->cmd_tout_sem);
 		destroy_workqueue(workqueue_task);
 		workqueue_task = NULL;
-		up(&cif_dev->cmd_tout_sem);
 	}
+	up(&cif_dev->cmd_tout_sem);
 }
 
 #endif // (DRIVER_CMD_CHECK == 1)

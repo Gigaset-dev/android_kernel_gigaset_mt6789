@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/HS2_DEV_SW/
  * MT6620_WIFI_DRIVER_V2_1_HS_2_0/mgmt/hs20.c#2
@@ -119,7 +120,7 @@ void hs20GenerateHS20IE(IN struct ADAPTER *prAdapter,
 
 	ucBssIndex = prMsduInfo->ucBssIndex;
 
-	if (!IS_BSS_INDEX_AIS(prAdapter, ucBssIndex) {
+	if (!IS_BSS_INDEX_AIS(prAdapter, ucBssIndex)) {
 		pr_info("[%s] prMsduInfo->ucBssIndex(%d) is not AIS\n",
 			__func__, ucBssIndex);
 		return;
@@ -459,6 +460,8 @@ u_int8_t hs20IsUnsolicitedNeighborAdv(IN struct ADAPTER *prAdapter,
 u_int8_t hs20IsForgedGTKFrame(IN struct ADAPTER *prAdapter,
 		IN struct BSS_INFO *prBssInfo, IN struct SW_RFB *prCurrSwRfb)
 {
+	/* 3 TODO: Need to verify this function before enable it */
+#if 0
 	struct CONNECTION_SETTINGS *prConnSettings =
 		aisGetConnSettings(prAdapter, prBssInfo->ucBssIndex);
 	uint8_t *pucEthDestAddr = prCurrSwRfb->pvHeader;
@@ -520,7 +523,7 @@ u_int8_t hs20IsForgedGTKFrame(IN struct ADAPTER *prAdapter,
 		}
 #endif
 	}
-
+#endif
 	return FALSE;
 }
 #endif

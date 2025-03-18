@@ -870,6 +870,8 @@
 #define STATUS_CODE_ASSOC_DENIED_LARGE_LIS_INTERVAL 51
 /* Invalid pairwise master key identifier (PMKID) */
 #define STATUS_INVALID_PMKID                        53
+/* not support DH group */
+#define STATUS_FINITE_CYCLIC_GROUP_NOT_SUPPORTED    77
 
 /* proprietary definition of reserved field of Status Code */
 /* Join failure */
@@ -2976,6 +2978,12 @@ struct _IE_TWT_T {
 	uint8_t ucReserved;	/* TWT Channel for 11ah. Reserved for 11ax */
 } __KAL_ATTRIB_PACKED__;
 #endif
+
+struct IE_HT_TPE {
+	uint8_t ucId;
+	uint8_t ucLength;
+	uint8_t u8TxPowerInfo;
+} __KAL_ATTRIB_PACKED__;
 
 struct IE_VHT_TPE {
 	uint8_t ucId;

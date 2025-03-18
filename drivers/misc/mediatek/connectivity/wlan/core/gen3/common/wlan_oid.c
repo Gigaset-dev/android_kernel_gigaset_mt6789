@@ -1109,6 +1109,8 @@ wlanoidSetConnect(IN P_ADAPTER_T prAdapter, IN PVOID pvSetBuffer, IN UINT_32 u4S
 	prGlueInfo = prAdapter->prGlueInfo;
 	kalMemZero(prConnSettings->aucSSID, sizeof(prConnSettings->aucSSID));
 	kalMemZero(prConnSettings->aucBSSID, sizeof(prConnSettings->aucBSSID));
+	kalMemZero(prConnSettings->aucBSSIDHint,
+		sizeof(prConnSettings->aucBSSIDHint));
 	prConnSettings->eConnectionPolicy = CONNECT_BY_SSID_ANY;
 	prConnSettings->fgIsConnByBssidIssued = FALSE;
 
@@ -1131,6 +1133,14 @@ wlanoidSetConnect(IN P_ADAPTER_T prAdapter, IN PVOID pvSetBuffer, IN UINT_32 u4S
 				fgEqualBssid = TRUE;
 		} else
 			DBGLOG(OID, INFO, "wrong bssid " MACSTR "to connect\n", MAC2STR(pParamConn->pucBssid));
+	} else if (pParamConn->pucBssidHint) {
+		if (!EQUAL_MAC_ADDR(aucZeroMacAddr, pParamConn->pucBssidHint)
+			&& IS_UCAST_MAC_ADDR(pParamConn->pucBssidHint)) {
+			prConnSettings->eConnectionPolicy =
+				CONNECT_BY_BSSID_HINT;
+			COPY_MAC_ADDR(prConnSettings->aucBSSIDHint,
+				pParamConn->pucBssidHint);
+		}
 	} else
 		DBGLOG(OID, TRACE, "No Bssid set\n");
 	prConnSettings->u4FreqInKHz = pParamConn->u4CenterFreq;
@@ -1212,6 +1222,12 @@ wlanoidSetConnect(IN P_ADAPTER_T prAdapter, IN PVOID pvSetBuffer, IN UINT_32 u4S
 	DBGLOG(OID, INFO, "ssid %s, bssid " MACSTR ", conn policy %d, disc reason %d\n",
 	       prConnSettings->aucSSID, MAC2STR(prConnSettings->aucBSSID),
 	       prConnSettings->eConnectionPolicy, prAisAbortMsg->ucReasonOfDisconnect);
+	DBGLOG(INIT, INFO, "ssid %s, bssid " MACSTR
+		", bssid_hint " MACSTR ", conn policy %d, disc reason %d\n",
+		prConnSettings->aucSSID, MAC2STR(prConnSettings->aucBSSID),
+		MAC2STR(prConnSettings->aucBSSIDHint),
+		prConnSettings->eConnectionPolicy,
+		prAisAbortMsg->ucReasonOfDisconnect);
 	return WLAN_STATUS_SUCCESS;
 }				/* end of wlanoidSetConnect */
 
@@ -2219,6 +2235,7 @@ wlanoidSetAddKey(IN P_ADAPTER_T prAdapter, IN PVOID pvSetBuffer, IN UINT_32 u4Se
 	P_WLAN_TABLE_T prWlanTable;
 	P_STA_RECORD_T prStaRec = NULL;
 	BOOL fgAddTxBcKey = FALSE;
+	UINT_8 aucBMC[] = BC_MAC_ADDR;
 
 #if CFG_SUPPORT_TDLS
 	P_STA_RECORD_T prTmpStaRec;
@@ -2281,7 +2298,8 @@ wlanoidSetAddKey(IN P_ADAPTER_T prAdapter, IN PVOID pvSetBuffer, IN UINT_32 u4Se
 	*pu4SetInfoLen = u4SetBufferLen;
 
 	/* Dump PARAM_KEY content. */
-	DBGLOG(OID, INFO, "PARAM_KEY Length: 0x%x, Key Index: 0x%x, Key Length: 0x%x, BSSID: "MACSTR"\n",
+	DBGLOG(OID, INFO, "PARAM_KEY AuthMode=%d Length: 0x%x, Key Index: 0x%x, Key Length: 0x%x, BSSID: "MACSTR"\n",
+	       prAdapter->rWifiVar.rConnSettings.eAuthMode,
 	       prNewKey->u4Length, prNewKey->u4KeyIndex, prNewKey->u4KeyLength,
 	       MAC2STR(prNewKey->arBSSID));
 	DBGLOG(OID, TRACE, "Key RSC:\n");
@@ -2292,10 +2310,8 @@ wlanoidSetAddKey(IN P_ADAPTER_T prAdapter, IN PVOID pvSetBuffer, IN UINT_32 u4Se
 	prAisSpecBssInfo = &prAdapter->rWifiVar.rAisSpecificBssInfo;
 	prBssInfo = prAdapter->prAisBssInfo;
 
-	if (prAdapter->rWifiVar.rConnSettings.eAuthMode >= AUTH_MODE_WPA &&
-	    prAdapter->rWifiVar.rConnSettings.eAuthMode != AUTH_MODE_WPA_NONE) {
-		if ((prNewKey->arBSSID[0] & prNewKey->arBSSID[1] & prNewKey->arBSSID[2] &
-		     prNewKey->arBSSID[3] & prNewKey->arBSSID[4] & prNewKey->arBSSID[5]) == 0xFF) {
+	if (rsnKeyMgmtWpa(prAdapter, prAdapter->rWifiVar.rConnSettings.eAuthMode)) {
+		if (EQUAL_MAC_ADDR(prNewKey->arBSSID, aucBMC)) {
 			prStaRec = cnmGetStaRecByAddress(prAdapter, prBssInfo->ucBssIndex, prBssInfo->aucBSSID);
 		} else {
 			prStaRec = cnmGetStaRecByAddress(prAdapter, prBssInfo->ucBssIndex, prNewKey->arBSSID);
@@ -2381,7 +2397,8 @@ wlanoidSetAddKey(IN P_ADAPTER_T prAdapter, IN PVOID pvSetBuffer, IN UINT_32 u4Se
 	} else if (prNewKey->u4KeyLength == 13) {
 		prCmdKey->ucAlgorithmId = CIPHER_SUITE_WEP104;
 	} else if (prNewKey->u4KeyLength == 16) {
-		if (prAdapter->rWifiVar.rConnSettings.eAuthMode < AUTH_MODE_WPA)
+		if (!rsnKeyMgmtWpa(prAdapter, prAdapter->rWifiVar.rConnSettings.eAuthMode) &&
+		    prNewKey->ucCipher == CIPHER_SUITE_WEP128)
 			prCmdKey->ucAlgorithmId = CIPHER_SUITE_WEP128;
 		else {
 #if CFG_SUPPORT_802_11W
@@ -2439,13 +2456,13 @@ wlanoidSetAddKey(IN P_ADAPTER_T prAdapter, IN PVOID pvSetBuffer, IN UINT_32 u4Se
 	}
 
 	{
-		if ((prCmdKey->aucPeerAddr[0] & prCmdKey->aucPeerAddr[1] & prCmdKey->aucPeerAddr[2] & prCmdKey->
-		     aucPeerAddr[3] & prCmdKey->aucPeerAddr[4] & prCmdKey->aucPeerAddr[5]) == 0xFF) {
-			if (prAdapter->rWifiVar.rConnSettings.eAuthMode >= AUTH_MODE_WPA
-			    && prAdapter->rWifiVar.rConnSettings.eAuthMode != AUTH_MODE_WPA_NONE
-			    && 1 /* Connected */) {
+		if (EQUAL_MAC_ADDR(prCmdKey->aucPeerAddr, aucBMC)) {
+			if (rsnKeyMgmtWpa(prAdapter, prAdapter->rWifiVar.rConnSettings.eAuthMode)
+				|| prAdapter->rWifiVar.rConnSettings.eAuthMode == AUTH_MODE_WPA_PSK
+				|| prAdapter->rWifiVar.rConnSettings.eAuthMode == AUTH_MODE_WPA) {
 				prStaRec = cnmGetStaRecByAddress(prAdapter, prBssInfo->ucBssIndex, prBssInfo->aucBSSID);
-				ASSERT(prStaRec);	/* AIS RSN Group key, addr is BC addr */
+				/* AIS RSN Group key, addr is BC addr */
+				ASSERT(prStaRec);
 				kalMemCopy(prCmdKey->aucPeerAddr, prStaRec->aucMacAddr, MAC_ADDR_LEN);
 			} else {
 				prStaRec = NULL;
@@ -3287,6 +3304,40 @@ wlanoidSetPmkid(IN P_ADAPTER_T prAdapter, IN PVOID pvSetBuffer, IN UINT_32 u4Set
 	return WLAN_STATUS_SUCCESS;
 
 }				/* wlanoidSetPmkid */
+
+/*----------------------------------------------------------------------------*/
+/*!
+* \brief This is called to del the PMKID from the PMK cache in the driver.
+*
+* \param[in] prAdapter Pointer to the Adapter structure.
+* \param[in] pvSetBuffer A pointer to the buffer that holds the data to be set.
+* \param[in] u4SetBufferLen The length of the set buffer.
+* \param[out] pu4SetInfoLen If the call is successful, returns the number of
+*                           bytes read from the set buffer. If the call failed
+*                           due to invalid length of the set buffer, returns
+*                           the amount of storage needed.
+*
+* \retval WLAN_STATUS_SUCCESS
+* \retval WLAN_STATUS_BUFFER_TOO_SHORT
+* \retval WLAN_STATUS_INVALID_DATA
+*/
+/*----------------------------------------------------------------------------*/
+WLAN_STATUS
+wlanoidDelPmkid(IN P_ADAPTER_T prAdapter, IN PVOID pvSetBuffer,
+		     IN UINT_32 u4SetBufferLen, OUT PUINT_32 pu4SetInfoLen)
+{
+	P_PARAM_PMKID_T prPmkid;
+
+	ASSERT(prAdapter);
+	ASSERT(pu4SetInfoLen);
+	ASSERT(pvSetBuffer);
+
+	*pu4SetInfoLen = u4SetBufferLen;
+	prPmkid = (P_PARAM_PMKID_T) pvSetBuffer;
+	if (u4SetBufferLen < sizeof(PARAM_PMKID_T))
+		return WLAN_STATUS_INVALID_DATA;
+	return secDelPmkid(prAdapter, prPmkid);
+}
 
 /*----------------------------------------------------------------------------*/
 /*!

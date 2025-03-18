@@ -80,16 +80,11 @@ void btmtk_reset_waker(struct work_struct *work)
 	}
 
 #ifdef CFG_CHIP_RESET_KO_SUPPORT
-	if (rstNotifyWholeChipRstStatus(RST_MODULE_BT, RST_MODULE_STATE_DUMP_START, NULL) == RST_MODULE_RET_FAIL)
-		return;
+	send_reset_event(RESET_MODULE_TYPE_BT, RFSM_EVENT_READY);
 #endif
 
 	if (bmain_info->hif_hook.dump_debug_sop)
 		bmain_info->hif_hook.dump_debug_sop(bdev);
-
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-	rstNotifyWholeChipRstStatus(RST_MODULE_BT, RST_MODULE_STATE_DUMP_END, NULL);
-#endif
 
 	DUMP_TIME_STAMP("chip_reset_start");
 	cif_event = HIF_EVENT_SUBSYS_RESET;
@@ -173,10 +168,16 @@ L0RESET:
 		 */
 		/* msleep(2000); */
 		if (bmain_info->hif_hook.whole_reset) {
+#ifdef CFG_CHIP_RESET_KO_SUPPORT
+			DUMP_TIME_STAMP("Send reset message to reset ko");
+			send_reset_event(RESET_MODULE_TYPE_BT, RFSM_EVENT_TRIGGER_RESET);
+			atomic_inc(&bmain_info->whole_reset_count);
+#else
 			DUMP_TIME_STAMP("whole_chip_reset_start");
 			bmain_info->hif_hook.whole_reset(bdev);
 			atomic_inc(&bmain_info->whole_reset_count);
 			DUMP_TIME_STAMP("whole_chip_reset_end");
+#endif
 		} else {
 			BTMTK_INFO("%s: Not support whole chip reset", __func__);
 		}

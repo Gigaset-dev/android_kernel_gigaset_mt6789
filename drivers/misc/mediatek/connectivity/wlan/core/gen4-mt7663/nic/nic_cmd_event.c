@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/
  *     MT6620_WIFI_DRIVER_V2_3/nic/nic_cmd_event.c#3
@@ -406,9 +360,6 @@ void nicCmdEventPfmuTagRead(IN struct ADAPTER *prAdapter,
 
 	g_rPfmuTag1 = prPfumTagRead->ru4TxBfPFMUTag1;
 	g_rPfmuTag2 = prPfumTagRead->ru4TxBfPFMUTag2;
-
-	kalOidComplete(prGlueInfo, prCmdInfo->fgSetQuery,
-		       u4QueryInfoLen, WLAN_STATUS_SUCCESS);
 
 	DBGLOG(INIT, INFO,
 	       "========================== (R)Tag1 info ==========================\n");
@@ -1724,6 +1675,8 @@ void nicOidCmdTimeoutCommon(IN struct ADAPTER *prAdapter,
 	if (prCmdInfo->fgIsOid)
 		kalOidComplete(prAdapter->prGlueInfo, prCmdInfo->fgSetQuery,
 			       0, WLAN_STATUS_FAILURE);
+	if (prAdapter->fgIsPostponeTxEAPOLM3)
+		prAdapter->fgIsPostponeTxEAPOLM3 = FALSE;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -2588,6 +2541,86 @@ void nicCmdEventQueryMemDump(IN struct ADAPTER *prAdapter,
 	return;
 
 }
+
+#if CFG_SUPPORT_MDNS_OFFLOAD
+void nicCmdEventQueryMdnsStats(struct ADAPTER *prAdapter,
+		struct CMD_INFO *prCmdInfo, uint8_t *pucEventBuf)
+{
+	struct GLUE_INFO *prGlueInfo;
+	uint16_t len;
+
+	if (!prAdapter) {
+		DBGLOG(NIC, ERROR, "NULL prAdapter!\n");
+		return;
+	}
+
+	if (!prCmdInfo) {
+		DBGLOG(NIC, ERROR, "NULL prCmdInfo!\n");
+		return;
+	}
+
+	len = prCmdInfo->u4InformationBufferLength;
+	prGlueInfo = prAdapter->prGlueInfo;
+
+	DBGLOG(NIC, TRACE, "Glue=%p, Pend=%p, Cmd=%p, oid=%u, Buf=%p, len=%u",
+			prGlueInfo, &prGlueInfo->rPendComp, prCmdInfo,
+			prCmdInfo->fgIsOid, prCmdInfo->pvInformationBuffer,
+			len);
+
+	memcpy((uint8_t *)prCmdInfo->pvInformationBuffer, pucEventBuf, len);
+
+	DBGLOG(RX, TRACE, "kalOidComplete: infoLen=%u", len);
+
+	if (prCmdInfo->fgIsOid)
+		kalOidComplete(prGlueInfo, prCmdInfo->fgSetQuery,
+						len, WLAN_STATUS_SUCCESS);
+}
+
+void nicEventMdnsStats(struct ADAPTER *prAdapter,
+		struct WIFI_EVENT *prEvent)
+{
+	struct CMD_INFO *prCmdInfo;
+
+	if (!prAdapter) {
+		DBGLOG(NIC, ERROR, "NULL prAdapter!\n");
+		return;
+	}
+
+	prCmdInfo = nicGetPendingCmdInfo(prAdapter, prEvent->ucSeqNum);
+
+	if (!prCmdInfo) {
+		DBGLOG(NIC, ERROR, "NULL prCmdInfo!\n");
+		return;
+	}
+
+	if (unlikely(prEvent->u2PacketLength - sizeof(struct WIFI_EVENT) >
+					prCmdInfo->u4InformationBufferLength)) {
+		DBGLOG(RX, WARN, "prEventLen=%u-%u, BufLen=%u",
+				prEvent->u2PacketLength,
+				sizeof(struct WIFI_EVENT),
+				prCmdInfo->u4InformationBufferLength);
+		kalOidComplete(prAdapter->prGlueInfo, prCmdInfo->fgSetQuery, 0,
+				WLAN_STATUS_FAILURE);
+	} else if (prCmdInfo->pfCmdDoneHandler) {
+		/* The destination buffer length has been checked sufficient */
+		kalMemZero(prCmdInfo->pvInformationBuffer,
+				prCmdInfo->u4InformationBufferLength);
+		prCmdInfo->u4InformationBufferLength =
+			prEvent->u2PacketLength - sizeof(struct WIFI_EVENT);
+		DBGLOG(RX, TRACE, "Calling prCmdInfo->pfCmdDoneHandler=%ps",
+				prCmdInfo->pfCmdDoneHandler);
+		prCmdInfo->pfCmdDoneHandler(prAdapter, prCmdInfo,
+					    prEvent->aucBuffer);
+	} else if (prCmdInfo->fgIsOid)
+		kalOidComplete(prAdapter->prGlueInfo,
+			prCmdInfo->fgSetQuery,
+			prEvent->u2PacketLength - sizeof(struct WIFI_EVENT),
+			WLAN_STATUS_SUCCESS);
+
+	/* return prCmdInfo */
+	cmdBufFreeCmdInfo(prAdapter, prCmdInfo);
+}
+#endif
 
 #if CFG_SUPPORT_BATCH_SCAN
 /*----------------------------------------------------------------------------*/
@@ -4100,12 +4133,20 @@ void nicExtEventReCalData(IN struct ADAPTER *prAdapter, IN uint8_t *pucEventBuf)
 	struct RECAL_DATA_T *prCalArray = NULL;
 	uint32_t u4Idx = 0;
 
-	ASSERT(pucEventBuf);
-	ASSERT(prAdapter);
+	if (pucEventBuf == NULL) {
+		DBGLOG(RFTEST, ERROR, "pucEventBuf is NULL\n");
+		return;
+	}
+	if (prAdapter == NULL) {
+		DBGLOG(RFTEST, ERROR, "prAdapter is NULL\n");
+		return;
+	}
+
 	prReCalInfo = &prAdapter->rReCalInfo;
 	if (prReCalInfo->prCalArray == NULL) {
 		prCalArray = (struct RECAL_DATA_T *)kalMemAlloc(
-			  2048 * sizeof(struct RECAL_DATA_T), VIR_MEM_TYPE);
+				CAL_ARRAY_SIZE * sizeof(struct RECAL_DATA_T),
+				VIR_MEM_TYPE);
 
 		if (prCalArray == NULL) {
 			DBGLOG(RFTEST, ERROR,
@@ -4115,7 +4156,7 @@ void nicExtEventReCalData(IN struct ADAPTER *prAdapter, IN uint8_t *pucEventBuf)
 		prReCalInfo->prCalArray = prCalArray;
 	}
 
-	if (prReCalInfo->u4Count >= 2048) {
+	if (prReCalInfo->u4Count >= CAL_ARRAY_SIZE) {
 		DBGLOG(RFTEST, ERROR,
 			"Too many Recal packet, maximum packets will be 2048, ignore\n");
 		return;
@@ -5200,6 +5241,11 @@ void nicEventAddPkeyDone(IN struct ADAPTER *prAdapter,
 	}
 
 	prAdapter->fgIsAddKeyDone = TRUE;
+
+	if (prAdapter->fgIsPostponeTxEAPOLM3) {
+		prAdapter->fgIsPostponeTxEAPOLM3 = FALSE;
+		DBGLOG(RX, INFO, "[Passpoint] PTK is installed and ready!\n");
+	}
 }
 
 void nicEventIcapDone(IN struct ADAPTER *prAdapter,
@@ -5655,6 +5701,401 @@ void nicOidCmdTimeoutSetAddKey(IN struct ADAPTER *prAdapter,
 	if (prCmdInfo->fgIsOid)
 		kalOidComplete(prAdapter->prGlueInfo, prCmdInfo->fgSetQuery,
 			       0, WLAN_STATUS_FAILURE);
+	if (prAdapter->fgIsPostponeTxEAPOLM3)
+		prAdapter->fgIsPostponeTxEAPOLM3 = FALSE;
+}
+#endif
+
+#if CFG_SUPPORT_CSI
+#if CFG_CSI_DEBUG
+void print_content(uint32_t cmd_len, uint8_t *buffer)
+{
+	uint32_t i, j;
+
+	DBGLOG(NIC, INFO, "Start ===========\n");
+	j = (cmd_len>>2) + 1;
+	for (i = 0; i < j; i++) {
+		DBGLOG(NIC, INFO, "%02x %02x %02x %02x\n",
+			*(buffer + i*4 + 3), *(buffer + i*4 + 2),
+			*(buffer + i*4 + 1), *(buffer + i*4 + 0));
+	}
+	 DBGLOG(NIC, INFO, "End =============\n");
+}
+#endif
+void
+nicEventCSIData(IN struct ADAPTER *prAdapter, IN struct WIFI_EVENT *prEvent)
+{
+	struct CSI_TLV_ELEMENT *prCSITlvData;
+	int32_t i4EventLen;
+	int16_t i2Idx = 0;
+	int8_t *prBuf = NULL;
+	uint16_t *pru2Tmp = NULL;
+	uint32_t *p32tmp = NULL;
+	struct CSI_DATA_T *prCSIData = NULL;
+	struct CSI_INFO_T *prCSIInfo = &(prAdapter->rCSIInfo);
+	/* u2Offset is 8 bytes currently, tag 4 bytes + length 4 bytes */
+	uint16_t u2Offset = OFFSET_OF(struct CSI_TLV_ELEMENT, aucbody);
+	uint32_t u4Tmp = 0;
+	uint8_t ucLastTagFlg = false;
+
+#define CSI_EVENT_MAX_SIZE 1500
+
+	ASSERT(prAdapter);
+
+	DBGLOG(NIC, INFO, "[CSI] nicEventCSIData\n");
+
+	i4EventLen = prEvent->u2PacketLength -
+			prAdapter->chip_info->event_hdr_size;
+	if (i4EventLen > CSI_EVENT_MAX_SIZE) {
+		DBGLOG(NIC, WARN, "[CSI] Invalid CSI event size %u\n",
+			i4EventLen);
+		return;
+	}
+	prCSIData = kalMemAlloc(sizeof(struct CSI_DATA_T), VIR_MEM_TYPE);
+
+	if (!prCSIData) {
+		DBGLOG(NIC, WARN, "[CSI] Alloc prCSIData failed!");
+		return;
+	}
+
+	prCSIData->u8TimeStamp = div_u64(kalGetBootTime(), USEC_PER_MSEC);
+
+	prBuf = (int8_t *) (prEvent->aucBuffer);
+#if CFG_CSI_DEBUG
+	DBGLOG(NIC, ERROR, "[CSI] debug: i4EventLen=%d\n", i4EventLen);
+	print_content(i4EventLen, (uint8_t *) prBuf);
+#endif
+	while ((i4EventLen >= u2Offset) && (ucLastTagFlg == false)) {
+		prCSITlvData = (struct CSI_TLV_ELEMENT *) prBuf;
+
+		DBGLOG(NIC, LOUD, "[CSI] tag_type=%d\n"
+						, prCSITlvData->tag_type);
+		if (prCSITlvData->tag_type == (CSI_EVENT_TLV_TAG_NUM - 1))
+			ucLastTagFlg = true;
+
+		switch (prCSITlvData->tag_type) {
+		case CSI_EVENT_VERSION:
+			if (prCSITlvData->body_len != sizeof(uint32_t)) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid FwVer len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+			u4Tmp = le32_to_cpup(
+					(uint32_t *) prCSITlvData->aucbody);
+			prCSIData->ucFwVer = (uint8_t)u4Tmp;
+			break;
+		case CSI_EVENT_CBW:
+			if (prCSITlvData->body_len != sizeof(uint32_t)) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid CBW len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+			prCSIData->ucBw = le32_to_cpup(
+					(uint32_t *) prCSITlvData->aucbody);
+			break;
+		case CSI_EVENT_RSSI:
+			if (prCSITlvData->body_len != sizeof(uint32_t)) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid RSSI len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+
+			prCSIData->cRssi =
+				le32_to_cpup(
+					(uint32_t *) prCSITlvData->aucbody);
+			break;
+		case CSI_EVENT_SNR:
+			if (prCSITlvData->body_len != sizeof(uint32_t)) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid SNR len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+
+			prCSIData->ucSNR =
+				le32_to_cpup(
+					(uint32_t *) prCSITlvData->aucbody);
+			break;
+		case CSI_EVENT_BAND:
+			if (prCSITlvData->body_len != sizeof(uint32_t)) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid BAND len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+
+			prCSIData->ucDbdcIdx =
+				le32_to_cpup(
+					(uint32_t *) prCSITlvData->aucbody);
+			break;
+		case CSI_EVENT_CSI_NUM:
+			if (prCSITlvData->body_len != sizeof(uint32_t)) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid CSI num len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+
+			prCSIData->u2DataCount =
+				le32_to_cpup(
+					(uint32_t *) prCSITlvData->aucbody);
+			break;
+		case CSI_EVENT_CSI_I_DATA:
+			if (prCSIData->u2DataCount > CSI_MAX_DATA_COUNT) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid CSI count %u\n",
+					prCSIData->u2DataCount);
+				goto out;
+			}
+
+			if (prCSITlvData->body_len !=
+				sizeof(int16_t) * CSI_MAX_DATA_COUNT) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid CSI num len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+
+			kalMemZero(prCSIData->ac2IData,
+				sizeof(prCSIData->ac2IData));
+			pru2Tmp = (int16_t *)prCSITlvData->aucbody;
+			for (i2Idx = 0; i2Idx < prCSIData->u2DataCount; i2Idx++)
+				prCSIData->ac2IData[i2Idx] =
+					le16_to_cpup(pru2Tmp + i2Idx);
+			break;
+		case CSI_EVENT_CSI_Q_DATA:
+			if (prCSIData->u2DataCount > CSI_MAX_DATA_COUNT) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid CSI count %u\n",
+					prCSIData->u2DataCount);
+				goto out;
+			}
+
+			if (prCSITlvData->body_len !=
+				sizeof(int16_t) * CSI_MAX_DATA_COUNT) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid CSI num len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+
+			kalMemZero(prCSIData->ac2QData,
+				sizeof(prCSIData->ac2QData));
+
+			pru2Tmp = (int16_t *) prCSITlvData->aucbody;
+			for (i2Idx = 0; i2Idx < prCSIData->u2DataCount; i2Idx++)
+				prCSIData->ac2QData[i2Idx] =
+					le16_to_cpup(pru2Tmp + i2Idx);
+			break;
+		case CSI_EVENT_DBW:
+			if (prCSITlvData->body_len != sizeof(uint32_t)) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid DBW len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+
+			prCSIData->ucDataBw =
+				le32_to_cpup((int32_t *) prCSITlvData->aucbody);
+			break;
+		case CSI_EVENT_CH_IDX:
+			if (prCSITlvData->body_len != sizeof(uint32_t)) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid CH IDX len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+
+			prCSIData->ucPrimaryChIdx =
+				le32_to_cpup((int32_t *) prCSITlvData->aucbody);
+			break;
+		case CSI_EVENT_TA:
+			/*
+			 * TA length is 8-byte long (MAC addr 6 bytes +
+			 * 2 bytes padding), the 2-byte padding keeps
+			 * the next Tag at a 4-byte aligned address.
+			 */
+			if (prCSITlvData->body_len !=
+				ALIGN_4(sizeof(prCSIData->aucTA))) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid TA len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+			kalMemCopy(prCSIData->aucTA, prCSITlvData->aucbody,
+				sizeof(prCSIData->aucTA));
+			break;
+		case CSI_EVENT_EXTRA_INFO:
+			if (prCSITlvData->body_len != sizeof(uint32_t)) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid Error len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+			prCSIData->u4ExtraInfo =
+				le32_to_cpup((int32_t *) prCSITlvData->aucbody);
+			break;
+		case CSI_EVENT_RX_MODE:
+			if (prCSITlvData->body_len != sizeof(uint32_t)) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid Rx Mode len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+			u4Tmp = le32_to_cpup((int32_t *) prCSITlvData->aucbody);
+
+			prCSIData->ucRxMode = (uint8_t)GET_CSI_RX_MODE(u4Tmp);
+			if (prCSIData->ucRxMode == 0)
+				prCSIData->bIsCck = TRUE;
+			else
+				prCSIData->bIsCck = FALSE;
+
+			prCSIData->u2RxRate = GET_CSI_RATE(u4Tmp);
+			break;
+		case CSI_EVENT_RSVD1:
+			if (prCSITlvData->body_len >
+				sizeof(int32_t) * CSI_MAX_RSVD1_COUNT) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid RSVD1 len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+
+			kalMemCopy(prCSIData->ai4Rsvd1,
+				prCSITlvData->aucbody,
+				prCSITlvData->body_len);
+
+			prCSIData->ucRsvd1Cnt =
+				prCSITlvData->body_len / sizeof(int32_t);
+			break;
+		case CSI_EVENT_RSVD2:
+			if (prCSITlvData->body_len >
+				sizeof(int32_t) * CSI_MAX_RSVD2_COUNT) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid RSVD2 len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+			prCSIData->ucRsvd2Cnt =
+				prCSITlvData->body_len / sizeof(int32_t);
+			p32tmp = (int32_t *)(prCSITlvData->aucbody);
+			for (i2Idx = 0; i2Idx < prCSIData->ucRsvd2Cnt; i2Idx++)
+				prCSIData->au4Rsvd2[i2Idx] =
+						le2cpu32(*(p32tmp + i2Idx));
+			break;
+		case CSI_EVENT_RSVD3:
+			if (prCSITlvData->body_len != sizeof(uint32_t)) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid RSVD3 len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+
+			prCSIData->i4Rsvd3 =
+				le32_to_cpup((int32_t *) prCSITlvData->aucbody);
+			break;
+		case CSI_EVENT_RSVD4:
+			if (prCSITlvData->body_len != sizeof(uint32_t)) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid RSVD4 len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+
+			prCSIData->ucRsvd4 =
+				le32_to_cpup(
+					(uint32_t *) prCSITlvData->aucbody);
+			break;
+		case CSI_EVENT_H_IDX:
+			if (prCSITlvData->body_len != sizeof(uint32_t)) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid Antenna_pattern len %u",
+					prCSITlvData->body_len);
+				goto out;
+			}
+
+			prCSIData->Antenna_pattern =
+				le32_to_cpup(
+					(uint32_t *) prCSITlvData->aucbody);
+
+			/*to drop pkt that usr do not need*/
+			if ((prCSIInfo->Matrix_Get_Bit) &&
+				!(prCSIInfo->Matrix_Get_Bit &
+				(1 << (prCSIData->Antenna_pattern & 0xf)))) {
+				DBGLOG(NIC, WARN,
+					"[CSI] drop Antenna_pattern=%d\n",
+					prCSIData->Antenna_pattern);
+				goto out;
+			}
+			break;
+		case CSI_EVENT_TX_RX_IDX:
+			if (prCSITlvData->body_len != sizeof(uint32_t)) {
+				DBGLOG(NIC, WARN,
+					"[CSI] Invalid TRxIdx len %u",
+							prCSITlvData->body_len);
+				goto out;
+			}
+			prCSIData->u4TRxIdx = le32_to_cpup(
+					(uint32_t *) prCSITlvData->aucbody);
+			break;
+		default:
+			DBGLOG(NIC, WARN, "[CSI] Unsupported CSI tag %d\n",
+				prCSITlvData->tag_type);
+		};
+
+		i4EventLen -= (u2Offset + prCSITlvData->body_len);
+
+		if (i4EventLen >= u2Offset)
+			prBuf += (u2Offset + prCSITlvData->body_len);
+	}
+
+	/*mask the null tone && pilot tone*/
+	if ((prCSIInfo->ucValue1[CSI_CONFIG_OUTPUT_FORMAT] ==
+		CSI_OUTPUT_TONE_MASKED ||
+		prCSIInfo->ucValue1[CSI_CONFIG_OUTPUT_FORMAT] ==
+		CSI_OUTPUT_TONE_MASKED_SHIFTED) &&
+		!prCSIData->bIsCck) {
+
+		wlanApplyCSIToneMask(prCSIData->ucRxMode,
+			prCSIData->ucBw, prCSIData->ucDataBw,
+			prCSIData->ucPrimaryChIdx,
+			prCSIData->ac2IData, prCSIData->ac2QData);
+	}
+	/*reoder the tone */
+	if (prCSIInfo->ucValue1[CSI_CONFIG_OUTPUT_FORMAT] ==
+		CSI_OUTPUT_TONE_MASKED_SHIFTED &&
+		!prCSIData->bIsCck) {
+		kalMemCopy(prCSIInfo->ai2TempIData,
+			prCSIData->ac2IData,
+			sizeof(int16_t) * prCSIData->u2DataCount);
+		kalMemCopy(prCSIInfo->ai2TempQData,
+			prCSIData->ac2QData,
+			sizeof(int16_t) * prCSIData->u2DataCount);
+		wlanShiftCSI(prCSIData->ucRxMode,
+			prCSIData->ucBw, prCSIData->ucDataBw,
+			prCSIData->ucPrimaryChIdx,
+			prCSIInfo->ai2TempIData,
+			prCSIInfo->ai2TempQData,
+			prCSIData->ac2IData,
+			prCSIData->ac2QData);
+		if (prCSIData->ucDataBw == RX_VT_FR_MODE_20)
+			prCSIData->u2DataCount = 64;
+		else if (prCSIData->ucDataBw == RX_VT_FR_MODE_40)
+			prCSIData->u2DataCount = 128;
+		else
+			prCSIData->u2DataCount = 256;
+		DBGLOG(INIT, INFO, "[CSI] u2DataCount=%d\n",
+					prCSIData->u2DataCount);
+	}
+
+	wlanPushCSIData(prAdapter, prCSIData);
+	wake_up_interruptible(&(prAdapter->rCSIInfo.waitq));
+
+out:
+	kalMemFree(prCSIData, VIR_MEM_TYPE, sizeof(struct CSI_DATA_T));
 }
 #endif
 
@@ -5976,3 +6417,42 @@ void nicCmdEventGetTmReport(
 					u4QueryInfoLen, WLAN_STATUS_SUCCESS);
 }
 #endif
+
+#if (CFG_SUPPORT_TSF_SYNC == 1)
+void nicCmdEventLatchTSF(IN struct ADAPTER *prAdapter,
+	IN struct CMD_INFO *prCmdInfo, IN uint8_t *pucEventBuf)
+{
+	uint32_t u4QueryInfoLen;
+	struct GLUE_INFO *prGlueInfo;
+
+	if (!prAdapter) {
+		DBGLOG(NIC, ERROR, "NULL prAdapter!\n");
+		return;
+	}
+
+	if (!prCmdInfo) {
+		DBGLOG(NIC, ERROR, "NULL prCmdInfo!\n");
+		return;
+	}
+
+	if (!pucEventBuf) {
+		DBGLOG(NIC, ERROR, "NULL pucEventBuf!\n");
+		return;
+	}
+
+	if (prCmdInfo->fgIsOid) {
+		prGlueInfo = prAdapter->prGlueInfo;
+
+		kalMemCopy(prCmdInfo->pvInformationBuffer,
+			pucEventBuf, sizeof(struct CMD_TSF_SYNC));
+		u4QueryInfoLen = sizeof(struct CMD_TSF_SYNC);
+
+		kalOidComplete(prGlueInfo, prCmdInfo->fgSetQuery,
+			       u4QueryInfoLen, WLAN_STATUS_SUCCESS);
+	}
+
+	return;
+
+}
+#endif
+

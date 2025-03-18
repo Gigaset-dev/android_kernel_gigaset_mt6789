@@ -8,6 +8,7 @@
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/poll.h>
+#include <linux/version.h>
 #include "connsys_debug_utility.h"
 #include "fw_log_mcu.h"
 
@@ -56,7 +57,11 @@ int fw_log_mcu_init(struct fw_log_mcu_info *info, const struct file_operations *
 		goto error;
 	}
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,4,0))
+	info->mcu_class = class_create(info->driver_name);
+#else
 	info->mcu_class = class_create(THIS_MODULE, info->driver_name);
+#endif
 	if (IS_ERR(info->mcu_class)) {
 		pr_notice("[%s] class_create fail, conn_type=[%d]\n", __func__, info->conn_type);
 		goto error;

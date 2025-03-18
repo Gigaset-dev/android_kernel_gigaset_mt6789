@@ -1,6 +1,6 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
 
 /*! \file   hs20.h
@@ -72,7 +72,6 @@ struct HS20_INFO {
 
 	uint8_t aucHS20AssocInfoIE[200];	/*for Assoc req */
 	uint16_t u2HS20AssocInfoIELen;
-	uint8_t ucHotspotConfig;
 	u_int8_t fgConnectHS20AP;
 
 };

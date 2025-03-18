@@ -31,6 +31,9 @@ endif
 
 $(info os option: $(os))
 
+ifeq ($(os), none)
+kver_ge = $(shell echo 1)
+else
 # script for check the kernel version condition
 # example check kernel >= 5.4 : $(call kver_ge,5,4)
 kver_ge = $(shell \
@@ -41,7 +44,8 @@ if($(PATCHLEVEL) > $(2)) {print 1} else { \
 if($(SUBLEVEL) < $(3)) {print 0} else {print 1} \
 }}}}}' \
 )
-
+endif
+$(info ker ver : $(VERSION), PATCHLEVEL : $(PATCHLEVEL), SUBLEVEL : $(SUBLEVEL))
 # ---------------------------------------------------
 # ALPS Setting
 # ---------------------------------------------------
@@ -54,7 +58,9 @@ ifeq ($(KBUILD_MODPOST_FAIL_ON_WARNINGS),)
     KBUILD_MODPOST_FAIL_ON_WARNINGS=y
 endif
 
+ifeq ($(DRIVER_BUILD_DATE),)
 DRIVER_BUILD_DATE=$(shell date +%Y%m%d%H%M%S)
+endif
 ccflags-y += -DDRIVER_BUILD_DATE='"$(DRIVER_BUILD_DATE)"'
 # ---------------------------------------------------
 # Compile Options
@@ -69,12 +75,29 @@ MTK_COMBO_CHIP = MT6632
 endif
 
 MTK_PLATFORM := $(subst ",,$(CONFIG_MTK_PLATFORM))
+
 $(info $$MTK_PLATFORM is [${MTK_PLATFORM}])
+$(info $$WLAN_CHIP_ID is [${WLAN_CHIP_ID}])
 
 ifeq ($(WLAN_CHIP_ID),)
 WLAN_CHIP_ID=$(word 1, $(MTK_COMBO_CHIP))
 endif
-$(info $$WLAN_CHIP_ID is [${WLAN_CHIP_ID}])
+
+MODULE_NAME_RESET := wlan_sdio_reset
+ifneq ($(findstring  wlan_sdio_reset,$(MODULE_NAME_RESET)),)
+    CONFIG_BUILD_MTPREALLOC_KO = n
+    CONFIG_BUILD_WLAN_KO = n
+    $(warning build $(MODULE_NAME_RESET).ko)
+    CONFIG_BUILD_RESET_KO = y
+else
+    CONFIG_BUILD_RESET_KO = n
+    ifeq ($(CONFIG_MTK_PREALLOC_MEMORY), y)
+        $(warning build $(MODULE_NAME_PREALLOC).ko)
+        CONFIG_BUILD_MTPREALLOC_KO = y
+    endif
+    $(warning build $(MODULE_NAME).ko)
+    CONFIG_BUILD_WLAN_KO = y
+endif
 
 ccflags-y += -DCFG_SUPPORT_DEBUG_FS=0
 ccflags-y += -DWLAN_INCLUDE_PROC
@@ -135,12 +158,20 @@ CONFIG_MTK_WIFI_TWT_HOTSPOT_SUPPORT=n
 CONFIG_MTK_WIFI_TWT_HOTSPOT_AC_SUPPORT=n
 endif
 
+CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH=n
+ifeq ($(CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH), y)
+	ccflags-y += -DCFG_MTK_CONNSYS_DEDICATED_LOG_PATH=1
+else
+	ccflags-y += -DCFG_MTK_CONNSYS_DEDICATED_LOG_PATH=0
+endif
+
 ifneq ($(findstring MT7961,$(MTK_COMBO_CHIP)),)
 ccflags-y:=$(filter-out -UMT7961,$(ccflags-y))
 ccflags-y += -DMT7961
 ccflags-y += -DCFG_SDIO_INTR_ENHANCE_FORMAT=2
 ccflags-y += -DCFG_SUPPORT_SCHED_SCAN=1
 ccflags-y += -DCFG_SUPPORT_MDNS_OFFLOAD=1
+ccflags-y += -DCFG_SUPPORT_DUAL_WTBL_GTK_REKEY_OFFLOAD=1
 # MT7961's max cmd tx resource = 3
 # so QM_CMD_RESERVED_THRESHOL must be less than 3
 ccflags-y += -DQM_CMD_RESERVED_THRESHOLD=1
@@ -159,6 +190,7 @@ CONFIG_MTK_WIFI_TWT_HOTSPOT_SUPPORT=y
 CONFIG_MTK_WIFI_TWT_HOTSPOT_AC_SUPPORT=n
 CONFIG_WIFI_TWT_STAPS_DISABLE_SCAN=n
 CONIFG_WIFI_TWT_WIFI_6E_CERTIFICATION=n
+CONFIG_SUPPORT_PCIE_WFDMA_WMM_SCH=n
 CONFIG_SUPPORT_WIFI_DL_BT_PATCH=y
 CONFIG_SUPPORT_PCIE_ASPM=y
 CONFIG_SUPPORT_PCIE_ASPM_IMPROVE=n
@@ -166,6 +198,12 @@ CONFIG_SUPPORT_CMD_OVER_WFDMA=y
 CFG_SUPPORT_HOST_RX_WM_EVENT_FROM_PSE=y
 CONFIG_MTK_WIFI_NAN=n
 CONFIG_MTK_DBDC_SW_FOR_P2P_LISTEN=n
+CFG_SUPPORT_SW_BIP_GMAC=y
+CONFIG_SUPPORT_SAP_WPA3_H2E=y
+CONFIG_MTK_PASSPOINT_R2_SUPPORT=y
+CONFIG_SUPPORT_SAP_OWE=n
+CONFIG_WIFI_RAM_COEX_SPDT_3ANT_CTRL=n
+CONFIG_SUPPORT_UPDTAE_HE_BSS_COLOR_FROM_BEACON=n
 
 # AP KVR
 ifeq ($(CFG_MTK_AP_80211KVR_INTERFACE), y)
@@ -180,6 +218,12 @@ ifeq ($(CONFIG_WIFI_ANTENNA_REPORT), y)
 	ccflags-y += -DCONFIG_WIFI_ANTENNA_REPORT=1
 else
 	ccflags-y += -DCONFIG_WIFI_ANTENNA_REPORT=0
+endif
+ifeq ($(CONFIG_SUPPORT_PCIE_WFDMA_WMM_SCH), y)
+	ccflags-y += -DCFG_SUPPORT_PCIE_WFDMA_WMM=1
+	ccflags-y += -D_PCIE_WMM_DMASH=1
+else
+	ccflags-y += -DCFG_SUPPORT_PCIE_WFDMA_WMM=0
 endif
 ifeq ($(CONFIG_WIFI_SUPPORT_GET_NOISE), y)
 	ccflags-y += -DCONFIG_WIFI_SUPPORT_GET_NOISE=1
@@ -226,12 +270,35 @@ ifeq ($(CFG_ADM_CTRL), y)
 else
 	ccflags-y += -DCFG_ADM_CTRL=0
 endif
+ifeq ($(CFG_SUPPORT_SW_BIP_GMAC), y)
+	ccflags-y += -DCFG_SUPPORT_SW_BIP_GMAC=1
+else
+	ccflags-y += -DCFG_SUPPORT_SW_BIP_GMAC=0
+endif
+ifeq ($(CONFIG_SUPPORT_SAP_WPA3_H2E), y)
+	ccflags-y += -DCFG_SAP_SUPPORT_WPA3_H2E=1
+else
+	ccflags-y += -DCFG_SAP_SUPPORT_WPA3_H2E=0
+endif
+ifeq ($(CONFIG_SUPPORT_SAP_OWE), y)
+        ccflags-y += -DCFG_SUPPORT_SOFTAP_OWE=1
+else
+        ccflags-y += -DCFG_SUPPORT_SOFTAP_OWE=0
+endif
+ifeq ($(CONFIG_WIFI_RAM_COEX_SPDT_3ANT_CTRL), y)
+        ccflags-y += -DCFG_WIFI_RAM_COEX_SPDT_3ANT_CTRL=1
+else
+        ccflags-y += -DCFG_WIFI_RAM_COEX_SPDT_3ANT_CTRL=0
+endif
+
 ifeq ($(CONFIG_MTK_COMBO_WIFI_HIF), sdio)
 CONFIG_TX_RSRC_WMM_ENHANCE=y
 CONFIG_SUPPORT_MAILBOX_ACK=y
 endif
 ifeq ($(CONFIG_MTK_COMBO_WIFI_HIF), pcie)
 CFG_COALESCING_INTERRUPT=y
+CONFIG_SUPPORT_PCIE_WFDMA_WMM_SCH=y
+CONFIG_RX_WORK_SUPPORT=y
 endif
 # For Buzzard, only PCIE & USB support
 ifneq ($(CONFIG_MTK_COMBO_WIFI_HIF), sdio)
@@ -295,6 +362,7 @@ ccflags-y:=$(filter-out -UMT7902,$(ccflags-y))
 ccflags-y += -DMT7902
 ccflags-y += -DCFG_SDIO_INTR_ENHANCE_FORMAT=2
 ccflags-y += -DCFG_SUPPORT_SCHED_SCAN=1
+ccflags-y += -DCFG_SUPPORT_DUAL_WTBL_GTK_REKEY_OFFLOAD=1
 # ccflags-y += -DQM_CMD_RESERVED_THRESHOLD=1
 CONFIG_MTK_WIFI_CONNAC2X=y
 CONFIG_MTK_WIFI_11AX_SUPPORT=y
@@ -330,6 +398,11 @@ CONFIG_SUPPORT_DEBUG_SOP=y
 CONFIG_NOT_CLR_FREE_MSDU_IN_ACTIVE_NETWORK=y
 # Default disable feature notify country code to zb
 CONFIG_SUPPORT_ZB_SKU=n
+CFG_SUPPORT_SW_BIP_GMAC=y
+CONFIG_SUPPORT_SAP_WPA3_H2E=y
+CONFIG_MTK_PASSPOINT_R2_SUPPORT=y
+CONFIG_SUPPORT_SAP_OWE=n
+CONFIG_SUPPORT_UPDTAE_HE_BSS_COLOR_FROM_BEACON=n
 
 ccflags-y += -DCFG_SUPPORT_WOW_EINT=1
 ccflags-y += -DCFG_SUPPORT_SUPPLICANT_SME=1
@@ -341,8 +414,91 @@ ccflags-y += -DCFG_SUPPORT_HE_ER=1
 ccflags-y += -DCFG_SUPPORT_DBDC=0
 ccflags-y += -DCFG_SUPPORT_BW160=1
 ccflags-y += -DCFG_WIFI_TX_ETH_CHK_EMPTY_PAYLOAD=1
-ccflags-y += -DCFG_SUPPORT_SINGLE_SKU_LOCAL_DB=1
-ccflags-y += -DCFG_SUPPORT_WOW_EINT_KEYEVENT_WAKEUP=1
+ifeq ($(CFG_SUPPORT_SW_BIP_GMAC), y)
+	ccflags-y += -DCFG_SUPPORT_SW_BIP_GMAC=1
+else
+	ccflags-y += -DCFG_SUPPORT_SW_BIP_GMAC=0
+endif
+ifeq ($(CONFIG_SUPPORT_SAP_WPA3_H2E), y)
+        ccflags-y += -DCFG_SAP_SUPPORT_WPA3_H2E=1
+else
+        ccflags-y += -DCFG_SAP_SUPPORT_WPA3_H2E=0
+endif
+ifeq ($(CONFIG_SUPPORT_SAP_OWE), y)
+        ccflags-y += -DCFG_SUPPORT_SOFTAP_OWE=1
+else
+        ccflags-y += -DCFG_SUPPORT_SOFTAP_OWE=0
+endif
+endif
+
+ifneq ($(findstring MT7926,$(MTK_COMBO_CHIP)),)
+ccflags-y:=$(filter-out -UMT7926,$(ccflags-y))
+ccflags-y += -DMT7926
+ccflags-y += -DCFG_SDIO_INTR_ENHANCE_FORMAT=2
+ccflags-y += -DCFG_SUPPORT_SCHED_SCAN=1
+ccflags-y += -DCFG_SUPPORT_DUAL_WTBL_GTK_REKEY_OFFLOAD=1
+# ccflags-y += -DQM_CMD_RESERVED_THRESHOLD=1
+CONFIG_MTK_WIFI_CONNAC2X=y
+CONFIG_MTK_WIFI_11AX_SUPPORT=y
+ifeq ($(call kver_ge,5,4,0),1)
+CONFIG_MTK_WIFI_6G_SUPPORT=y
+else
+CONFIG_MTK_WIFI_6G_SUPPORT=n
+endif
+CONFIG_MTK_WIFI_TWT_SUPPORT=y
+CONFIG_MTK_WIFI_TWT_HOTSPOT_SUPPORT=y
+CONFIG_MTK_WIFI_TWT_HOTSPOT_AC_SUPPORT=n
+CONFIG_WIFI_TWT_STAPS_DISABLE_SCAN=n
+CONFIG_SUPPORT_WIFI_DL_BT_PATCH=y
+CONFIG_SUPPORT_WIFI_DL_ZB_PATCH=y
+CONFIG_SUPPORT_PCIE_ASPM=y
+CONFIG_SUPPORT_PCIE_ASPM_IMPROVE=n
+CONFIG_SUPPORT_WIFI_DL_TEST_MODE=y
+CONFIG_SUPPORT_DTIM_SKIP=n
+# CONFIG_SUPPORT_CMD_OVER_WFDMA=y
+# CFG_SUPPORT_HOST_RX_WM_EVENT_FROM_PSE=y
+CONFIG_WIFI_RAM_MQM_BA_DELAY_SUPPORT=n
+ifeq ($(CONFIG_MTK_COMBO_WIFI_HIF), sdio)
+CONFIG_TX_RSRC_WMM_ENHANCE=y
+CONFIG_SUPPORT_MAILBOX_ACK=n
+endif
+ifeq ($(CONFIG_MTK_COMBO_WIFI_HIF), pcie)
+CFG_COALESCING_INTERRUPT=y
+endif
+CONFIG_SUPPORT_DEBUG_SOP=y
+CONFIG_NOT_CLR_FREE_MSDU_IN_ACTIVE_NETWORK=y
+# Default disable feature notify country code to zb
+CONFIG_SUPPORT_ZB_SKU=n
+CFG_SUPPORT_SW_BIP_GMAC=y
+CONFIG_SUPPORT_SAP_WPA3_H2E=y
+CONFIG_MTK_PASSPOINT_R2_SUPPORT=y
+CONFIG_SUPPORT_SAP_OWE=y
+
+ccflags-y += -DCFG_SUPPORT_WOW_EINT=1
+ccflags-y += -DCFG_SUPPORT_SUPPLICANT_SME=1
+ccflags-y += -DCFG_SUPPORT_OWE=1
+ccflags-y += -DCFG_REDIRECT_OID_SUPPORT=1
+ccflags-y += -DCFG_SUPPORT_CFG80211_QUEUE=1
+ccflags-y += -DCFG_RX_REPORT_FORMAT=2
+ccflags-y += -DCFG_SUPPORT_HE_ER=0
+ccflags-y += -DCFG_SUPPORT_DBDC=0
+ccflags-y += -DCFG_SUPPORT_BW160=1
+ccflags-y += -DCFG_WIFI_TX_ETH_CHK_EMPTY_PAYLOAD=1
+ifeq ($(CFG_SUPPORT_SW_BIP_GMAC), y)
+	ccflags-y += -DCFG_SUPPORT_SW_BIP_GMAC=1
+else
+	ccflags-y += -DCFG_SUPPORT_SW_BIP_GMAC=0
+endif
+ifeq ($(CONFIG_SUPPORT_SAP_WPA3_H2E), y)
+        ccflags-y += -DCFG_SAP_SUPPORT_WPA3_H2E=1
+else
+        ccflags-y += -DCFG_SAP_SUPPORT_WPA3_H2E=0
+endif
+ifeq ($(CONFIG_SUPPORT_SAP_OWE), y)
+        ccflags-y += -DCFG_SUPPORT_SOFTAP_OWE=1
+else
+        ccflags-y += -DCFG_SUPPORT_SOFTAP_OWE=0
+endif
 endif
 
 ifneq ($(findstring MT7933,$(MTK_COMBO_CHIP)),)
@@ -411,6 +567,12 @@ ifeq ($(CONFIG_MTK_WIFI_11AX_SUPPORT), y)
     ccflags-y += -DCFG_SUPPORT_802_11AX=1
 else
     ccflags-y += -DCFG_SUPPORT_802_11AX=0
+endif
+
+ifeq ($(CONFIG_MTK_WIFI_11AX_SUPPORT)_$(CONFIG_SUPPORT_UPDTAE_HE_BSS_COLOR_FROM_BEACON), y_y)
+    ccflags-y += -DCFG_SUPPORT_UPDATE_HE_BSS_COLOR_FROM_BEACON=1    # For BSS Color Update Issue
+else
+    ccflags-y += -DCFG_SUPPORT_UPDATE_HE_BSS_COLOR_FROM_BEACON=0
 endif
 
 ifeq ($(CONFIG_MTK_WIFI_11BE_SUPPORT), y)
@@ -563,8 +725,10 @@ endif
 
 ifeq ($(CONFIG_MTK_COMBO_WIFI_HIF), sdio)
     ccflags-y += -D_HIF_SDIO=1
+	ccflags-y += -DCFG_CHIP_RESET_USE_MSTAR_GPIO_API=0
 else ifeq ($(CONFIG_MTK_COMBO_WIFI_HIF), pcie)
     ccflags-y += -D_HIF_PCIE=1
+    ccflags-y += -Wframe-larger-than=2048
 else ifeq ($(CONFIG_MTK_COMBO_WIFI_HIF), usb)
     ccflags-y += -D_HIF_USB=1
 else ifeq ($(CONFIG_MTK_COMBO_WIFI_HIF), axi)
@@ -746,6 +910,19 @@ else
     ccflags-y += -DCFG_SUPPORT_RX_NAPI=0
 endif
 
+ifeq ($(CONFIG_RX_WORK_SUPPORT), y)
+    ccflags-y += -DCFG_SUPPORT_RX_WORK=1
+else
+    ccflags-y += -DCFG_SUPPORT_RX_WORK=0
+endif
+
+ifeq ($(CONFIG_SUPPORT_PCIE_WFDMA_WMM_SCH), y)
+    ccflags-y += -DCFG_SUPPORT_PCIE_WFDMA_WMM=1
+    ccflags-y += -D_PCIE_WMM_DMASH=1
+else
+    ccflags-y += -DCFG_SUPPORT_PCIE_WFDMA_WMM=0
+endif
+
 ifeq ($(CONFIG_HIF_TX_PREALLOC_DATA_BUFFER), n)
     ccflags-y += -DCFG_HIF_TX_PREALLOC_DATA_BUFFER=0
 else
@@ -835,6 +1012,13 @@ ccflags-y += -DCFG_SUPPORT_DTIM_SKIP=1
 ccflags-y += -DMAX_SLEEP_TIME=600
 endif
 
+# For Single sku DFS channel set default flag
+ifeq ($(CONFIG_SUPPORT_SINGLE_SKU_DFS_PROTECT), n)
+	ccflags-y += -DCFG_SUPPORT_SINGLE_SKU_DFS_PROTECT=0
+else
+	ccflags-y += -DCFG_SUPPORT_SINGLE_SKU_DFS_PROTECT=1
+endif
+
 # kernel 5.15 cfg80211 para is changed for mlo
 ifeq ($(call kver_ge,5,15,41),1)
 	ifeq ($(CONFIG_ANDROID), y)
@@ -845,6 +1029,34 @@ ifeq ($(call kver_ge,5,15,41),1)
 else
 	ccflags-y += -DCFG_ADVANCED_80211_MLO=0
 endif
+
+# Google ANU and ANT kernel-5.15 have many differences in cfg80211 API
+# So, we need configurations to distinguish between them
+# IMB use $(BRANCH)
+#	T: android13-5.15
+#	U: android14-5.15
+# DTV use CONFIG_MTK_KERNEL_ANDROID_14 to identify android14 Kernel-5.15
+# DTV use CONFIG_MTK_KERNEL_ANDROID_13 to identify android13 Kernel-5.15
+
+ifeq ($(BRANCH), android13-5.15)
+    CFG_KERNEL_AN13_515=1
+    CFG_KERNEL_AN14_515=0
+else ifeq ($(BRANCH), android14-5.15)
+    CFG_KERNEL_AN13_515=0
+    CFG_KERNEL_AN14_515=1
+else ifeq ($(CONFIG_MTK_KERNEL_ANDROID_13), y)
+    CFG_KERNEL_AN13_515=1
+    CFG_KERNEL_AN14_515=0
+else ifeq ($(CONFIG_MTK_KERNEL_ANDROID_14), y)
+    CFG_KERNEL_AN13_515=0
+    CFG_KERNEL_AN14_515=1
+else
+    CFG_KERNEL_AN13_515=0
+    CFG_KERNEL_AN14_515=0
+endif
+
+ccflags-y += -DCFG_KERNEL_AN13_515=$(CFG_KERNEL_AN13_515)
+ccflags-y += -DCFG_KERNEL_AN14_515=$(CFG_KERNEL_AN14_515)
 
 ifeq ($(MODULE_NAME),)
 	MODULE_NAME := wlan_$(shell echo $(strip $(WLAN_CHIP_ID)) | tr A-Z a-z)_$(CONFIG_MTK_COMBO_WIFI_HIF)
@@ -866,6 +1078,10 @@ ccflags-y += -I$(srctree)/drivers/misc/mediatek/emi/$(MTK_PLATFORM)
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/emi/submodule
 ccflags-y += -I$(srctree)/drivers/devfreq/
 ccflags-y += -I$(srctree)/net
+
+ifeq ($(CONFIG_DRM_MEDIATEK_V2), y)
+ccflags-$(CONFIG_DRM_MEDIATEK_V2) += -I$(srctree)/drivers/gpu/drm/mediatek/mediatek_v2/
+endif
 
 ifeq ($(CONFIG_MTK_COMBO_WIFI_HIF), sdio)
 ccflags-y += -I$(src)/os/$(os)/hif/sdio/include
@@ -1013,7 +1229,8 @@ MGMT_OBJS := 	$(MGMT_DIR)ais_fsm.o \
 		$(MGMT_DIR)wnm.o \
 		$(MGMT_DIR)qosmap.o \
 		$(MGMT_DIR)ap_selection.o \
-		$(MGMT_DIR)wmm.o
+		$(MGMT_DIR)wmm.o \
+		$(MGMT_DIR)gcm.o
 
 # ---------------------------------------------------
 # Chips Objects List
@@ -1105,6 +1322,14 @@ CHIPS_OBJS += $(CHIPS)mt7961/mt7961.o
 CHIPS_OBJS += $(CHIPS)mt7961/dbg_mt7961.o
 CHIPS_OBJS += $(CHIPS)mt7902/dbg_mt7902.o
 CHIPS_OBJS += $(CHIPS)mt7902/hal_dmashdl_mt7902.o
+CHIPS_OBJS += $(CHIPS)mt7961/hal_wfsys_reset_mt7961.o
+endif
+ifneq ($(findstring MT7926,$(MTK_COMBO_CHIP)),)
+CHIPS_OBJS += $(CHIPS)mt7926/mt7926.o
+CHIPS_OBJS += $(CHIPS)mt7902/mt7902.o
+CHIPS_OBJS += $(CHIPS)mt7902/dbg_mt7902.o
+CHIPS_OBJS += $(CHIPS)mt7961/mt7961.o
+CHIPS_OBJS += $(CHIPS)mt7961/dbg_mt7961.o
 CHIPS_OBJS += $(CHIPS)mt7961/hal_wfsys_reset_mt7961.o
 endif
 ifneq ($(filter MT6639,$(MTK_COMBO_CHIP)),)
@@ -1206,9 +1431,7 @@ endif
 ifeq ($(CONFIG_MTK_COMBO_WIFI_HIF), sdio)
 HIF_OBJS :=  $(HIF_DIR)arm.o \
              $(HIF_DIR)sdio.o \
-             $(HIF_DIR)hal_api.o \
-             $(HIF_DIR)sdio_test_driver_core.o \
-             $(HIF_DIR)sdio_test_driver_ops.o
+             $(HIF_DIR)hal_api.o
 else ifeq ($(CONFIG_MTK_COMBO_WIFI_HIF), pcie)
 HIF_OBJS :=  $(HIF_COMMON_DIR)hal_pdma.o \
              $(HIF_COMMON_DIR)kal_pdma.o \
@@ -1304,27 +1527,58 @@ include $(src)/test/ut.make
 endif
 
 #
-# mtprealloc
+# mtprealloc: driver support prealloc or not
 #
 ifeq ($(CONFIG_MTK_PREALLOC_MEMORY), y)
-ccflags-y += -DCFG_PREALLOC_MEMORY
-ccflags-y += -I$(src)/prealloc/include
-MODULE_NAME_PREALLOC = $(MODULE_NAME)_prealloc
-PREALLOC_OBJS := prealloc/prealloc.o
-$(MODULE_NAME_PREALLOC)-objs += $(PREALLOC_OBJS)
-obj-m += $(MODULE_NAME_PREALLOC).o
+    ccflags-y += -DCFG_PREALLOC_MEMORY
+    ccflags-y += -I$(src)/prealloc/include
 endif
 
 #
-# mtreset
+# mtprealloc: build mtprealloc.ko
 #
-ifeq ($(CONFIG_GKI_SUPPORT), y)
-ccflags-y += -DCFG_CHIP_RESET_KO_SUPPORT
-ccflags-y += -I$(src)/reset/include
-ifeq ($(CONFIG_MTK_COMBO_WIFI_HIF), sdio)
-MODULE_NAME_RESET = wlan_sdio_reset
+ifeq ($(CONFIG_BUILD_MTPREALLOC_KO), y)
+    ifeq ($(MODULE_NAME_PREALLOC),)
+        MODULE_NAME_PREALLOC = $(MODULE_NAME)_prealloc
+    endif
+    ccflags-y += -I$(src)/prealloc/include
+    PREALLOC_OBJS := prealloc/prealloc.o
+    $(MODULE_NAME_PREALLOC)-objs += $(PREALLOC_OBJS)
+    obj-m += $(MODULE_NAME_PREALLOC).o
 endif
-RESET_OBJS := reset/reset.o
-$(MODULE_NAME_RESET)-objs += $(RESET_OBJS)
-obj-m += $(MODULE_NAME_RESET).o
+
+
+#
+# mtreset:wlan_sdio_reset: driver support resetko or not
+#
+CONFIG_CHIP_RESET_KO_SUPPORT=y
+RESET_MODULE_SYMVERS_DIR = $(shell pwd)/../../KERNEL_MODULES/$(MODULE_NAME_RESET).ko_intermediates/LINKED/Module.symvers
+ifeq ($(CONFIG_CHIP_RESET_KO_SUPPORT), y)
+    ccflags-y += -DCFG_CHIP_RESET_KO_SUPPORT=1
+    ccflags-y += -I$(src)/reset/include
+    ifneq ($(RESET_MODULE_SYMVERS_DIR),)
+        $(info 'RESET_MODULE_SYMVERS_DIR=' $(RESET_MODULE_SYMVERS_DIR))
+        KBUILD_EXTRA_SYMBOLS += $(RESET_MODULE_SYMVERS_DIR)
+    else
+        $(error 'RESET_MODULE_SYMVERS_DIR' undefined)
+    endif
+else
+    ccflags-y += -DCFG_CHIP_RESET_KO_SUPPORT=0
+endif
+
+
+#
+#  mtreset:wlan_sdio_reset: build mtreset.ko
+#
+ifeq ($(CONFIG_BUILD_RESET_KO), y)
+    ifeq ($(MODULE_NAME_RESET),)
+        MODULE_NAME_RESET = wlan_sdio
+    endif
+    ccflags-y += -I$(src)/reset/include
+    RESET_OBJS += reset/reset.o
+    RESET_OBJS += reset/reset_fsm.o
+    RESET_OBJS += reset/reset_fsm_def.o
+    RESET_OBJS += reset/reset_hif.o
+    $(MODULE_NAME_RESET)-objs += $(RESET_OBJS)
+    obj-m += $(MODULE_NAME_RESET).o
 endif

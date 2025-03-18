@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: @(#) gl_p2p.c@@
  */
@@ -464,6 +465,11 @@ static int p2pDoIOCTL(struct net_device *prDev,
 		struct ifreq *prIFReq,
 		int i4Cmd);
 
+#if KERNEL_VERSION(5, 15, 0) <= CFG80211_VERSION_CODE
+static int p2pDoPrivIOCTL(struct net_device *prDev, struct ifreq *prIfReq,
+			void __user *prData, int i4Cmd);
+#endif
+
 /*---------------------------------------------------------------------------*/
 /*!
  * \brief A function for prDev->init
@@ -480,6 +486,7 @@ static int p2pInit(struct net_device *prDev)
 		return -ENXIO;
 
 #if CFG_SUPPORT_RX_GRO
+	kalRxGroInit(prDev);
 	kalNapiInit(prDev);
 #endif
 
@@ -506,6 +513,9 @@ const struct net_device_ops p2p_netdev_ops = {
 	.ndo_set_rx_mode = p2pSetMulticastList,
 	.ndo_get_stats = p2pGetStats,
 	.ndo_do_ioctl = p2pDoIOCTL,
+#if KERNEL_VERSION(5, 15, 0) <= CFG80211_VERSION_CODE
+	.ndo_siocdevprivate = p2pDoPrivIOCTL,
+#endif
 	.ndo_start_xmit = p2pHardStartXmit,
 	/* .ndo_select_queue       = p2pSelectQueue, */
 	.ndo_select_queue = wlanSelectQueue,
@@ -1082,6 +1092,10 @@ int glSetupP2P(struct GLUE_INFO *prGlueInfo, struct wireless_dev *prP2pWdev,
 		prP2pWdev->wiphy->bands[BAND_5G] = NULL;
 
 #endif /* CFG_ENABLE_WIFI_DIRECT_CFG_80211 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+	if (!prAdapter->fgIsHwSupport6G)
+		prP2pWdev->wiphy->bands[BAND_6G] = NULL;
+#endif
 
 	/* setup netdev */
 	/* Point to shared glue structure */
@@ -1425,7 +1439,7 @@ u_int8_t glP2pCreateWirelessDevice(struct GLUE_INFO *prGlueInfo)
 	cfg80211_regd_set_wiphy(prWiphy);
 
 	/* 2.1 set priv as pointer to glue structure */
-	*((struct GLUE_INFO **) wiphy_priv(prWiphy)) = prGlueInfo;
+	WIPHY_PRIV_REVERSE(prWiphy, prGlueInfo);
 	/* Here are functions which need rtnl_lock */
 	if (wiphy_register(prWiphy) < 0) {
 		DBGLOG(INIT, WARN, "fail to register wiphy for p2p\n");
@@ -1623,7 +1637,6 @@ static int p2pOpen(IN struct net_device *prDev)
 #if CFG_SUPPORT_RX_GRO
 	kalNapiEnable(prDev);
 #endif
-
 	/* 2. carrier on & start TX queue */
 	/*DFS todo 20161220_DFS*/
 #if (CFG_SUPPORT_DFS_MASTER == 1)
@@ -1733,7 +1746,6 @@ static int p2pStop(IN struct net_device *prDev)
 #if CFG_SUPPORT_RX_GRO
 	kalNapiDisable(prDev);
 #endif
-
 	return 0;
 }				/* end of p2pStop() */
 
@@ -2085,6 +2097,13 @@ int p2pDoIOCTL(struct net_device *prDev, struct ifreq *prIfReq, int i4Cmd)
 	return ret;
 }				/* end of p2pDoIOCTL() */
 
+#if KERNEL_VERSION(5, 15, 0) <= CFG80211_VERSION_CODE
+int p2pDoPrivIOCTL(struct net_device *prDev, struct ifreq *prIfReq,
+		void __user *prData, int i4Cmd)
+{
+	return p2pDoIOCTL(prDev, prIfReq, i4Cmd);
+}
+#endif
 
 /*---------------------------------------------------------------------------*/
 /*!

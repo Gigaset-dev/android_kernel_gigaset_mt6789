@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
 ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/common/wlan_bow.c#1
 */
@@ -475,12 +476,16 @@ uint32_t bowCmdSetupConnection(IN struct ADAPTER *prAdapter, IN struct BT_OVER_W
 		DBGLOG(BOW, EVENT, "prBowFsmInfo->u2BeaconInterval, %d.\n", prBowFsmInfo->u2BeaconInterval);
 
 		cnmTimerInitTimer(prAdapter,
-				  &prBowFsmInfo->rStartingBeaconTimer,
-				  (PFN_MGMT_TIMEOUT_FUNC) bowSendBeacon, (unsigned long) NULL);
+			&prBowFsmInfo->rStartingBeaconTimer,
+			(PFN_MGMT_TIMEOUT_FUNC) bowSendBeacon,
+			(unsigned long) NULL,
+			TIMER_WAKELOCK_AUTO);
 
 		cnmTimerInitTimer(prAdapter,
-				  &prBowFsmInfo->rChGrantedTimer,
-				  (PFN_MGMT_TIMEOUT_FUNC) bowChGrantedTimeout, (unsigned long) NULL);
+			&prBowFsmInfo->rChGrantedTimer,
+			(PFN_MGMT_TIMEOUT_FUNC) bowChGrantedTimeout,
+			(unsigned long) NULL,
+			TIMER_WAKELOCK_AUTO);
 
 		/* Reset Global Variable */
 		g_u4Beaconing = 0;

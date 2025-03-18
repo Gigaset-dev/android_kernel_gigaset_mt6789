@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id:
  * //Department/DaVinci/TRUNK/MT6620_5931_WiFi_Driver/
@@ -54,7 +55,7 @@ extern const struct net_device_ops p2p_netdev_ops;
 
 #define MAX_P2P_IE_SIZE	5
 
-#define P2P_MAXIMUM_CLIENT_COUNT                    16
+#define P2P_MAXIMUM_CLIENT_COUNT                    20
 #define P2P_DEFAULT_CLIENT_COUNT 4
 
 /******************************************************************************
@@ -190,6 +191,7 @@ struct GL_P2P_INFO {
 	struct completion rStopApComp;
 
 	enum ENUM_CHNL_SWITCH_POLICY eChnlSwitchPolicy;
+	u_int8_t fgChannelSwitchReq;
 };
 
 struct GL_P2P_DEV_INFO {
@@ -324,7 +326,9 @@ u_int8_t p2pNetUnregister(struct GLUE_INFO *prGlueInfo,
 u_int8_t p2PAllocInfo(IN struct GLUE_INFO *prGlueInfo, IN uint8_t ucIdex);
 u_int8_t p2PFreeInfo(struct GLUE_INFO *prGlueInfo, uint8_t ucIdx);
 
-void p2pSetSuspendMode(struct GLUE_INFO *prGlueInfo, u_int8_t fgEnable);
+void p2pSetSuspendMode(struct GLUE_INFO *prGlueInfo,
+			u_int8_t fgEnable,
+			enum ENUM_SUSPEND_MODE_SOURCE eSource);
 u_int8_t glP2pCreateWirelessDevice(struct GLUE_INFO *prGlueInfo);
 void glP2pDestroyWirelessDevice(void);
 void p2pUpdateChannelTableByDomain(struct GLUE_INFO *prGlueInfo);

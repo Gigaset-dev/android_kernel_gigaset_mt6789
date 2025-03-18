@@ -408,7 +408,8 @@ int fm_register_irq(struct platform_driver *drv, unsigned int irq_num)
 	return 0;
 }
 
-int fm_register_plat(unsigned int family_id, unsigned int conn_id)
+int fm_register_plat(unsigned int host_id, unsigned int family_id,
+	unsigned int conn_id)
 {
 	return 0;
 }

@@ -186,7 +186,8 @@ MGMT_OBJS := $(MGMT_DIR)ais_fsm.o \
 	     $(MGMT_DIR)tdls.o \
 	     $(MGMT_DIR)wnm.o \
 	     $(MGMT_DIR)qosmap.o \
-	     $(MGMT_DIR)wmm.o
+	     $(MGMT_DIR)wmm.o \
+	     $(MGMT_DIR)ie_sort.o \
 # ---------------------------------------------------
 # STATS Objects List
 # ---------------------------------------------------

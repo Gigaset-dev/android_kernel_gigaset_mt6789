@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: /os/linux/include/gl_kal.h
  */
@@ -147,6 +148,7 @@ enum ENUM_SPIN_LOCK_CATEGORY_E {
 #if (CFG_TX_DYN_CMD_SUPPORT == 1)
 	SPIN_LOCK_DYN_CMD,
 #endif
+	SPIN_LOCK_MSDUIFO,
 	SPIN_LOCK_NUM
 };
 
@@ -396,6 +398,8 @@ struct KAL_THREAD_SCHEDSTATS {
 #define KAL_FIFO_INIT(_prFiFoQ, _prBuf, _rBufLen)
 #define KAL_FIFO_IN(_prFiFoQ, _rObj)
 #define KAL_FIFO_OUT(_prFiFoQ, _rObj)
+#define KAL_FIFO_IN_LOCKED(_prFiFoQ, _rObj, lock)
+#define KAL_FIFO_OUT_LOCKED(_prFiFoQ, _rObj, lock)
 #define KAL_FIFO_LEN(_prFiFoQ)
 #define KAL_FIFO_AVAIL(_prFiFoQ)
 #define KAL_FIFO_IS_EMPTY(_prFiFoQ)
@@ -698,6 +702,9 @@ KAL_NEED_IMPLEMENT(__FILE__, __func__, __LINE__)
 
 #define KAL_DMA_MAPPING_ERROR(_dev, _addr) \
 KAL_NEED_IMPLEMENT(__FILE__, __func__, __LINE__)
+
+#define KAL_DMA_SET_MASK(_dev, _mask) \
+KAL_NEED_IMPLEMENT(__FILE__, __func__, __LINE__)
 #else
 #define KAL_DMA_TO_DEVICE	DMA_TO_DEVICE
 #define KAL_DMA_FROM_DEVICE	DMA_FROM_DEVICE
@@ -715,6 +722,9 @@ KAL_NEED_IMPLEMENT(__FILE__, __func__, __LINE__)
 KAL_NEED_IMPLEMENT(__FILE__, __func__, __LINE__)
 
 #define KAL_DMA_MAPPING_ERROR(_dev, _addr) \
+KAL_NEED_IMPLEMENT(__FILE__, __func__, __LINE__)
+
+#define KAL_DMA_SET_MASK(_dev, _mask) \
 KAL_NEED_IMPLEMENT(__FILE__, __func__, __LINE__)
 #endif
 
@@ -821,7 +831,7 @@ kalProcessRxPacket(IN struct GLUE_INFO *prGlueInfo,
 
 uint32_t kalRxIndicatePkts(IN struct GLUE_INFO *prGlueInfo,
 			   IN void *apvPkts[],
-			   IN uint8_t ucPktNum);
+			   IN uint16_t u2PktNum);
 
 #ifdef CFG_REMIND_IMPLEMENT
 #define kalRxIndicateOnePkt(_prGlueInfo, _pvPkt) \
@@ -1405,12 +1415,12 @@ u_int8_t kalWSCGetActiveState(IN struct GLUE_INFO
 /* RSSI Updating                                                              */
 /*----------------------------------------------------------------------------*/
 #ifdef CFG_REMIND_IMPLEMENT
-#define kalUpdateRSSI(_prGlueInfo, _eNetTypeIdx, _cRssi, _cLinkQuality) \
+#define kalUpdateRSSI(_prGlueInfo, _ucBssIndex, _cRssi, _cLinkQuality) \
 	KAL_NEED_IMPLEMENT(__FILE__, __func__, __LINE__, _prGlueInfo)
 #else
 void
 kalUpdateRSSI(IN struct GLUE_INFO *prGlueInfo,
-	      IN enum ENUM_KAL_NETWORK_TYPE_INDEX eNetTypeIdx,
+	      IN uint8_t ucBssIndex,
 	      IN int8_t cRssi,
 	      IN int8_t cLinkQuality);
 #endif
@@ -1904,11 +1914,9 @@ uint8_t kalRxNapiValidSkb(struct GLUE_INFO *prGlueInfo,
 #if CFG_CHIP_RESET_SUPPORT
 void kalRemoveProbe(IN struct GLUE_INFO *prGlueInfo);
 
-#if (CFG_SUPPORT_SINGLE_SKU_LOCAL_DB == 1)
 void
 kalApplyCustomRegulatory(IN struct wiphy *pWiphy,
 	IN const struct ieee80211_regdomain *pRegdom);
-#endif
 
 #endif /* _GL_KAL_H */
 

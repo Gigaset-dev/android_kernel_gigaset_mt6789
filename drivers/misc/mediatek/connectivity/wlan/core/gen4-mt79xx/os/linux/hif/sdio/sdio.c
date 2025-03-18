@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /******************************************************************************
 *[File]             sdio.c
 *[Version]          v1.0
@@ -9,8 +10,6 @@
 *[Author]
 *[Description]
 *    The program provides SDIO HIF driver
-*[Copyright]
-*    Copyright (C) 2010 MediaTek Incorporation. All Rights Reserved.
 ******************************************************************************/
 
 
@@ -142,6 +141,10 @@ static const struct sdio_device_id mtk_sdio_ids[] = {
 	{	SDIO_DEVICE(0x037a, 0x7902),
 		.driver_data = (kernel_ulong_t)&mt66xx_driver_data_mt7902},
 #endif /* MT7902 */
+#ifdef MT7926
+	{	SDIO_DEVICE(0x037a, 0x7926),
+		.driver_data = (kernel_ulong_t)&mt66xx_driver_data_mt7926},
+#endif /* MT7926 */
 
 	{ /* end: all zeroes */ },
 };
@@ -207,14 +210,14 @@ void print_content(uint32_t cmd_len, uint8_t *buffer)
 {
 	uint32_t i, j;
 
-	pr_debug(DRV_NAME"Start ===========\n");
+	pr_debug(dev_info DRV_NAME"Start ===========\n");
 	j = (cmd_len>>2) + 1;
 	for (i = 0; i < j; i++) {
-		pr_debug(DRV_NAME"%02x %02x %02x %02x\n",
+		pr_debug(dev_info DRV_NAME"%02x %02x %02x %02x\n",
 			*(buffer + i*4 + 3), *(buffer + i*4 + 2),
 			*(buffer + i*4 + 1), *(buffer + i*4 + 0));
 	}
-	pr_debug(DRV_NAME"End =============\n");
+	pr_debug(dev_info DRV_NAME"End =============\n");
 }
 #endif
 
@@ -339,6 +342,22 @@ static int mtk_wow_input_init(struct GLUE_INFO *prGlueInfo)
 	}
 
 	return 0;
+}
+
+static void mtk_wow_input_deinit(struct GLUE_INFO *prGlueInfo)
+{
+
+	if ((prGlueInfo == NULL) ||
+		(prGlueInfo->prAdapter == NULL) ||
+		(prGlueInfo->prAdapter->prWowInputDev == NULL)) {
+		DBGLOG(HAL, ERROR, "prGlueInfo is NULL\n");
+		return;
+	}
+
+	input_unregister_device(prGlueInfo->prAdapter->prWowInputDev);
+	prGlueInfo->prAdapter->prWowInputDev = NULL;
+	return;
+
 }
 #endif
 
@@ -543,13 +562,17 @@ static int mtk_sdio_pm_suspend(struct device *pDev)
 	uint8_t drv_own_fail = FALSE;
 	uint32_t count = 0;
 	struct WIFI_VAR *prWifiVar = NULL;
-
+#if CFG_SUPPORT_MULTITHREAD
+	struct task_struct *prHifThread = NULL;
+#endif
 	DBGLOG(HAL, STATE, "==>\n");
 
 	func = dev_to_sdio_func(pDev);
 	prGlueInfo = sdio_get_drvdata(func);
 	prAdapter = prGlueInfo->prAdapter;
-
+#if CFG_SUPPORT_MULTITHREAD
+	prHifThread = prGlueInfo->hif_thread;
+#endif
 	/* Stop upper layers calling the device hard_start_xmit routine. */
 	netif_tx_stop_all_queues(prGlueInfo->prDevHandler);
 
@@ -587,13 +610,19 @@ static int mtk_sdio_pm_suspend(struct device *pDev)
 	glSdioSetState(&prGlueInfo->rHifInfo, SDIO_STATE_PRE_SUSPEND_START);
 #endif
 
-	prGlueInfo->fgIsInSuspendMode = TRUE;
 #if (CFG_SUPPORT_PERMON == 1)
 	if (!wlan_perf_monitor_force_enable)
 		kalPerMonDisable(prGlueInfo);
 #endif
 
 	wlanSuspendPmHandle(prGlueInfo);
+#if (CONFIG_WIFI_ULTRA_RADIO_OFF_CTRL == 1)
+	/* if no STA connected and no sched scan */
+	/* then radio off : 1 */
+	if (aisGetConnectedBssInfo(prAdapter) == NULL)
+		if (!(prWifiVar->rScanInfo.fgSchedScanning))
+			nicRadioStateCtrl(prAdapter, PM_RADIO_OFF);
+#endif
 
 	/* send pre-suspend cmd to notify FW do not send pkt/event to host */
 	halPreSuspendCmd(prAdapter);
@@ -637,6 +666,14 @@ static int mtk_sdio_pm_suspend(struct device *pDev)
 	while (wait < 500) {
 		if ((prAdapter->u4PwrCtrlBlockCnt == 0) &&
 		    (prAdapter->fgIsFwOwn == TRUE) &&
+#if CFG_SUPPORT_MULTITHREAD
+		    (!prHifThread ||
+#if KERNEL_VERSION(5, 14, 0) <= CFG80211_VERSION_CODE
+			prHifThread->__state & TASK_NORMAL) &&
+#else
+			prHifThread->state & TASK_NORMAL) &&
+#endif
+#endif
 		    (drv_own_fail == FALSE)) {
 			DBGLOG(HAL, STATE, "************************\n");
 			DBGLOG(HAL, STATE, "* Entered SDIO Suspend *\n");
@@ -707,9 +744,7 @@ static int mtk_sdio_pm_resume(struct device *pDev)
 {
 	struct sdio_func *func;
 	struct GLUE_INFO *prGlueInfo = NULL;
-#if CFG_SUPPORT_WOW_EINT
 	struct ADAPTER *prAdapter = NULL;
-#endif
 	uint32_t count = 0;
 
 	DBGLOG(HAL, STATE, "==>\n");
@@ -719,9 +754,8 @@ static int mtk_sdio_pm_resume(struct device *pDev)
 
 	halEnableInterrupt(prGlueInfo->prAdapter);
 
-#if CFG_SUPPORT_WOW_EINT
 	prAdapter = prGlueInfo->prAdapter;
-
+#if CFG_SUPPORT_WOW_EINT
 	if (prAdapter->rWowlanDevNode.wowlan_irq != 0 &&
 		atomic_read(
 		&(prAdapter->rWowlanDevNode.irq_enable_count)) == 1) {
@@ -742,9 +776,12 @@ static int mtk_sdio_pm_resume(struct device *pDev)
 	prGlueInfo->rHifInfo.fgForceFwOwn = FALSE;
 
 	halPreResumeCmd(prGlueInfo->prAdapter);
+#if (CONFIG_WIFI_ULTRA_RADIO_OFF_CTRL == 1)
+	/* 2 : radio on */
+	nicRadioStateCtrl(prAdapter, PM_RADIO_ON);
+#endif
 
 	kalPerMonEnable(prGlueInfo);
-	prGlueInfo->fgIsInSuspendMode = FALSE;
 
 	while (prGlueInfo->rHifInfo.state != SDIO_STATE_LINK_UP) {
 		if (count > 500) {
@@ -1074,9 +1111,11 @@ int32_t glBusSetIrq(void *pvData, void *pfnIsr, void *pvCookie)
 
 #if CFG_SUPPORT_WOW_EINT_KEYEVENT_WAKEUP
 	InitStatus = mtk_wow_input_init(prGlueInfo);
-	if (InitStatus != 0)
+	if (InitStatus != 0) {
 		DBGLOG(HAL, ERROR,
 			"alocating input device for WOW is failed\n");
+		return -1;
+	}
 #endif
 
 	prHifInfo->fgIsPendingInt = FALSE;
@@ -1125,6 +1164,10 @@ void glBusFreeIrq(void *pvData, void *pvCookie)
 
 #if CFG_SUPPORT_WOW_EINT
 	mtk_sdio_eint_free_irq(prHifInfo->func);
+#endif
+
+#if CFG_SUPPORT_WOW_EINT_KEYEVENT_WAKEUP
+	mtk_wow_input_deinit(prGlueInfo);
 #endif
 
 }				/* end of glBusreeIrq() */
@@ -2021,7 +2064,7 @@ u_int8_t kalDevWriteCmd(IN struct GLUE_INFO *prGlueInfo, IN struct CMD_INFO *prC
 	u2OverallBufferLength += prChipInfo->u2HifTxdSize;
 
 
-	if (prCmdInfo->u4TxdLen) {
+	if (prCmdInfo->pucTxd && prCmdInfo->u4TxdLen) {
 		memcpy((pucOutputBuf + u2OverallBufferLength), prCmdInfo->pucTxd, prCmdInfo->u4TxdLen);
 		u2OverallBufferLength += prCmdInfo->u4TxdLen;
 	}

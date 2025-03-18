@@ -1078,6 +1078,9 @@ VOID aisFsmSteps(IN P_ADAPTER_T prAdapter, ENUM_AIS_STATE_T eNextState)
 					/* reset trial count */
 					prAisFsmInfo->ucConnTrialCount = 0;
 
+					prBtmParam->fgUnsolicitedReq = FALSE;
+					DBGLOG(AIS, TRACE, "fgUnsolicitedReq: %d\n", prBtmParam->fgUnsolicitedReq);
+
 					eNextState = AIS_STATE_COLLECT_ESS_INFO;
 					fgIsTransition = TRUE;
 				} else {
@@ -3277,8 +3280,6 @@ aisIndicationOfMediaStateToHost(IN P_ADAPTER_T prAdapter,
 				break;
 			}
 		} else {
-			/* Clear the pmkid cache while media disconnect */
-			secClearPmkid(prAdapter);
 			rEventConnStatus.ucReasonOfDisconnect = prAisBssInfo->ucReasonOfDisconnect;
 		}
 
@@ -4580,6 +4581,8 @@ aisDeauthXmitComplete(IN P_ADAPTER_T prAdapter, IN P_MSDU_INFO_T prMsduInfo, IN 
 	P_AIS_FSM_INFO_T prAisFsmInfo;
 
 	ASSERT(prAdapter);
+
+	DBGLOG(AIS, INFO, "DEAUTH frame rTxDoneStatus:%d!\n", rTxDoneStatus);
 
 	prAisFsmInfo = &(prAdapter->rWifiVar.rAisFsmInfo);
 	if (rTxDoneStatus == TX_RESULT_SUCCESS)

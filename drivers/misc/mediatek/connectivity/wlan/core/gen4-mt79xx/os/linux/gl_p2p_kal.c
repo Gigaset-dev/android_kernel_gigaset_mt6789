@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: @(#) gl_p2p_cfg80211.c@@
  */
@@ -1596,7 +1597,9 @@ kalP2PGOStationUpdate(IN struct GLUE_INFO *prGlueInfo,
 				 */
 				if (prCliStaRec->fgIsConnected == FALSE &&
 				    prBssInfo->u4RsnSelectedAKMSuite !=
-							RSN_AKM_SUITE_SAE)
+							RSN_AKM_SUITE_SAE &&
+				    prBssInfo->u4RsnSelectedAKMSuite !=
+							RSN_AKM_SUITE_OWE)
 					break;
 				prCliStaRec->fgIsConnected = FALSE;
 				cfg80211_del_sta(prP2pGlueInfo->aprRoleHandler,
@@ -2092,11 +2095,13 @@ void kalP2pIndicateQueuedMgmtFrame(IN struct GLUE_INFO *prGlueInfo,
 
 void kalP2pIndicateAcsResult(IN struct GLUE_INFO *prGlueInfo,
 		IN uint8_t ucRoleIndex,
+		IN enum ENUM_BAND eBand,
 		IN uint8_t ucPrimaryCh,
 		IN uint8_t ucSecondCh,
 		IN uint8_t ucSeg0Ch,
 		IN uint8_t ucSeg1Ch,
-		IN enum ENUM_MAX_BANDWIDTH_SETTING eChnlBw)
+		IN enum ENUM_MAX_BANDWIDTH_SETTING eChnlBw,
+		IN enum P2P_VENDOR_ACS_HW_MODE eHwMode)
 {
 	struct GL_P2P_INFO *prGlueP2pInfo = (struct GL_P2P_INFO *) NULL;
 	struct sk_buff *vendor_event = NULL;
@@ -2104,7 +2109,7 @@ void kalP2pIndicateAcsResult(IN struct GLUE_INFO *prGlueInfo,
 
 	prGlueP2pInfo = prGlueInfo->prP2PInfo[ucRoleIndex];
 
-	if (!prGlueP2pInfo) {
+	if (!prGlueP2pInfo || !prGlueP2pInfo->prWdev) {
 		DBGLOG(P2P, ERROR, "p2p glue info null.\n");
 		return;
 	}
@@ -2127,13 +2132,39 @@ void kalP2pIndicateAcsResult(IN struct GLUE_INFO *prGlueInfo,
 		break;
 	}
 
-	DBGLOG(P2P, INFO, "r=%d, c=%d, s=%d, s0=%d, s1=%d, ch_w=%d\n",
+#if CFG_SUPPORT_SAP_DFS_CHANNEL
+	/* Indicatre CAC */
+	if ((eBand == BAND_5G) &&
+		(rlmDomainIsLegalDfsChannel(
+		prGlueInfo->prAdapter,
+		eBand,
+		ucPrimaryCh) || (eChnlBw >= MAX_BW_160MHZ))) {
+		DBGLOG(P2P, INFO, "Do pre CAC.\n");
+		if (ch_width == 40) {
+			/* Hostapd workaround for dfs offload BW40 */
+			ch_width = 20;
+			ucSecondCh = 0;
+		}
+		wlanUpdateDfsChannelTable(prGlueInfo,
 			ucRoleIndex,
+			ucPrimaryCh,
+			rlmGetVhtOpBwByBssOpBw(eChnlBw),
+			0,
+			nicChannelNum2Freq(ucSeg0Ch, eBand) / 1000,
+			eBand);
+	}
+#endif
+
+	DBGLOG(P2P, INFO,
+		"r=%d, b=%d, c=%d, s=%d, s0=%d, s1=%d, ch_w=%d, h=%d\n",
+			ucRoleIndex,
+			eBand,
 			ucPrimaryCh,
 			ucSecondCh,
 			ucSeg0Ch,
 			ucSeg1Ch,
-			ch_width);
+			ch_width,
+			eHwMode);
 
 	vendor_event = kalCfg80211VendorEventAlloc(prGlueP2pInfo->prWdev->wiphy,
 			prGlueP2pInfo->prWdev,
@@ -2146,16 +2177,16 @@ void kalP2pIndicateAcsResult(IN struct GLUE_INFO *prGlueInfo,
 		goto nla_put_failure;
 	}
 
-	if (unlikely(nla_put_u8(vendor_event,
-			WIFI_VENDOR_ATTR_ACS_PRIMARY_CHANNEL,
-			ucPrimaryCh) < 0)) {
+	if (unlikely(nla_put_u32(vendor_event,
+			WIFI_VENDOR_ATTR_ACS_PRIMARY_FREQUENCY,
+			nicChannelNum2Freq(ucPrimaryCh, eBand) / 1000) < 0)) {
 		DBGLOG(P2P, ERROR, "put primary channel fail.\n");
 		goto nla_put_failure;
 	}
 
-	if (unlikely(nla_put_u8(vendor_event,
-			WIFI_VENDOR_ATTR_ACS_SECONDARY_CHANNEL,
-			ucSecondCh) < 0)) {
+	if (unlikely(nla_put_u32(vendor_event,
+			WIFI_VENDOR_ATTR_ACS_SECONDARY_FREQUENCY,
+			nicChannelNum2Freq(ucSecondCh, eBand) / 1000) < 0)) {
 		DBGLOG(P2P, ERROR, "put secondary channel fail.\n");
 		goto nla_put_failure;
 	}
@@ -2183,9 +2214,7 @@ void kalP2pIndicateAcsResult(IN struct GLUE_INFO *prGlueInfo,
 
 	if (unlikely(nla_put_u8(vendor_event,
 			WIFI_VENDOR_ATTR_ACS_HW_MODE,
-			ucPrimaryCh > 14 ?
-				P2P_VENDOR_ACS_HW_MODE_11A :
-				P2P_VENDOR_ACS_HW_MODE_11G) < 0)) {
+			eHwMode) < 0)) {
 		DBGLOG(P2P, ERROR, "put hw mode fail.\n");
 		goto nla_put_failure;
 	}
@@ -2232,9 +2261,11 @@ void kalP2pIndicateChnlSwitch(IN struct ADAPTER *prAdapter,
 	}
 
 	/* Compose ch info. */
-	if (prP2PInfo->chandef == NULL) {
+	if (prP2PInfo->fgChannelSwitchReq &&
+		prP2PInfo->chandef == NULL) {
 		struct ieee80211_channel *chan;
 
+		prP2PInfo->fgChannelSwitchReq = false;
 		prP2PInfo->chandef = (struct cfg80211_chan_def *)
 				cnmMemAlloc(prAdapter, RAM_TYPE_BUF,
 				sizeof(struct cfg80211_chan_def));
@@ -2356,6 +2387,21 @@ void kalP2pIndicateChnlSwitch(IN struct ADAPTER *prAdapter,
 			break;
 		}
 
+#if (CFG_SUPPORT_P2P_CSA == 1)
+		/*
+		* Align with mtk P2P design:  wpa_supplicant determine
+		* channel number. Driver determine the bandwidth.
+		* So only indicate bw20 to kernel/wpa_supplicant,
+		* If we indicate real bandwidth, wpa_supplicant may stop
+		* GO because of bandwidth change.
+		*/
+		prP2PInfo->chandef->width
+					= NL80211_CHAN_WIDTH_20;
+		prP2PInfo->chandef->center_freq1
+				= prP2PInfo->chandef->chan->center_freq;
+		prP2PInfo->chandef->center_freq2 = 0;
+#endif
+
 		DBGLOG(P2P, INFO,
 			"role(%d) b=%d f=%d w=%d s1=%d s2=%d dfs=%d\n",
 			role_idx,
@@ -2377,8 +2423,14 @@ void kalP2pIndicateChnlSwitch(IN struct ADAPTER *prAdapter,
 	cfg80211_ch_switch_notify(
 		prNetdevice,
 		prP2PInfo->chandef
-#if (CFG_ADVANCED_80211_MLO == 1)
+#if (CFG_ADVANCED_80211_MLO == 1) || \
+	(KERNEL_VERSION(5, 19, 2) <= CFG80211_VERSION_CODE)
 		, 0
+#if ((CFG_KERNEL_AN13_515 == 1) && \
+	(KERNEL_VERSION(5, 15, 94) <= LINUX_VERSION_CODE)) || \
+	(KERNEL_VERSION(6, 3, 0) <= CFG80211_VERSION_CODE)
+		, 0
+#endif
 #endif
 		);
 	netif_carrier_on(prNetdevice);

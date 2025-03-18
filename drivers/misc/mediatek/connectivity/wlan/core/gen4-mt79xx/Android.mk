@@ -34,6 +34,7 @@ ifeq (MT7902, $(strip $(MTK_COMBO_CHIP)))
     LOCAL_INIT_RC := init.wlan_mt79xx_drv.rc
     LOCAL_SRC_FILES := $(patsubst $(LOCAL_PATH)/%,%,$(shell find $(LOCAL_PATH) -type f -name '*.[cho]')) Makefile
     include $(MTK_KERNEL_MODULE)
+    include $(LOCAL_PATH)/build_wlan_drv.mk
 
     WIFI_OPTS := CONFIG_MTK_COMBO_WIFI_HIF=sdio
     WIFI_OPTS += MTK_COMBO_CHIP=MT7902

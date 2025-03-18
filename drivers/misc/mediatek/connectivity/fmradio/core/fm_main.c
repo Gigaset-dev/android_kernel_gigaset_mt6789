@@ -46,7 +46,7 @@ static struct fm_timer *fm_timer_sys;
 static struct fm_timer *fm_cqi_check_timer;
 #endif
 
-#define FM_CHIP_CAN_SUSPEND 0x00006631 //drv modified for FM causes HW_reboot by liuhai 20240222
+#define FM_CHIP_CAN_SUSPEND 0x00006631
 FM_WAKE_LOCK_T *fm_wake_lock;
 
 static bool scan_stop_flag; /* false */
@@ -292,9 +292,13 @@ static signed int fm_which_chip(unsigned short chipid, enum fm_cfg_chip_type *ty
 
 	if (fm_wcn_ops.ei.get_get_adie) {
 		fm_chip = (signed short)fm_wcn_ops.ei.get_get_adie();
-		if (fm_chip == 0x6631 || fm_chip == 0x6635) {
+		if (fm_chip == 0x6631 || fm_chip == 0x6635 || fm_chip == 0x6637) {
 			if (type)
 				*type = FM_AD_DIE_CHIP;
+
+			/* use mt6635 instead for APP compatible */
+			if (fm_chip == 0x6637)
+				fm_chip = 0x6635;
 			return fm_chip;
 		}
 	}

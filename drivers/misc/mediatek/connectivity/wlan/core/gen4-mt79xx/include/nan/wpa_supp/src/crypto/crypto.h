@@ -1,13 +1,9 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2013 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
- * Wrapper functions for crypto libraries
- * Copyright (c) 2004-2013, Jouni Malinen <j@w1.fi>
- *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
  *
  * This file defines the cryptographic functions that need to be implemented
  * for wpa_supplicant and hostapd. When TLS is not used, internal

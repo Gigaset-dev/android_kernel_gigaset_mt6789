@@ -723,8 +723,11 @@ void nic_txd_v2_compose_security_frame(
 		nicTxGetTxCountLimitByTc(ucTempTC));
 
 	/* Set lowest BSS basic rate */
-	HAL_MAC_CONNAC2X_TXD_SET_FR_RATE(prTxDesc,
-		prBssInfo->u2HwDefaultFixedRateCode);
+	if (prBssInfo) {
+		HAL_MAC_CONNAC2X_TXD_SET_FR_RATE(prTxDesc,
+			prBssInfo->u2HwDefaultFixedRateCode);
+	}
+
 #if 0 /* FALCON_TODO */
 	HAL_MAC_FALCON_TX_DESC_SET_FIXED_RATE_MODE_TO_DESC(prTxDesc);
 #endif
@@ -734,8 +737,10 @@ void nic_txd_v2_compose_security_frame(
 	HAL_MAC_CONNAC2X_TXD_SET_PKT_FORMAT(prTxDesc, TXD_PKT_FORMAT_COMMAND);
 
 	/* Own MAC */
-	HAL_MAC_CONNAC2X_TXD_SET_OWN_MAC_INDEX(prTxDesc,
-		prBssInfo->ucOwnMacIndex);
+	if (prBssInfo) {
+		HAL_MAC_CONNAC2X_TXD_SET_OWN_MAC_INDEX(prTxDesc,
+			prBssInfo->ucOwnMacIndex);
+	}
 
 	/* PID */
 	if (prMsduInfo->pfTxDoneHandler) {

@@ -8,6 +8,7 @@
 #include <linux/errno.h>
 #include <linux/of_platform.h>
 #include <linux/of_device.h>
+#include <linux/version.h>
 #include <linux/cdev.h>
 #include <linux/uaccess.h>
 #include <linux/fs.h>
@@ -504,7 +505,11 @@ static int __init connfem_mod_init(void)
 	pr_info("ConnFem DevID major %d", connfem_major);
 
 	/* Char Device: Create class */
+#if (KERNEL_VERSION(6, 4, 0) <= LINUX_VERSION_CODE)
+	connfem_cdev_ctx.class = class_create(CONNFEM_DRIVER_NAME);
+#else
 	connfem_cdev_ctx.class = class_create(THIS_MODULE, CONNFEM_DRIVER_NAME);
+#endif
 	if (IS_ERR(connfem_cdev_ctx.class)) {
 		pr_info("[WARN] ConnFem create class failed");
 		ret = -30;

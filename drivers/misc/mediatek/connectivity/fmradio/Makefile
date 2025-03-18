@@ -1,6 +1,24 @@
 # SPDX-License-Identifier: GPL-2.0
 # Copyright (c) 2021 Mediatek Inc.
+#
+$(info [fm_drv:Makefile] CFG_LEGACY_BUILD = $(CFG_LEGACY_BUILD))
 
+ifneq ($(CFG_LEGACY_BUILD), yes)
+include $(wildcard $(KERNEL_SRC)/$(DEVICE_MODULES_REL_DIR)/Makefile.include)
+
+WMT_MODULE := $(OUT_DIR)/../vendor/mediatek/kernel_modules/connectivity/common/Module.symvers
+CONNINFRA_MODULE := $(OUT_DIR)/../vendor/mediatek/kernel_modules/connectivity/conninfra/Module.symvers
+
+EXTRA_SYMBOLS += $(WMT_MODULE)
+ifneq ($(wildcard $(CONNINFRA_MODULE)),)
+EXTRA_SYMBOLS += $(CONNINFRA_MODULE)
+endif
+
+modules modules_install clean:
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) $(KBUILD_OPTIONS) KBUILD_EXTRA_SYMBOLS="$(EXTRA_SYMBOLS)" $(@)
+
+#for legacy build
+else
 $(info [fm_drv:Makefile] M = $(M))
 $(info [fm_drv:Makefile] FM_CHIP_ID = $(FM_CHIP_ID))
 $(info [fm_drv:Makefile] FM_CHIP = $(FM_CHIP))
@@ -15,7 +33,8 @@ define build_kernel_modules
     $(info [fm_drv:Makefile:build] CFG_BUILD_CONNAC2 = $(2))
     $(info [fm_drv:Makefile:build] CFG_FM_CHIP_ID = $(3))
     $(info [fm_drv:Makefile:build] CFG_FM_CHIP = $(4))
-    $(MAKE) -C $(KERNEL_SRC) M=$(M)/Build/$(1) modules $(KBUILD_OPTIONS) CFG_FM_PLAT=$(1) CFG_BUILD_CONNAC2=$(2) CFG_FM_CHIP_ID=$(3) CFG_FM_CHIP=$(4) KBUILD_EXTRA_SYMBOLS="$(5)"
+    $(info [fm_drv:Makefile:build] CFG_LEGACY_BUILD = $(5))
+    $(MAKE) -C $(KERNEL_SRC) M=$(M)/Build/$(1) modules $(KBUILD_OPTIONS) CFG_FM_PLAT=$(1) CFG_BUILD_CONNAC2=$(2) CFG_FM_CHIP_ID=$(3) CFG_FM_CHIP=$(4) CFG_LEGACY_BUILD = $(5) KBUILD_EXTRA_SYMBOLS="$(6)"
 endef
 
 define install_kernel_modules
@@ -94,4 +113,6 @@ endif
 	$(call clean_kernel_modules,mt6625,false,,mt6625,$(extra_symbols))
 	$(call clean_kernel_modules,mt6627,false,,mt6627,$(extra_symbols))
 	$(call clean_kernel_modules,mt6630,false,,mt6630,$(extra_symbols))
+endif
+
 endif

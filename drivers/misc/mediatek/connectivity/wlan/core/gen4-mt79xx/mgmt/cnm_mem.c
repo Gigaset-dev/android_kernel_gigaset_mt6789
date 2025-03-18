@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/mgmt/cnm_mem.c#2
  */
@@ -652,11 +653,6 @@ struct STA_RECORD *cnmStaRecAlloc(struct ADAPTER *prAdapter,
 		prStaRec = NULL;
 	}
 
-	/* remove pending msdu when sta_rec alloc */
-	if (prStaRec)
-		nicFreePendingTxMsduInfo(prAdapter,
-			prStaRec->ucWlanIndex, MSDU_REMOVE_BY_WLAN_INDEX);
-
 	return prStaRec;
 }
 
@@ -678,21 +674,28 @@ void cnmStaRecFree(struct ADAPTER *prAdapter, struct STA_RECORD *prStaRec)
 	if (!prStaRec)
 		return;
 
-	log_dbg(RSN, INFO, "cnmStaRecFree %d\n", prStaRec->ucIndex);
+	log_dbg(CNM, INFO, "ucIndex = %d\n", prStaRec->ucIndex);
 
 	ucStaRecIndex = prStaRec->ucIndex;
 	ucBssIndex = prStaRec->ucBssIndex;
 
-	cnmStaRoutinesForAbort(prAdapter, prStaRec);
+	if (prStaRec->fgIsInUse) {
+		nicFreePendingTxMsduInfo(prAdapter, prStaRec->ucWlanIndex,
+					MSDU_REMOVE_BY_WLAN_INDEX);
 
-	cnmStaSendRemoveCmd(prAdapter, STA_REC_CMD_ACTION_STA,
-		ucStaRecIndex, ucBssIndex);
+		cnmStaRoutinesForAbort(prAdapter, prStaRec);
+
+		cnmStaSendRemoveCmd(prAdapter, STA_REC_CMD_ACTION_STA,
+			ucStaRecIndex, ucBssIndex);
 #if DSCP_SUPPORT
-	if (prStaRec->qosMapSet) {
-		QosMapSetRelease(prStaRec);
-		prStaRec->qosMapSet = NULL;
-	}
+		if (prStaRec->qosMapSet) {
+			QosMapSetRelease(prStaRec);
+			prStaRec->qosMapSet = NULL;
+		}
 #endif
+	} else {
+		log_dbg(CNM, ERROR, "prStaRec is not in use\n");
+	}
 }
 
 /*----------------------------------------------------------------------------*/

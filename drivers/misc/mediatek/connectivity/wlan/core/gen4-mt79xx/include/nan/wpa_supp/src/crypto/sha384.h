@@ -1,14 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2015 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
-/*
- * SHA384 hash implementation and interface functions
- * Copyright (c) 2015, Jouni Malinen <j@w1.fi>
- *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
- */
+
 #ifndef SHA384_H
 #define SHA384_H
 

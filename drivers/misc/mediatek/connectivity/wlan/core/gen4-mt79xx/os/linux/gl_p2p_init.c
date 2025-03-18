@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: @(#) gl_p2p_init.c@@
  */
@@ -68,7 +69,9 @@ static uint16_t mode = RUNNING_P2P_MODE;
  ******************************************************************************
  */
 
-void p2pSetSuspendMode(struct GLUE_INFO *prGlueInfo, u_int8_t fgEnable)
+void p2pSetSuspendMode(struct GLUE_INFO *prGlueInfo,
+			u_int8_t fgEnable,
+			enum ENUM_SUSPEND_MODE_SOURCE eSource)
 {
 	struct net_device *prDev = NULL;
 
@@ -89,8 +92,12 @@ void p2pSetSuspendMode(struct GLUE_INFO *prGlueInfo, u_int8_t fgEnable)
 		return;
 	}
 
+	if (prGlueInfo->fgIsP2pInSuspendMode == fgEnable)
+		return;
+	prGlueInfo->fgIsP2pInSuspendMode = fgEnable;
+
 	kalSetNetAddressFromInterface(prGlueInfo, prDev, fgEnable);
-	wlanNotifyFwSuspend(prGlueInfo, prDev, fgEnable);
+	wlanNotifyFwSuspend(prGlueInfo, prDev, fgEnable, eSource);
 }
 
 /*---------------------------------------------------------------------------*/

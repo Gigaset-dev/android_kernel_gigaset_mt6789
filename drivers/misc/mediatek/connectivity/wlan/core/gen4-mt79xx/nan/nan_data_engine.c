@@ -1,8 +1,7 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
  * Copyright (c) 2021 MediaTek Inc.
  */
-
 
 /*******************************************************************************
  *                         C O M P I L E R   F L A G S
@@ -890,7 +889,8 @@ nanDataAllocateNdp(struct ADAPTER *prAdapter,
 
 	cnmTimerInitTimer(prAdapter, &(prNDP->rNDPUserSpaceResponseTimer),
 			  (PFN_MGMT_TIMEOUT_FUNC)nanDataResponseTimeout,
-			  (unsigned long)prNDP);
+			  (unsigned long)prNDP,
+			  TIMER_WAKELOCK_AUTO);
 
 	if (prNDL->ucNDPNum < UINT8_MAX)
 		prNDL->ucNDPNum++;
@@ -953,8 +953,10 @@ nanDataUpdateNdpLocalNDI(IN struct ADAPTER *prAdapter,
 						  NAN_BSS_INDEX_BAND0)
 						  ->ucBssIndex];
 
-	if (UNEQUAL_MAC_ADDR(prNDP->aucLocalNDIAddr, prBssInfo->aucOwnMacAddr))
-		COPY_MAC_ADDR(prNDP->aucLocalNDIAddr, prBssInfo->aucOwnMacAddr);
+	if (UNEQUAL_MAC_ADDR(prNDP->aucLocalNDIAddr,
+		prAdapter->rDataPathInfo.aucLocalNDIAddr))
+		COPY_MAC_ADDR(prNDP->aucLocalNDIAddr,
+			prAdapter->rDataPathInfo.aucLocalNDIAddr);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -1090,15 +1092,18 @@ nanDataAllocateNdl(struct ADAPTER *prAdapter, IN uint8_t *pucMacAddr,
 	/* timer initialization sequence */
 	cnmTimerInitTimer(prAdapter, &(prNDL->rNDPProtocolExpireTimer),
 			  (PFN_MGMT_TIMEOUT_FUNC)nanDataProtocolTimeout,
-			  (unsigned long)prNDL);
+			  (unsigned long)prNDL,
+			  TIMER_WAKELOCK_AUTO);
 
 	cnmTimerInitTimer(prAdapter, &(prNDL->rNDPProtocolRetryTimer),
 			  (PFN_MGMT_TIMEOUT_FUNC)nanDataRetryTimeout,
-			  (unsigned long)prNDL);
+			  (unsigned long)prNDL,
+			  TIMER_WAKELOCK_AUTO);
 
 	cnmTimerInitTimer(prAdapter, &(prNDL->rNDPSecurityExpireTimer),
 			  (PFN_MGMT_TIMEOUT_FUNC)nanDataSecurityTimeout,
-			  (unsigned long)prNDL);
+			  (unsigned long)prNDL,
+			  TIMER_WAKELOCK_AUTO);
 
 	LINK_INITIALIZE(&(prNDL->rPendingReqList));
 
@@ -1229,6 +1234,7 @@ nanDataEngineInit(struct ADAPTER *prAdapter, IN uint8_t *pu1NMIAddress) {
 
 	prDataPathInfo->ucNDLNum = 0;
 	COPY_MAC_ADDR(prDataPathInfo->aucLocalNMIAddr, pu1NMIAddress);
+	COPY_MAC_ADDR(prDataPathInfo->aucLocalNDIAddr, pu1NMIAddress);
 
 	for (i = 0; i < NAN_MAX_SUPPORT_NDL_NUM; i++) {
 		for (j = 0; j < NAN_MAX_SUPPORT_NDP_NUM; j++) {
@@ -2266,24 +2272,31 @@ nanNdpProcessDataTermination(struct ADAPTER *prAdapter,
 	prAttrNDPE = (struct _NAN_ATTR_NDPE_T *)nanRetrieveAttrById(
 		pucAttrList, u2AttrListLength, NAN_ATTR_ID_NDP_EXTENSION);
 
-	if (prAttrNDP != NULL)
+	if (prAttrNDP != NULL) {
+		DBGLOG(NAN, LOUD, "prAttrNDP->ucNDPID= %d\n",
+			prAttrNDP->ucNDPID);
 		prNDP = nanDataUtilSearchNdpByNdpId(prAdapter, prNDL,
 						    prAttrNDP->ucNDPID);
-	else if (prAttrNDPE != NULL)
+	} else if (prAttrNDPE != NULL) {
+		DBGLOG(NAN, LOUD, "prAttrNDPE->ucNDPID= %d\n",
+			prAttrNDPE->ucNDPID);
+
 		prNDP = nanDataUtilSearchNdpByNdpId(prAdapter, prNDL,
 						    prAttrNDPE->ucNDPID);
-	else {
+	} else {
 		/* invalid NAF as NAN_ACTION_DATA_PATH_TERMINATION
 		 * should carry NDP/NDPE attribute
 		 */
+		DBGLOG(NAN, LOUD, "prAttrNDP/prAttrNDPE null!\n");
 		return WLAN_STATUS_FAILURE;
 	}
 
 	if (prNDP == NULL) {
 		/* unknown NDP-ID, ignore it - DoS Attack ? */
+		DBGLOG(NAN, LOUD, "prNDP null!\n");
 		return WLAN_STATUS_FAILURE;
 	}
-
+	DBGLOG(NAN, LOUD, "Check return success\n");
 	/* update parameters through attribute parsing */
 	if (nanNdpParseAttributes(prAdapter, NAN_ACTION_DATA_PATH_TERMINATION,
 				  pucAttrList, u2AttrListLength, prNDL,
@@ -3704,6 +3717,8 @@ nanCmdDataResponse(struct ADAPTER *prAdapter,
 			prNDP->fgQoSRequired = FALSE;
 
 		if (prNanCmdDataResponse->ucSecurity) {
+			DBGLOG(NAN, ERROR,
+				"[Data Resp] ucSecurity: 1\n");
 			kalMemCopy(prNDP->aucPMK, prNanCmdDataResponse->aucPMK,
 				   NAN_PMK_INFO_LEN);
 
@@ -3725,8 +3740,11 @@ nanCmdDataResponse(struct ADAPTER *prAdapter,
 				return rStatus;
 			}
 
-		} else
+		} else {
+			DBGLOG(NAN, ERROR,
+				"[Data Resp] ucSecurity: open\n");
 			prNDP->fgSecurityRequired = FALSE;
+		}
 
 		/* always update in cases CMD Data Response asks for
 		 * security policy change
@@ -3886,7 +3904,7 @@ nanCmdDataEnd(IN struct ADAPTER *prAdapter,
  */
 /*----------------------------------------------------------------------------*/
 uint32_t
-nanCmdDataUpdtae(IN struct ADAPTER *prAdapter,
+nanCmdDataUpdate(IN struct ADAPTER *prAdapter,
 		 struct _NAN_PARAMETER_NDL_SCH *prNanUpdateSchParam) {
 	return nanUpdateNdlSchedule(prAdapter, prNanUpdateSchParam);
 }
@@ -4230,6 +4248,7 @@ nanNdpSendDataPathRequest(IN struct ADAPTER *prAdapter,
  * \return Status
  */
 /*----------------------------------------------------------------------------*/
+
 uint32_t
 nanNdpSendDataPathResponse(
 	IN struct ADAPTER *prAdapter, struct _NAN_NDP_INSTANCE_T *prNDP,
@@ -4601,7 +4620,7 @@ nanNdpSendDataPathKeyInstall(IN struct ADAPTER *prAdapter,
 /*----------------------------------------------------------------------------*/
 uint32_t
 nanNdpSendDataPathTermination(IN struct ADAPTER *prAdapter,
-			      struct _NAN_NDP_INSTANCE_T *prNDP) {
+		struct _NAN_NDP_INSTANCE_T *prNDP) {
 	uint32_t i;
 	uint16_t u2EstimatedFrameLen;
 	struct MSDU_INFO *prMsduInfo;
@@ -4677,6 +4696,73 @@ nanNdpSendDataPathTermination(IN struct ADAPTER *prAdapter,
 	return nanDataEngineSendNAF(
 		prAdapter, prMsduInfo, prMsduInfo->u2FrameLength,
 		(PFN_TX_DONE_HANDLER)nanDPTerminationTxDone, prStaRec);
+}
+
+/*----------------------------------------------------------------------------*/
+/*!
+ * \brief            Send NAF - Out-of-bound Action frame
+ *
+ * \param[in]
+ *
+ * \return Status
+ */
+/*----------------------------------------------------------------------------*/
+uint32_t
+nanNdpSendOOBAction(struct ADAPTER *prAdapter,
+			      struct _NAN_CMD_OOB_ACTION *prNanCmdOOBAction)
+
+{
+	struct MSDU_INFO *prMsduInfo = NULL;
+	struct STA_RECORD *prStaRec = NULL;
+	uint16_t u2EstimatedFrameLen = 0;
+
+	if (!prAdapter) {
+		DBGLOG(NAN, ERROR, "[%s] prAdapter error\n", __func__);
+		return WLAN_STATUS_INVALID_DATA;
+	}
+
+	u2EstimatedFrameLen =
+			OFFSET_OF(struct _NAN_ACTION_FRAME_T, ucCategory);
+
+	u2EstimatedFrameLen += prNanCmdOOBAction->ucPayloadLen;
+
+	/* allocate MSDU_INFO_T */
+	prMsduInfo = cnmMgtPktAlloc(prAdapter, u2EstimatedFrameLen);
+	if (prMsduInfo == NULL) {
+		DBGLOG(NAN, WARN,
+		       "NAN Data Engine: packet allocation failure\n");
+		return WLAN_STATUS_RESOURCES;
+	}
+	kalMemZero((uint8_t *)prMsduInfo->prPacket, u2EstimatedFrameLen);
+
+	nanDataEngineComposeNAFHeader(prAdapter, prMsduInfo,
+				      NAN_ACTION_DATA_PATH_RESPONSE,
+				      prNanCmdOOBAction->aucSrcAddress,
+				      prNanCmdOOBAction->aucDestAddress);
+
+	kalMemCopy(((uint8_t *)prMsduInfo->prPacket +
+				WLAN_MAC_MGMT_HEADER_LEN),
+				prNanCmdOOBAction->aucPayload,
+				prNanCmdOOBAction->ucPayloadLen);
+
+	prMsduInfo->u2FrameLength +=
+		(prNanCmdOOBAction->ucPayloadLen - WLAN_MAC_MGMT_HEADER_LEN);
+
+	prStaRec = nanGetStaRecByNDI(prAdapter,
+		prNanCmdOOBAction->aucDestAddress);
+
+	if (!prStaRec) {
+		DBGLOG(NAN, WARN,
+	       "NAN Data Engine: sta_rec NULL!\n");
+		return WLAN_STATUS_FAILURE;
+	}
+
+	prMsduInfo->fgSecurity = prNanCmdOOBAction->ucSecurity;
+	prMsduInfo->ucTokenId = prNanCmdOOBAction->ucToken;
+
+	return nanDataEngineSendNAF(
+		prAdapter, prMsduInfo, prMsduInfo->u2FrameLength,
+		(PFN_TX_DONE_HANDLER)nanNdpOOBActionTxDone, prStaRec);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -5541,6 +5627,40 @@ nanDPTerminationTxDone(IN struct ADAPTER *prAdapter,
 
 /*----------------------------------------------------------------------------*/
 /*!
+ * \brief            NAF TX Done Callback - for NDP negotiation (DP Response)
+ *
+ * \param[in]
+ *
+ * \return Status
+ */
+/*----------------------------------------------------------------------------*/
+uint32_t
+nanNdpOOBActionTxDone(IN struct ADAPTER *prAdapter,
+		IN struct MSDU_INFO *prMsduInfo,
+		IN enum ENUM_TX_RESULT_CODE rTxDoneStatus)
+{
+	if (!prAdapter) {
+		DBGLOG(NAN, ERROR, "[%s] prAdapter NULL\n", __func__);
+		return WLAN_STATUS_INVALID_DATA;
+	}
+
+	if (!prMsduInfo) {
+		DBGLOG(NAN, ERROR, "[%s] prMsduInfo error\n", __func__);
+		return WLAN_STATUS_INVALID_DATA;
+	}
+
+	/* Send rsp event to wifi hal */
+	if (nanNdpOOBActionTxDoneEvent(
+		prAdapter, prMsduInfo->ucTokenId, rTxDoneStatus) !=
+			WLAN_STATUS_SUCCESS) {
+		return WLAN_STATUS_FAILURE;
+	}
+
+	return WLAN_STATUS_SUCCESS;
+}
+
+/*----------------------------------------------------------------------------*/
+/*!
  * \brief          NAF TX Done Callback - for NDL negotiation (Schedule Request)
  *
  * \param[in]
@@ -5843,8 +5963,9 @@ nanDataEngineSendNAF(IN struct ADAPTER *prAdapter,
 
 	prMsduInfo->ucTxToNafQueFlag = TRUE;
 
-	if (!prAdapter->rWifiVar.fgNoPmf && (prSelectStaRec != NULL) &&
-	    (prSelectStaRec->rPmfCfg.fgApplyPmf == TRUE)) {
+	if ((!prAdapter->rWifiVar.fgNoPmf && (prSelectStaRec != NULL) &&
+	    (prSelectStaRec->rPmfCfg.fgApplyPmf == TRUE)) ||
+	    prMsduInfo->fgSecurity) {
 		struct _NAN_ACTION_FRAME_T *prNAF = NULL;
 
 		prNAF = (struct _NAN_ACTION_FRAME_T *)prMsduInfo->prPacket;

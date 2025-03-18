@@ -1,13 +1,13 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
 
 /*! \file  mt7961.h
 *    \brief This file contains the info of MT7961
 */
 
-#if defined(MT7961) || defined(MT7922) || defined(MT7902)
+#if defined(MT7961) || defined(MT7922) || defined(MT7902) || defined(MT7926)
 
 #ifndef _MT7961_H
 #define _MT7961_H
@@ -262,4 +262,6 @@ void mt7961SerInit(IN struct ADAPTER *prAdapter,
 
 #endif /* _MT7961_H */
 
-#endif  /* defined(MT7961) || defined(MT7922) || defined(MT7902) */
+#endif /* defined(MT7961) || defined(MT7922) || defined(MT7902) ||
+	* defined(MT7926)
+	*/

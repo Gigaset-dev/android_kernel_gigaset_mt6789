@@ -42,7 +42,8 @@ const UINT_8 aucDataRate[] = {
 	RATE_36M,		/* RATE_36M_INDEX */
 	RATE_48M,		/* RATE_48M_INDEX */
 	RATE_54M,		/* RATE_54M_INDEX */
-	RATE_HT_PHY		/* RATE_HT_PHY_INDEX */
+	RATE_HT_PHY,		/* RATE_HT_PHY_INDEX */
+	RATE_H2E_ONLY		/* RATE_H2E_ONLY_INDEX */
 };
 
 static const UINT_8 aucDefaultAckCtsRateIndex[RATE_NUM] = {

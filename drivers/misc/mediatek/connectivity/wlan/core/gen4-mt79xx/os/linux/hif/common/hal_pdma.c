@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /******************************************************************************
  *[File]             hif_pdma.c
  *[Version]          v1.0
@@ -9,8 +10,6 @@
  *[Author]
  *[Description]
  *    The program provides PDMA HIF APIs
- *[Copyright]
- *    Copyright (C) 2015 MediaTek Incorporation. All Rights Reserved.
  ******************************************************************************/
 
 /*******************************************************************************
@@ -84,7 +83,42 @@ uint8_t halRingDataSelectByWmmIndex(
 	}
 	return u2Port;
 }
+#if CFG_SUPPORT_PCIE_WFDMA_WMM
+uint8_t halRingDataSelectByWmm(
+	IN struct ADAPTER *prAdapter,
+	IN uint8_t ucTC,
+	IN uint8_t ucWmmQueSet)
+{
+	uint16_t u2Port = TX_RING_DATA0_IDX_0;
+	uint8_t ucTarQueue;
 
+	if (ucWmmQueSet == 0) {
+		ucTarQueue = nicTxGetTxDestQIdxByTc(ucTC);
+
+		if (ucTarQueue  < MAC_TXQ_ALTX_0_INDEX) {
+			uint8_t ucTcType = ucTarQueue % 4;
+
+			switch (ucTcType) {
+			case TC0_INDEX:
+				u2Port = TX_RING_DATA0_IDX_0;
+				break;
+			case TC1_INDEX:
+				u2Port = TX_RING_DATA1_IDX_1;
+				break;
+			case TC2_INDEX:
+				u2Port = TX_RING_DATA2_IDX_2;
+				break;
+			case TC3_INDEX:
+				u2Port = TX_RING_DATA3_IDX_3;
+				break;
+			}
+		}
+	} else {
+		u2Port = TX_RING_DATA4_IDX_4;
+	}
+	return u2Port;
+}
+#endif
 /*----------------------------------------------------------------------------*/
 /*!
  * @brief Decide TxRingData number by MsduInfo
@@ -100,7 +134,12 @@ uint8_t halTxRingDataSelect(IN struct ADAPTER *prAdapter,
 	IN struct MSDU_INFO *prMsduInfo)
 {
 	ASSERT(prAdapter);
+#if CFG_SUPPORT_PCIE_WFDMA_WMM
+	return halRingDataSelectByWmm(prAdapter,
+		prMsduInfo->ucTC, prMsduInfo->ucWmmQueSet);
+#else
 	return halRingDataSelectByWmmIndex(prAdapter, prMsduInfo->ucWmmQueSet);
+#endif
 }
 
 
@@ -475,16 +514,8 @@ u_int8_t halSetDriverOwn(IN struct ADAPTER *prAdapter)
 #if CFG_SUPPORT_PCIE_ASPM
 	prHifInfo = &prAdapter->prGlueInfo->rHifInfo;
 #endif
-	/* if direct trx,  set drv/fw own will be called
-	*  in softirq/tasklet/thread context,
-	*  if normal trx, set drv/fw own will only
-	*  be called in thread context
-	*/
-	if (HAL_IS_TX_DIRECT(prAdapter) || HAL_IS_RX_DIRECT(prAdapter))
-		spin_lock_bh(
-			&prAdapter->prGlueInfo->rSpinLock[SPIN_LOCK_SET_OWN]);
-	else
-		KAL_ACQUIRE_MUTEX(prAdapter, MUTEX_SET_OWN);
+
+	KAL_HIF_OWN_LOCK(prAdapter);
 
 	GLUE_INC_REF_CNT(prAdapter->u4PwrCtrlBlockCnt);
 
@@ -504,7 +535,12 @@ u_int8_t halSetDriverOwn(IN struct ADAPTER *prAdapter)
 
 	while (1) {
 		/* Delay for LP engine to complete its operation. */
+#if CFG_SUPPORT_RX_WORK
+		kalUsleep_range(LP_OWN_BACK_LOOP_DELAY_MIN_US,
+				LP_OWN_BACK_LOOP_DELAY_MAX_US);
+#else /* !CFG_SUPPORT_RX_WORK */
 		kalUdelay(LP_OWN_BACK_LOOP_DELAY_MAX_US);
+#endif /* !CFG_SUPPORT_RX_WORK */
 
 		if (!prBusInfo->fgCheckDriverOwnInt ||
 		    test_bit(GLUE_FLAG_INT_BIT, &prAdapter->prGlueInfo->ulFlag))
@@ -614,11 +650,7 @@ u_int8_t halSetDriverOwn(IN struct ADAPTER *prAdapter)
 		"DRIVER OWN Done[%lu us]\n", KAL_GET_TIME_INTERVAL());
 
 end:
-	if (HAL_IS_TX_DIRECT(prAdapter) || HAL_IS_RX_DIRECT(prAdapter))
-		spin_unlock_bh(
-			&prAdapter->prGlueInfo->rSpinLock[SPIN_LOCK_SET_OWN]);
-	else
-		KAL_RELEASE_MUTEX(prAdapter, MUTEX_SET_OWN);
+	KAL_HIF_OWN_UNLOCK(prAdapter);
 
 	return fgStatus;
 }
@@ -650,16 +682,9 @@ void halSetFWOwn(IN struct ADAPTER *prAdapter, IN u_int8_t fgEnableGlobalInt)
 #if CFG_SUPPORT_PCIE_ASPM
 	prHifInfo = &prAdapter->prGlueInfo->rHifInfo;
 #endif
-	/* if direct trx,  set drv/fw own will be called
-	*  in softirq/tasklet/thread context,
-	*  if normal trx, set drv/fw own will only
-	*  be called in thread context
-	*/
-	if (HAL_IS_TX_DIRECT(prAdapter) || HAL_IS_RX_DIRECT(prAdapter))
-		spin_lock_bh(
-			&prAdapter->prGlueInfo->rSpinLock[SPIN_LOCK_SET_OWN]);
-	else
-		KAL_ACQUIRE_MUTEX(prAdapter, MUTEX_SET_OWN);
+
+	KAL_HIF_OWN_LOCK(prAdapter);
+
 	/* Decrease Block to Enter Low Power Semaphore count */
 	GLUE_DEC_REF_CNT(prAdapter->u4PwrCtrlBlockCnt);
 
@@ -711,11 +736,7 @@ void halSetFWOwn(IN struct ADAPTER *prAdapter, IN u_int8_t fgEnableGlobalInt)
 	}
 
 unlock:
-	if (HAL_IS_TX_DIRECT(prAdapter) || HAL_IS_RX_DIRECT(prAdapter))
-		spin_unlock_bh(
-			&prAdapter->prGlueInfo->rSpinLock[SPIN_LOCK_SET_OWN]);
-	else
-		KAL_RELEASE_MUTEX(prAdapter, MUTEX_SET_OWN);
+	KAL_HIF_OWN_UNLOCK(prAdapter);
 
 }
 
@@ -1106,6 +1127,7 @@ void halReturnMsduToken(IN struct ADAPTER *prAdapter, uint32_t u4TokenNum)
 	spin_lock_irqsave(&prTokenInfo->rTokenLock, flags);
 
 	prToken->fgInUsed = FALSE;
+	prToken->prMsduInfo = NULL;
 	prTokenInfo->u4UsedCnt--;
 	prTokenInfo->aprTokenStack[prTokenInfo->u4UsedCnt] = prToken;
 
@@ -1249,18 +1271,25 @@ u_int8_t halProcessToken(IN struct ADAPTER *prAdapter,
 	struct HIF_MEM_OPS *prMemOps;
 	struct RTMP_DMACB *prTxCell;
 	struct RTMP_TX_RING *prTxRing;
+	struct MSDU_TOKEN_INFO *prTokenInfo = NULL;
 
 	prHifInfo = &prAdapter->prGlueInfo->rHifInfo;
 	prMemOps = &prHifInfo->rMemOps;
 	prTokenEntry = halGetMsduTokenEntry(prAdapter, u4Token);
+	prTokenInfo = &prHifInfo->rTokenInfo;
 
-#if (CFG_SUPPORT_CONNAC3X == 1)
+	if (!prTokenInfo->u4UsedCnt) {
+		DBGLOG(HAL, WARN,
+			"No msdu needs to be released, token[%u]\n",
+			u4Token);
+		return FALSE;
+	}
+
 	if (!prTokenEntry->fgInUsed) {
 		DBGLOG(HAL, WARN, "Skip unused token[%d]\n",
 			u4Token);
 		return FALSE;
 	}
-#endif
 
 #if CFG_HIF_TX_PREALLOC_DATA_BUFFER
 	DBGLOG_LIMITED(HAL, TRACE, "MsduRpt: Tok[%u] Free[%u]\n",
@@ -1580,7 +1609,7 @@ void halRxReceiveRFBs(IN struct ADAPTER *prAdapter, uint32_t u4Port,
 				KAL_FIFO_LEN(&prGlueInfo->rRxKfifoQ));
 			break;
 		}
-#endif
+#endif /* CFG_SUPPORT_RX_NAPI */
 		QUEUE_REMOVE_HEAD(&prRxCtrl->rFreeSwRfbList,
 			prSwRfb, struct SW_RFB *);
 		if (!prSwRfb) {
@@ -2691,8 +2720,10 @@ void halWpdmaFreeMsduTasklet(unsigned long data)
 {
 	struct GLUE_INFO *prGlueInfo = (struct GLUE_INFO *)data;
 	struct MSDU_INFO *prMsduInfo;
+	spinlock_t *prSpinLock = &prGlueInfo->rSpinLock[SPIN_LOCK_MSDUIFO];
 
-	while (KAL_FIFO_OUT(&prGlueInfo->rTxMsduRetFifo, prMsduInfo)) {
+	while (KAL_FIFO_OUT_LOCKED(&prGlueInfo->rTxMsduRetFifo,
+		prMsduInfo, prSpinLock)) {
 		if (!prMsduInfo) {
 			DBGLOG(RX, ERROR, "prMsduInfo null\n");
 			break;
@@ -2745,6 +2776,8 @@ bool halWpdmaWriteMsdu(struct GLUE_INFO *prGlueInfo,
 #if CFG_SUPPORT_PCIE_ASPM_IMPROVE
 	struct BUS_INFO *prBusInfo = NULL;
 #endif
+	spinlock_t *prSpinLock = &prGlueInfo->rSpinLock[SPIN_LOCK_MSDUIFO];
+
 
 	ASSERT(prGlueInfo);
 	ASSERT(prMsduInfo);
@@ -2830,7 +2863,8 @@ bool halWpdmaWriteMsdu(struct GLUE_INFO *prGlueInfo,
 	 * let nicTxProcessTxDoneEvent to return MSDU to avoid double return
 	 */
 	if (!fgIsTxDoneHdl) {
-		if (KAL_FIFO_IN(&prGlueInfo->rTxMsduRetFifo, prMsduInfo))
+		if (KAL_FIFO_IN_LOCKED(&prGlueInfo->rTxMsduRetFifo,
+				prMsduInfo, prSpinLock))
 			tasklet_schedule(&prGlueInfo->rTxMsduRetTask);
 		else
 			halWpdmaFreeMsdu(prGlueInfo, prMsduInfo, true);
@@ -2870,6 +2904,7 @@ bool halWpdmaWriteAmsdu(struct GLUE_INFO *prGlueInfo,
 #if CFG_SUPPORT_PCIE_ASPM_IMPROVE
 	struct BUS_INFO *prBusInfo = NULL;
 #endif
+	spinlock_t *prSpinLock = &prGlueInfo->rSpinLock[SPIN_LOCK_MSDUIFO];
 
 	ASSERT(prGlueInfo);
 
@@ -2972,8 +3007,8 @@ bool halWpdmaWriteAmsdu(struct GLUE_INFO *prGlueInfo,
 		prHifInfo->u4TxDataQLen--;
 
 		if (!pfgIsTxDoneHdl[u4Idx]) {
-			if (KAL_FIFO_IN(&prGlueInfo->rTxMsduRetFifo,
-				prMsduInfo))
+			if (KAL_FIFO_IN_LOCKED(&prGlueInfo->rTxMsduRetFifo,
+				prMsduInfo, prSpinLock))
 				tasklet_schedule(&prGlueInfo->rTxMsduRetTask);
 			else
 				halWpdmaFreeMsdu(prGlueInfo, prMsduInfo, true);
@@ -3383,29 +3418,63 @@ void halDeAggRxPktWorker(struct work_struct *work)
 void halRxTasklet(unsigned long data)
 {
 	struct GLUE_INFO *prGlueInfo = (struct GLUE_INFO *)data;
+	halRxWork(prGlueInfo);
+}
 
-	if (!HAL_IS_RX_DIRECT(prGlueInfo->prAdapter)) {
-		DBGLOG(INIT, ERROR,
-		       "Valid in RX-direct mode only\n");
+void halRxWork(struct GLUE_INFO *prGlueInfo)
+{
+	struct ADAPTER *prAdapter;
+	struct BUS_INFO *prBusInfo;
+	bool fgEnInt = FALSE;
+
+	prAdapter = prGlueInfo->prAdapter;
+	prBusInfo = prAdapter->chip_info->bus_info;
+
+	if (!HAL_IS_RX_DIRECT(prAdapter)) {
+		// DBGLOG(INIT, ERROR,
+		//        "Valid in RX-direct mode only\n");
 		return;
 	}
 
-	/* the Wi-Fi interrupt is already disabled in mmc
-	 * thread, so we set the flag only to enable the
-	 * interrupt later
-	 */
-	prGlueInfo->prAdapter->fgIsIntEnable = FALSE;
+	/* do nothing if wifi is not ready */
+	if (prGlueInfo->fgRxTaskReady == FALSE) {
+		DBGLOG_LIMITED(INIT, INFO,
+		       "Not ready yet, ignore pending interrupt\n");
+		return;
+	}
+
+	ACQUIRE_POWER_CONTROL_FROM_PM(prAdapter);
+
+	fgEnInt = KAL_TEST_AND_CLEAR_BIT(
+			GLUE_FLAG_RX_DIRECT_INT_BIT,
+			prGlueInfo->ulFlag);
+
 	if (prGlueInfo->ulFlag & GLUE_FLAG_HALT
 		|| kalIsResetting()
 		) {
 		/* Should stop now... skip pending interrupt */
-		DBGLOG(INIT, INFO,
+		DBGLOG_LIMITED(INIT, INFO,
 		       "ignore pending interrupt\n");
 	} else {
 		/* DBGLOG(INIT, INFO, ("HIF Interrupt!\n")); */
 		prGlueInfo->TaskIsrCnt++;
-		wlanIST(prGlueInfo->prAdapter);
+		wlanIST(prAdapter);
+
 	}
+
+#if CFG_SUPPORT_RX_WORK
+	RX_INC_CNT(&prAdapter->rRxCtrl, RX_WORK_COUNT);
+#else /* CFG_SUPPORT_RX_WORK */
+	RX_INC_CNT(&prAdapter->rRxCtrl, RX_TASKLET_COUNT);
+#endif /* CFG_SUPPORT_RX_WORK */
+
+	if (kalRxTaskWorkDone(prGlueInfo, fgEnInt)) {
+		/* interrupt is not enabled, keep int bit */
+		KAL_SET_BIT(GLUE_FLAG_RX_DIRECT_INT_BIT,
+			prGlueInfo->ulFlag);
+	}
+
+	RECLAIM_POWER_CONTROL_TO_PM(prAdapter, FALSE);
 }
 
 void halTxCompleteTasklet(unsigned long data)

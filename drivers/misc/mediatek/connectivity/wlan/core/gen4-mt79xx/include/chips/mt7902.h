@@ -1,13 +1,13 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
 
 /*! \file  mt7902.h
 *    \brief This file contains the info of MT7902
 */
 
-#ifdef MT7902
+#if defined(MT7902)  || defined(MT7926)
 
 #ifndef _MT7902_H
 #define _MT7902_H
@@ -151,6 +151,70 @@ u_int8_t mt7902_show_debug_sop_info(struct ADAPTER *prAdapter,
 	uint8_t ucCase);
 #endif
 
+#if defined(_HIF_PCIE) || defined(_HIF_AXI)
+
+void mt7902EnableInterrupt(
+	struct ADAPTER *prAdapter);
+void mt7902DisableInterrupt(
+	struct ADAPTER *prAdapter);
+uint8_t mt7902SetRxRingHwAddr(
+	struct RTMP_RX_RING *prRxRing,
+	struct BUS_INFO *prBusInfo,
+	uint32_t u4SwRingIdx);
+bool mt7902LiteWfdmaAllocRxRing(
+	struct GLUE_INFO *prGlueInfo,
+	bool fgAllocMem);
+void mt7902Connac2xProcessTxInterrupt(
+	struct ADAPTER *prAdapter);
+void mt7902Connac2xProcessRxInterrupt(
+	struct ADAPTER *prAdapter);
+void mt7902WfdmaTxRingExtCtrl(
+	struct GLUE_INFO *prGlueInfo,
+	struct RTMP_TX_RING *tx_ring,
+	uint32_t index);
+void mt7902WfdmaRxRingExtCtrl(
+	struct GLUE_INFO *prGlueInfo,
+	struct RTMP_RX_RING *rx_ring,
+	uint32_t index);
+void mt7902Connac2xWfdmaManualPrefetch(
+	struct GLUE_INFO *prGlueInfo);
+void mt7902ReadIntStatus(
+	struct ADAPTER *prAdapter,
+	uint32_t *pu4IntStatus);
+
+#endif
+
+#if defined(_HIF_USB)
+uint8_t mt7902Connac2xUsbEventEpDetected(IN struct ADAPTER *prAdapter);
+uint16_t mt7902Connac2xUsbRxByteCount(
+	struct ADAPTER *prAdapter,
+	struct BUS_INFO *prBusInfo,
+	uint8_t *pRXD);
+#endif
+
+void mt7902ConstructFirmwarePrio(struct GLUE_INFO *prGlueInfo,
+	uint8_t **apucNameTable, uint8_t **apucName,
+	uint8_t *pucNameIdx, uint8_t ucMaxNameIdx);
+void mt7902ConstructPatchName(struct GLUE_INFO *prGlueInfo,
+	uint8_t **apucName, uint8_t *pucNameIdx);
+
+#if CFG_SUPPORT_WIFI_DL_BT_PATCH
+void mt7902ConstructBtPatchName(struct GLUE_INFO *prGlueInfo,
+	uint8_t **apucName, uint8_t *pucNameIdx);
+uint32_t mt7902DownloadBtPatch(IN struct ADAPTER *prAdapter);
+#endif
+
+#if CFG_SUPPORT_WIFI_DL_ZB_PATCH
+void mt7902ConstructZbPatchName(struct GLUE_INFO *prGlueInfo,
+	uint8_t **apucName, uint8_t *pucNameIdx);
+uint32_t mt7902DownloadZbPatch(IN struct ADAPTER *prAdapter);
+#endif
+
+void mt7902_icapRiseVcoreClockRate(void);
+void mt7902_icapDownVcoreClockRate(void);
+uint32_t mt7902ConstructBufferBinFileName(struct ADAPTER *prAdapter,
+	uint8_t *aucEeprom);
+u_int8_t mt7902GetRxDbgInfoSrc(struct ADAPTER *prAdapter);
 
 /*******************************************************************************
 *                              F U N C T I O N S
@@ -159,4 +223,4 @@ u_int8_t mt7902_show_debug_sop_info(struct ADAPTER *prAdapter,
 
 #endif /* _MT7902_H */
 
-#endif  /* MT7902 */
+#endif  /* defined(MT7902) || defined(MT7926) */

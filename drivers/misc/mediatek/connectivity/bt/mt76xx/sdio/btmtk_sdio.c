@@ -280,6 +280,9 @@ static unsigned int timestamp[BTMTK_SDIO_RX_CHECKPOINT_NUM][BTMTK_SDIO_TIMESTAMP
 
 static inline unsigned long btmtk_kallsyms_lookup_name(const char *name)
 {
+#if CFG_SUPPORT_CHIP_RESET_KO
+	return 0;
+#else
 	void *addr = NULL;
 
 	addr = __symbol_get(name);
@@ -287,6 +290,7 @@ static inline unsigned long btmtk_kallsyms_lookup_name(const char *name)
 		__symbol_put(name);
 
 	return (unsigned long)addr;
+#endif
 }
 
 static unsigned int btmtk_sdio_get_microseconds(void)

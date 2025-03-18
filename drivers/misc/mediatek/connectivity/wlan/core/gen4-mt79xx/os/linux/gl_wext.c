@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/os/linux
  *	/gl_wext.c#5
@@ -90,8 +91,10 @@ static const struct iw_priv_args rIwPrivTable[] = {
 	{IOCTL_GET_INT, 0, IW_PRIV_TYPE_INT | 50, ""},
 
 	/* added for set_oid and get_oid */
-	{IOCTL_SET_STRUCT, 256, 0, ""},
-	{IOCTL_GET_STRUCT, 0, 256, ""},
+	{IOCTL_SET_STRUCT,
+	IW_PRIV_TYPE_CHAR | sizeof(struct NDIS_TRANSPORT_STRUCT), 0, ""},
+	{IOCTL_GET_STRUCT, 0,
+	IW_PRIV_TYPE_CHAR | sizeof(struct NDIS_TRANSPORT_STRUCT), ""},
 
 	{IOCTL_GET_DRIVER, IW_PRIV_TYPE_CHAR | IW_PRIV_BUF_SIZE,
 		IW_PRIV_TYPE_CHAR | IW_PRIV_BUF_SIZE, "driver"},
@@ -212,6 +215,7 @@ static const struct iw_priv_args rIwPrivTable[] = {
 	{PRIV_CMD_GET_BAND_WIDTH, 0, IW_PRIV_TYPE_CHAR | 2000, "get_bandwidth"},
 };
 
+#if defined(CONFIG_WEXT_PRIV) || LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 32)
 static const iw_handler rIwPrivHandler[] = {
 	[IOCTL_SET_INT - SIOCIWFIRSTPRIV] = priv_set_int,
 	[IOCTL_GET_INT - SIOCIWFIRSTPRIV] = priv_get_int,
@@ -242,6 +246,7 @@ static const iw_handler rIwPrivHandler[] = {
 	[IOCTL_IWPRIV_ATE - SIOCIWFIRSTPRIV] = priv_ate_set
 #endif
 };
+#endif
 
 /* standard ioctls */
 static int std_get_name(struct net_device *prDev,
@@ -880,6 +885,7 @@ u_int8_t wextSrchDesiredHS20IE(IN uint8_t *pucIEStart,
 		       IN int32_t i4TotalIeLen, OUT uint8_t **ppucDesiredIE)
 {
 	int32_t i4InfoElemLen;
+	u_int8_t ret = FALSE;
 
 	ASSERT(pucIEStart);
 	ASSERT(ppucDesiredIE);
@@ -889,13 +895,8 @@ u_int8_t wextSrchDesiredHS20IE(IN uint8_t *pucIEStart,
 
 		if (pucIEStart[0] == ELEM_ID_VENDOR
 		    && i4InfoElemLen <= i4TotalIeLen) {
-			if (pucIEStart[1] >= ELEM_MIN_LEN_HS20_INDICATION) {
-				if (memcmp(&pucIEStart[2], "\x50\x6f\x9a\x10",
-				    4) == 0) {
-					*ppucDesiredIE = &pucIEStart[0];
-					return TRUE;
-				}
-			}
+			*ppucDesiredIE = &pucIEStart[0];
+			ret = TRUE;
 		}
 
 		/* check desired EID */
@@ -904,7 +905,7 @@ u_int8_t wextSrchDesiredHS20IE(IN uint8_t *pucIEStart,
 		pucIEStart += i4InfoElemLen;
 	}
 
-	return FALSE;
+	return ret;
 }				/* wextSrchDesiredHS20IE */
 
 /*----------------------------------------------------------------------------*/
@@ -2664,6 +2665,7 @@ wext_get_rate(IN struct net_device *prNetDev,
 	uint32_t rStatus = WLAN_STATUS_SUCCESS;
 	uint32_t u4BufLen = 0;
 	uint32_t u4Rate = 0;
+	uint8_t ucBssIndex = 0;
 
 	ASSERT(prNetDev);
 	ASSERT(prRate);
@@ -2674,9 +2676,10 @@ wext_get_rate(IN struct net_device *prNetDev,
 	if (!netif_carrier_ok(prNetDev))
 		return -ENOTCONN;
 
-	rStatus = kalIoctl(prGlueInfo, wlanoidQueryLinkSpeed,
+	ucBssIndex = wlanGetBssIdx(prNetDev);
+	rStatus = kalIoctlByBssIdx(prGlueInfo, wlanoidQueryLinkSpeed,
 			   &u4Rate, sizeof(u4Rate),
-			   TRUE, FALSE, TRUE, &u4BufLen);
+			   TRUE, FALSE, TRUE, &u4BufLen, ucBssIndex);
 
 	if (rStatus != WLAN_STATUS_SUCCESS)
 		return -EFAULT;
@@ -3049,6 +3052,10 @@ wext_set_encode(IN struct net_device *prNetDev,
 		if (prWepKey)
 			kalMemFree(prWepKey, VIR_MEM_TYPE,
 				sizeof(struct PARAM_WEP));
+
+		if (rStatus != WLAN_STATUS_SUCCESS)
+			return -EFAULT;
+
 		eEncStatus = ENUM_ENCRYPTION_DISABLED;
 
 		rStatus = kalIoctl(prGlueInfo, wlanoidSetEncryptionStatus,
@@ -4666,8 +4673,10 @@ wext_indicate_wext_event(IN struct GLUE_INFO *prGlueInfo,
 	}
 
 	/* Send event to user space */
-	wireless_send_event(prDevHandler, u4Cmd, &wrqu,
+	if (prGlueInfo->u4ReadyFlag != 0) {
+		wireless_send_event(prDevHandler, u4Cmd, &wrqu,
 			    pucExtraInfo);
+	}
 
 skip_indicate_event:
 	return;
@@ -4697,21 +4706,25 @@ struct iw_statistics *wext_get_wireless_stats(
 	struct iw_statistics *pStats = NULL;
 	int32_t i4Rssi = 0;
 	uint32_t bufLen = 0;
+	uint8_t ucBssIndex = wlanGetBssIdx(prDev);
 
 	prGlueInfo = *((struct GLUE_INFO **) netdev_priv(prDev));
 	ASSERT(prGlueInfo);
 	if (!prGlueInfo)
 		goto stat_out;
 
-	pStats = (struct iw_statistics *)(&(prGlueInfo->rIwStats));
+	if (IS_BSS_INDEX_VALID(ucBssIndex))
+		pStats = (struct iw_statistics *)
+			(&(prGlueInfo->rIwStats[ucBssIndex]));
 
 	if (!prDev || !netif_carrier_ok(prDev)) {
 		/* network not connected */
 		goto stat_out;
 	}
 
-	rStatus = kalIoctl(prGlueInfo, wlanoidQueryRssi, &i4Rssi,
-			   sizeof(i4Rssi), TRUE, TRUE, TRUE, &bufLen);
+	rStatus = kalIoctlByBssIdx(prGlueInfo, wlanoidQueryRssi, &i4Rssi,
+				   sizeof(i4Rssi), TRUE, TRUE, TRUE,
+				   &bufLen, ucBssIndex);
 
 stat_out:
 	return pStats;

@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   mt7933.c
 *    \brief  Internal driver stack will export
 *    the required procedures here for GLUE Layer.
@@ -872,7 +873,9 @@ struct WIFI_CFG_NVRAM_STRUCT {
 	uint8_t ucRegP2pIfAtProbe;
 	uint8_t ucP2pShareMacAddr;
 	uint8_t ucTxShortGI;
+	uint8_t ucTxShortGI4P2p;
 	uint8_t ucRxShortGI;
+	uint8_t ucRxShortGI4P2p;
 	uint8_t ucTxLdpc;
 	uint8_t ucRxLdpc;
 	uint8_t ucTxStbc;
@@ -944,6 +947,8 @@ struct WIFI_CFG_NVRAM_STRUCT {
 	uint32_t u4MtkOuiCap;
 	uint8_t aucMtkFeature[4];
 	uint8_t ucGbandProbe256QAM;
+	uint8_t ucP2pGband256QAM;
+	uint8_t ucStaGband256QAM;
 
 	uint8_t ucVhtIeIn2g;
 
@@ -1103,7 +1108,9 @@ struct WIFI_CFG_NVRAM_STRUCT mt7933_cfg_data  = {
 #endif
 	.ucP2pShareMacAddr = 0,
 	.ucTxShortGI = 1,
+	.ucTxShortGI4P2p = 1,
 	.ucRxShortGI = 1,
+	.ucRxShortGI4P2p = 1,
 
 	.ucTxLdpc = 1,
 	.ucRxLdpc = 1,
@@ -1470,7 +1477,9 @@ void mt7933LoadCfgSetting(
 	prWifiVar->ucP2pShareMacAddr = mt7933_cfg_data.ucP2pShareMacAddr;
 
 	prWifiVar->ucTxShortGI = mt7933_cfg_data.ucTxShortGI;
+	prWifiVar->ucTxShortGI4P2p = mt7933_cfg_data.ucTxShortGI4P2p;
 	prWifiVar->ucRxShortGI = mt7933_cfg_data.ucRxShortGI;
+	prWifiVar->ucRxShortGI4P2p = mt7933_cfg_data.ucRxShortGI4P2p;
 
 	prWifiVar->ucTxLdpc = mt7933_cfg_data.ucTxLdpc;
 	prWifiVar->ucRxLdpc = mt7933_cfg_data.ucRxLdpc;
@@ -1561,6 +1570,8 @@ void mt7933LoadCfgSetting(
 	kalMemCopy(prWifiVar->aucMtkFeature, mt7933_cfg_data.aucMtkFeature, 4);
 
 	prWifiVar->ucGbandProbe256QAM = mt7933_cfg_data.ucGbandProbe256QAM;
+	prWifiVar->ucP2pGband256QAM = mt7933_cfg_data.ucP2pGband256QAM;
+	prWifiVar->ucStaGband256QAM = mt7933_cfg_data.ucStaGband256QAM;
 #endif
 #if CFG_SUPPORT_VHT_IE_IN_2G
 	prWifiVar->ucVhtIeIn2g = mt7933_cfg_data.ucVhtIeIn2g;

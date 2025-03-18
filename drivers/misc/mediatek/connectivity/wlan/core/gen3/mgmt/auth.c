@@ -993,6 +993,8 @@ authSendDeauthFrame(IN P_ADAPTER_T prAdapter,
 	}
 #endif
 
+	nicTxConfigPktControlFlag(prMsduInfo, MSDU_CONTROL_FLAG_FORCE_TX, TRUE);
+
 	/* 4 <8> Inform TXM to send this Deauthentication frame. */
 	DBGLOG(SAA, TRACE, "Send Deauth, ReasonCode: %d, SeqNo: %d\n", u2ReasonCode, prMsduInfo->ucTxSeqNum);
 	nicTxEnqueueMsdu(prAdapter, prMsduInfo);

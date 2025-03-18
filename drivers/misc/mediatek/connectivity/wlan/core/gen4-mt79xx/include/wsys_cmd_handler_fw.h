@@ -1,6 +1,6 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2017 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
 
 #ifndef _WSYS_CMD_HANDLER_FW_H
@@ -275,6 +275,10 @@ enum ENUM_CMD_ID {
 	CMD_ID_SET_ALWAYS_SCAN_PARAM = 0x73,/* 0x73 (Set) */
 	CMD_ID_TDLS_PS = 0x75,              /* 0x75 (Set) */
 
+#if (CFG_WIFI_RAM_COEX_SPDT_SHR_ANT_CTRL == 1)
+	CMD_ID_TRIGGER_SHR_ANT_SWCH_EVT = 0x77,
+#endif
+
 	CMD_ID_GET_CNM = 0x79,
 	CMD_ID_COEX_CTRL = 0x7C, /* 0x7C (Set/Query) */
 
@@ -299,12 +303,19 @@ enum ENUM_CMD_ID {
 	CMD_ID_SET_COUNTRY_LEGACY_POWER_LIMIT_PER_RATE = 0x95, /* 0x95 (Set) */
 	CMD_ID_WFC_KEEP_ALIVE = 0xA0,       /* 0xA0 (Set) */
 	CMD_ID_RSSI_MONITOR = 0xA1,         /* 0xA1 (Set) */
+#if (CFG_SUPPORT_PKT_OFLD == 1)
+	CMD_ID_PKT_OFLD = 0xA2,             /* 0xA2 (Set) */
+#endif /* CFG_SUPPORT_PKT_OFLD */
 	CMD_ID_CAL_BACKUP_IN_HOST_V2 = 0xAE,    /* 0xAE (Set / Query) */
 
 	CMD_ID_MQM_UPDATE_MU_EDCA_PARMS = 0xB0,   /* 0xB0 (Set) */
 	CMD_ID_RLM_UPDATE_SR_PARAMS = 0xB1,       /* 0xB1 (Set) */
 #if (CFG_COALESCING_INTERRUPT == 1)
 	CMD_ID_PF_CF_COALESCING_INT = 0xB2,    /* 0xB2 (Set) */
+#endif
+	CMD_ID_LP_DBG_CTRL = 0xB3,             /* 0xB3 (Set / Query) */
+#if CFG_SUPPORT_NAN
+	CMD_ID_DFSP_CONFIG = 0xB4,
 #endif
 
 	CMD_ID_ACCESS_REG           = 0xc0, /* 0xc0 (Set / Query) */
@@ -449,6 +460,8 @@ enum ENUM_EVENT_ID {
 	/* 0x44 (Query - CMD_ID_CHIP_CONFIG) */
 	EVENT_ID_ACCESS_RX_STAT = 0x45,
 	/* 0x45 (Query - CMD_ID_ACCESS_RX_STAT) */
+	EVENT_ID_MDNS_RECORD = 0x4e,
+	/* 0x4E (Query CMD_ID_SET_MDNS_RECORD ) */
 
 	EVENT_ID_RDD_SEND_PULSE = 0x50,
 	EVENT_ID_PFMU_TAG_READ = 0x51,
@@ -485,6 +498,9 @@ enum ENUM_EVENT_ID {
 	EVENT_ID_GET_CMD_INFO = 0x70,
 	/* 0x70 (Query - EVENT_ID_GET_CMD_INFO) */
 	/*query info from cmd.*/
+#if (CFG_WIFI_RAM_COEX_SPDT_SHR_ANT_CTRL == 1)
+	EVENT_ID_UPDATE_SHARED_ANTENNA_SWITCH = 0x77,
+#endif
 	EVENT_ID_DBDC_SWITCH_DONE = 0x78,
 	EVENT_ID_GET_CNM = 0x79,
 	EVENT_ID_COEX_CTRL = 0x7C,
@@ -498,12 +514,16 @@ enum ENUM_EVENT_ID {
 	EVENT_ID_BEACON_TSF_SYNC = 0x94,		/* 0x94 (Set / Query) */
 #endif
 	EVENT_ID_RSSI_MONITOR = 0xA1,       /* Event ID for Rssi monitoring */
+#if (CFG_SUPPORT_PKT_OFLD == 1)
+	EVENT_ID_PKT_OFLD = 0xA2,
+#endif /* CFG_SUPPORT_PKT_OFLD */
 	EVENT_ID_CAL_BACKUP_IN_HOST_V2 = 0xAE,
 	/* 0xAE (Query - CMD_ID_CAL_BACKUP) */
 	EVENT_ID_CAL_ALL_DONE = 0xAF,   /* 0xAF (FW Cal All Done Event) */
 #if (CFG_COALESCING_INTERRUPT == 1)
 	EVENT_ID_PF_CF_COALESCING_INT_DONE = 0xB2,    /* 0xB2 (Query) */
 #endif
+	EVENT_ID_LP_DBG_CTRL = 0xB3,            /* 0xB3 (Set / Query) */
 
 	EVENT_ID_WTBL_INFO = 0xCD,              /* 0xCD (Query) */
 	EVENT_ID_MIB_INFO = 0xCE,               /* 0xCE (Query) */
@@ -1132,12 +1152,11 @@ struct CMD_SCAN_REQ_V2 {
 	struct PARAM_SSID    arSSIDExtend[6];
 	uint8_t          aucBSSID[MAC_ADDR_LEN];
 	uint8_t          aucRandomMac[MAC_ADDR_LEN];
-	uint8_t          aucExtBSSID[CFG_SCAN_SSID_MAX_NUM][MAC_ADDR_LEN];
+	uint8_t          aucExtBSSID[CFG_SCAN_OOB_MAX_NUM][MAC_ADDR_LEN];
 	uint8_t          ucShortSSIDNum;
-	uint8_t 	 ucBssidMatchCh[CFG_SCAN_SSID_MAX_NUM];
-	uint8_t		 ucBssidMatchSsidInd[CFG_SCAN_SSID_MAX_NUM];
+	uint8_t          ucBssidMatchCh[CFG_SCAN_OOB_MAX_NUM];
+	uint8_t          ucBssidMatchSsidInd[CFG_SCAN_OOB_MAX_NUM];
 	uint8_t          aucPadding_3[31];
-
 };
 
 /* TLV for CMD_ID_SCAN_REQ_V2*/

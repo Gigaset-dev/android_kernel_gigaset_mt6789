@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/mgmt/bss.c#7
  */
@@ -90,6 +91,8 @@ struct APPEND_VAR_IE_ENTRY txBcnIETable[] = {
 	 rlmRspGenerateVhtCapIE},			/* 191 */
 	{(ELEM_HDR_LEN + ELEM_MAX_LEN_VHT_OP), NULL,
 	 rlmRspGenerateVhtOpIE},			/* 192 */
+	{(ELEM_HDR_LEN + ELEM_MAX_LEN_TPE), NULL,
+	   rlmGenerateVhtTPEIE},			/* 195 */
 	{(ELEM_HDR_LEN + ELEM_MAX_LEN_VHT_OP_MODE_NOTIFICATION), NULL,
 	 rlmRspGenerateVhtOpNotificationIE},		/* 199 */
 #endif
@@ -98,6 +101,10 @@ struct APPEND_VAR_IE_ENTRY txBcnIETable[] = {
 	 heRlmRspGenerateHeCapIE},			/* 255, EXT 35 */
 	{0, heRlmCalculateHeOpIELen,
 	 heRlmRspGenerateHeOpIE},			/* 255, EXT 36 */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+	{(ELEM_HDR_LEN + ELEM_MAX_LEN_HE_6G_CAP), NULL,
+	 heRlmReqGenerateHe6gBandCapIE}, /* 255, EXT 59 */
+#endif
 #endif
 	{(ELEM_HDR_LEN + ELEM_MAX_LEN_WPA), NULL,
 	 rsnGenerateWpaNoneIE},				/* 221 */
@@ -120,6 +127,15 @@ struct APPEND_VAR_IE_ENTRY txBcnIETable[] = {
 #if CFG_SUPPORT_WAC
 	{0, rlmCalculateWacIELen,
 	 rlmGenerateWacIE},				/* 221 */
+#endif
+
+#if (CFG_SAP_SUPPORT_WPA3_H2E == 1)
+	{(ELEM_HDR_LEN + ELEM_MAX_LEN_RSN), NULL,
+	 rsnGenerateRSNXIE},   /* 244 */
+#endif
+#if CFG_SUPPORT_SOFTAP_OWE
+	{(ELEM_HDR_LEN + ELEM_MAX_LEN_WPA), NULL,
+	 rsnGenerateOWEIE}
 #endif
 };
 
@@ -154,6 +170,8 @@ struct APPEND_VAR_IE_ENTRY txProbRspIETable[] = {
 	 rlmRspGenerateVhtCapIE},			/* 191 */
 	{(ELEM_HDR_LEN + ELEM_MAX_LEN_VHT_OP), NULL,
 	 rlmRspGenerateVhtOpIE},			/* 192 */
+	{(ELEM_HDR_LEN + ELEM_MAX_LEN_TPE), NULL,
+	   rlmGenerateVhtTPEIE},			/* 195 */
 	{(ELEM_HDR_LEN + ELEM_MAX_LEN_VHT_OP_MODE_NOTIFICATION), NULL,
 	 rlmRspGenerateVhtOpNotificationIE},		/* 199 */
 #endif
@@ -178,6 +196,14 @@ struct APPEND_VAR_IE_ENTRY txProbRspIETable[] = {
 #if CFG_SUPPORT_WAC
 	{0, rlmCalculateWacIELen,
 	 rlmGenerateWacIE},				/* 221 */
+#endif
+#if (CFG_SAP_SUPPORT_WPA3_H2E == 1)
+	{(ELEM_HDR_LEN + ELEM_MAX_LEN_RSN), NULL,
+	 rsnGenerateRSNXIE},  /* 244 */
+#endif
+#if CFG_SUPPORT_SOFTAP_OWE
+	{(ELEM_HDR_LEN + ELEM_MAX_LEN_WPA), NULL,
+	 rsnGenerateOWEIE}
 #endif
 };
 
@@ -322,10 +348,10 @@ void bssDetermineApBssInfoPhyTypeSet(IN struct ADAPTER *prAdapter,
 				     OUT struct BSS_INFO *prBssInfo)
 {
 	struct WIFI_VAR *prWifiVar = &prAdapter->rWifiVar;
-	uint8_t ucHtOption = FEATURE_ENABLED;
-	uint8_t ucVhtOption = FEATURE_ENABLED;
+	uint8_t ucHtOption;
+	uint8_t ucVhtOption;
 #if (CFG_SUPPORT_802_11AX == 1)
-        uint8_t ucHeOption = FEATURE_ENABLED;
+	uint8_t ucHeOption;
 #endif
 
 	/* Decide AP mode PHY type set */
@@ -364,7 +390,11 @@ void bssDetermineApBssInfoPhyTypeSet(IN struct ADAPTER *prAdapter,
 		prBssInfo->ucPhyTypeSet |= PHY_TYPE_BIT_VHT;
 	} else if (!fgIsPureAp &&
 			IS_FEATURE_ENABLED(ucVhtOption) &&
-			(prBssInfo->eBand == BAND_5G)) {
+			((prBssInfo->eBand == BAND_5G)
+#if (CFG_SUPPORT_WIFI_6G == 1)
+			|| (prBssInfo->eBand == BAND_6G)
+#endif
+			)) {
 		prBssInfo->ucPhyTypeSet |= PHY_TYPE_BIT_VHT;
 	}
 
@@ -1120,6 +1150,15 @@ bssComposeBeaconProbeRespFrameHeaderAndFF(IN uint8_t *pucBuffer,
 	/* NOTE(Kevin): Optimized for ARM */
 }		/* end of bssComposeBeaconProbeRespFrameHeaderAndFF() */
 
+
+uint32_t bssUpdateBeaconContent(IN struct ADAPTER
+				*prAdapter, IN uint8_t uBssIndex)
+{
+	return bssUpdateBeaconContentEx(prAdapter,
+		uBssIndex,
+		IE_UPD_METHOD_UPDATE_ALL);
+}
+
 /*---------------------------------------------------------------------------*/
 /*!
  * @brief Update the Beacon Frame Template to FW for AIS AdHoc and P2P GO.
@@ -1130,8 +1169,9 @@ bssComposeBeaconProbeRespFrameHeaderAndFF(IN uint8_t *pucBuffer,
  * @retval WLAN_STATUS_SUCCESS   Success.
  */
 /*---------------------------------------------------------------------------*/
-uint32_t bssUpdateBeaconContent(IN struct ADAPTER *prAdapter,
-				IN uint8_t ucBssIndex)
+uint32_t bssUpdateBeaconContentEx(IN struct ADAPTER *prAdapter,
+				IN uint8_t ucBssIndex,
+				enum ENUM_IE_UPD_METHOD eMethod)
 {
 	struct BSS_INFO *prBssInfo;
 	struct MSDU_INFO *prMsduInfo;
@@ -1185,13 +1225,14 @@ uint32_t bssUpdateBeaconContent(IN struct ADAPTER *prAdapter,
 	     i++) {
 		if (txBcnIETable[i].pfnAppendIE)
 			txBcnIETable[i].pfnAppendIE(prAdapter, prMsduInfo);
-
 	}
 
 	prBcnFrame = (struct WLAN_BEACON_FRAME *)prMsduInfo->prPacket;
 
+	DBGLOG(P2P, TRACE, "Dump beacon content to FW, method:%d\n", eMethod);
+
 	return nicUpdateBeaconIETemplate(prAdapter,
-					 IE_UPD_METHOD_UPDATE_ALL,
+					 eMethod,
 					 ucBssIndex,
 					 prBssInfo->u2CapInfo,
 					 (uint8_t *) prBcnFrame->aucInfoElem,
@@ -2536,7 +2577,7 @@ int8_t bssGetRxNss(IN struct ADAPTER *prAdapter,
 
 	pucIe = mtk_cfg80211_find_ie_match_mask(
 		ELEM_ID_HT_CAP,
-		&prBssDesc->aucIEBuf[0],
+		prBssDesc->pucIeBuf,
 		prBssDesc->u2IELength,
 		NULL, 0, 0, NULL);
 
@@ -2602,7 +2643,7 @@ uint32_t bssGetIotApAction(IN struct ADAPTER *prAdapter,
 		return -EINVAL;
 	}
 
-	pucIes = &prBssDesc->aucIEBuf[0];
+	pucIes = prBssDesc->pucIeBuf;
 	for (ucCnt = 0; ucCnt < CFG_IOT_AP_RULE_MAX_CNT; ucCnt++) {
 		prIotApRule = &prAdapter->rIotApRule[ucCnt];
 		u2MatchFlag = prIotApRule->u2MatchFlag;

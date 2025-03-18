@@ -137,6 +137,9 @@ static void bt_state_cb(u_int8_t state)
 			rstflag = CHIP_RESET_NONE;
 			break;
 		}
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0))
+		fallthrough;
+#endif
 	case RESET_END:
 		rstflag = CHIP_RESET_END;
 		rd_offset = 0;
@@ -361,7 +364,7 @@ static ssize_t BT_read(struct file *filp, char __user *buf, size_t count, loff_t
 	do {
 		retval = btmtk_receive_data(g_sbdev->hdev, i_buf, count);
 		if (retval < 0) {
-			BTMTK_ERR("bt_core_receive_data failed, retval %d", retval);
+			BTMTK_ERR("bt_core_receive_data failed, retval %zd", retval);
 			goto OUT;
 		} else if (retval == 0) { /* Got nothing, wait for RX queue's signal */
 			/*
@@ -385,7 +388,8 @@ static ssize_t BT_read(struct file *filp, char __user *buf, size_t count, loff_t
 
 	if (retval == 0) {
 		if (rstflag != CHIP_RESET_END) { /* Should never happen */
-			WARN(1, "Blocking read is waken up in unexpected case, rstflag=%d", rstflag);
+			// WARN(1, "Blocking read is waken up in unexpected case, rstflag=%d", rstflag);
+			BTMTK_WARN("Blocking read is waken up in unexpected case, rstflag = %d", rstflag);
 			retval = -EIO;
 			goto OUT;
 		} else { /* Reset end, send Hardware Error event only once */
@@ -557,8 +561,11 @@ int BT_init(void)
 	cdv_err = cdev_add(&BT_cdev, dev, BT_devs);
 	if (cdv_err)
 		goto cdv_error;
-
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0))
+	BT_class = class_create(BT_DRIVER_NODE_NAME);
+#else
 	BT_class = class_create(THIS_MODULE, BT_DRIVER_NODE_NAME);
+#endif
 	if (IS_ERR(BT_class))
 		goto create_node_error;
 	BT_dev = device_create(BT_class, NULL, dev, NULL, BT_DRIVER_NODE_NAME);

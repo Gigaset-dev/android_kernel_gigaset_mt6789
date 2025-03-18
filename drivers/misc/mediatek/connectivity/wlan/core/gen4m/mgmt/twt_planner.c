@@ -1074,6 +1074,13 @@ void twtPlannerSetParams(
 	ucBssIdx = prTWTCtrl->ucBssIdx;
 	prBssInfo = GET_BSS_INFO_BY_INDEX(prAdapter, ucBssIdx);
 
+	if (!prBssInfo) {
+		DBGLOG(TWT_PLANNER, ERROR,
+			"Invalid prBssInfo\n");
+
+		return;
+	}
+
 	if (prBssInfo->eCurrentOPMode != OP_MODE_INFRASTRUCTURE ||
 		prBssInfo->eConnectionState != MEDIA_STATE_CONNECTED) {
 		DBGLOG(TWT_PLANNER, ERROR,

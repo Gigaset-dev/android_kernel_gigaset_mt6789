@@ -3219,6 +3219,17 @@ try_again:
 			       prBssDesc->aucBSSID, prConnSettings->aucSSID,
 			       prConnSettings->aucBSSID, prEssLink->u4NumElem);
 			return prBssDesc;
+		} else if (prConnSettings->eConnectionPolicy == CONNECT_BY_BSSID_HINT) {
+			if (!EQUAL_MAC_ADDR(prBssDesc->aucBSSID,
+				prConnSettings->aucBSSIDHint))
+				continue;
+			if (!scanSanityCheckBssDesc(prAdapter, prBssDesc))
+				continue;
+			DBGLOG(SCN, INFO,
+				"Selected %pM base on bssidhint, when find %s, %pM in %d BSSes\n",
+				prBssDesc->aucBSSID, prConnSettings->aucSSID,
+				prConnSettings->aucBSSIDHint, prEssLink->u4NumElem);
+			return prBssDesc;
 		} else if (!fgSearchBlackList) {
 			prBssDesc->prBlack = aisQueryBlackList(prAdapter, prBssDesc);
 			if (prBssDesc->prBlack) {
@@ -3336,6 +3347,8 @@ try_again:
 #endif
 		}
 	} /* end of LINK_FOR_EACH */
+
+	prBtmParam->fgUnsolicitedReq = FALSE;
 
 	if (prConnSettings->eConnectionPolicy == CONNECT_BY_BSSID) {
 		DBGLOG(SCN, INFO, "Selected None base on bssid %pM in %d BSSes\n",

@@ -70,7 +70,6 @@ struct fm_ext_interface {
 	int (*get_hw_version)(void);
 	unsigned char (*get_top_index)(void);
 	unsigned int (*get_get_adie)(void);
-	bool (*is_aoc_support)(void);
 	int (*spi_clock_switch)(enum fm_spi_speed speed);
 	bool (*is_bus_hang)(void);
 	int (*spi_hopping)(void);
@@ -80,6 +79,7 @@ struct fm_ext_interface {
 	int (*host_post_on)(void);
 	int (*host_pre_off)(void);
 	int (*host_post_off)(void);
+	int (*top_clk_en)(unsigned int val);
 	signed int (*low_ops_register)(struct fm_callback *cb, struct fm_basic_interface *bi);
 	signed int (*low_ops_unregister)(struct fm_basic_interface *bi);
 	signed int (*rds_ops_register)(struct fm_basic_interface *bi, struct fm_rds_interface *ri);

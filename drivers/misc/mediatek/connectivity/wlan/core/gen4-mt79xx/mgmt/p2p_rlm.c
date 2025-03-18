@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: @(#) p2p_rlm.c@@
  */
@@ -59,6 +60,66 @@ static enum ENUM_CHNL_EXT rlmGetSco(struct ADAPTER *prAdapter,
  *                              F U N C T I O N S
  ******************************************************************************
  */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+void rlmUpdate6GOpInfo(struct ADAPTER *prAdapter,
+		struct BSS_INFO *prBssInfo)
+{
+	uint8_t ucMaxBandwidth, ucS1, ucS2, ucVhtChannelWidth;
+
+	if (IS_BSS_APGO(prBssInfo) && prBssInfo->eBand == BAND_6G) {
+		ucVhtChannelWidth = min_t(
+			uint8_t,
+			prBssInfo->ucVhtChannelWidth,
+			VHT_OP_CHANNEL_WIDTH_160);
+
+		HE_SET_6G_OP_INFOR_PRESENT(prBssInfo->ucHeOpParams);
+
+		/* HE bandwidth is no more than bw160 */
+		ucMaxBandwidth = min_t(
+			uint8_t,
+			rlmGetBssOpBwByVhtAndHtOpInfo(prBssInfo),
+			MAX_BW_160MHZ);
+
+		ucS1 = nicGetS1(prBssInfo->eBand,
+			prBssInfo->ucPrimaryChannel,
+			ucVhtChannelWidth);
+
+		ucS2 = nicGetS2(prBssInfo->eBand,
+			prBssInfo->ucPrimaryChannel,
+			ucVhtChannelWidth,
+			ucS1);
+
+		prBssInfo->r6gOperInfor.rControl.bits.ChannelWidth =
+			heRlmMaxBwToHeBw(ucMaxBandwidth);
+		prBssInfo->r6gOperInfor.ucPrimaryChannel =
+			prBssInfo->ucPrimaryChannel;
+
+		/* If the BSS channel width is 160 MHz then the Channel Center
+		 * Frequency Segment 0 field indicates the channel center
+		 * frequency index of the primary 80 MHz. The Channel Center
+		 * Frequency Segment 1 field indicates the channel center
+		 * frequency index of the 160 MHz channel on which the BSS
+		 * operates in the 6 GHz band.
+		 */
+		if (ucMaxBandwidth == MAX_BW_160MHZ) {
+			prBssInfo->r6gOperInfor.ucChannelCenterFreqSeg0 = ucS2;
+			prBssInfo->r6gOperInfor.ucChannelCenterFreqSeg1 = ucS1;
+		} else {
+			prBssInfo->r6gOperInfor.ucChannelCenterFreqSeg0 = ucS1;
+			prBssInfo->r6gOperInfor.ucChannelCenterFreqSeg1 = ucS2;
+		}
+
+		prBssInfo->r6gOperInfor.ucMinimumRate = 6;
+
+		DBGLOG(RLM, INFO,
+			"Set 6G operating info: BW[%d] CH[%d] S1[%d] S2[%d]\n",
+			prBssInfo->r6gOperInfor.rControl.bits.ChannelWidth,
+			prBssInfo->r6gOperInfor.ucPrimaryChannel,
+			prBssInfo->r6gOperInfor.ucChannelCenterFreqSeg0,
+			prBssInfo->r6gOperInfor.ucChannelCenterFreqSeg1);
+	}
+}
+#endif
 
 void rlmBssUpdateChannelParams(struct ADAPTER *prAdapter,
 		struct BSS_INFO *prBssInfo)
@@ -110,13 +171,10 @@ void rlmBssUpdateChannelParams(struct ADAPTER *prAdapter,
 		prBssInfo->u2VhtBasicMcsSet &=
 			(VHT_CAP_INFO_MCS_MAP_MCS9
 				<< VHT_CAP_INFO_MCS_1SS_OFFSET);
-#if CFG_SUPPORT_DBDC
-		ucMaxBw = cnmGetDbdcBwCapability(prAdapter,
-			prBssInfo->ucBssIndex);
-#else
-		ucMaxBw = cnmGetBssMaxBw(prAdapter,
-			prBssInfo->ucBssIndex);
-#endif
+
+		ucMaxBw = cnmOpModeGetMaxBw(prAdapter,
+			prBssInfo);
+
 		rlmFillVhtOpInfoByBssOpBw(prBssInfo, ucMaxBw);
 
 		/* If the S1 is invalid, force to change bandwidth */
@@ -144,9 +202,9 @@ void rlmBssUpdateChannelParams(struct ADAPTER *prAdapter,
 		kalMemZero(prBssInfo->ucHeOpParams,
 			HE_OP_BYTE_NUM * sizeof(uint8_t));
 
-		/* Disable BSS color support*/
-		prBssInfo->ucBssColorInfo |=
-			BIT(HE_OP_BSSCOLOR_BSS_COLOR_DISABLE_SHFT);
+		if (IS_FEATURE_DISABLED(prAdapter->rWifiVar.fgSapBssColor))
+			prBssInfo->ucBssColorInfo |=
+				BIT(HE_OP_BSSCOLOR_BSS_COLOR_DISABLE_SHFT);
 
 		prBssInfo->ucBssColorInfo |=
 			BIT(HE_OP_BSSCOLOR_BSS_COLOR_SHFT);
@@ -155,6 +213,39 @@ void rlmBssUpdateChannelParams(struct ADAPTER *prAdapter,
 		for (i = 1; i < 8; i++)
 			prBssInfo->u2HeBasicMcsSet |=
 				(HE_CAP_INFO_MCS_NOT_SUPPORTED << 2 * i);
+
+#if (CFG_SUPPORT_WIFI_6G == 1)
+		if (prBssInfo->eBand == BAND_6G) {
+			/* 6G would let ucPhyTypeSet without VHT
+			 * that would cause prBssInfo->ucVhtChannelWidth
+			 * not been set with rlmFillVhtOpInfoByBssOpBw
+			 */
+			ucMaxBw = cnmOpModeGetMaxBw(prAdapter,
+				prBssInfo);
+			rlmFillVhtOpInfoByBssOpBw(prBssInfo, ucMaxBw);
+
+			/* If the S1 is invalid, force to change bandwidth */
+			if (prBssInfo->ucVhtChannelFrequencyS1 == 0) {
+				/* Give GO/AP another chance to use BW80
+				 * if failed to get S1 for BW160.
+				 */
+				if ((prBssInfo->eCurrentOPMode ==
+						OP_MODE_ACCESS_POINT) &&
+					ucMaxBw == MAX_BW_160MHZ) {
+					rlmFillVhtOpInfoByBssOpBw(prBssInfo,
+						MAX_BW_80MHZ);
+				}
+
+				/* fallback to BW20/40 */
+				if (prBssInfo->ucVhtChannelFrequencyS1 == 0) {
+					prBssInfo->ucVhtChannelWidth =
+						VHT_OP_CHANNEL_WIDTH_20_40;
+				}
+			}
+			rlmUpdate6GOpInfo(prAdapter, prBssInfo);
+		}
+#endif
+
 	} else {
 		kalMemZero(prBssInfo->ucHeOpParams,
 			HE_OP_BYTE_NUM * sizeof(uint8_t));
@@ -1446,7 +1537,7 @@ uint8_t rlmGetVhtS1ForAP(struct ADAPTER *prAdapter,
 		struct BSS_INFO *prBssInfo)
 {
 	uint32_t ucFreq1Channel;
-	uint8_t ucPrimaryChannel = prBssInfo->ucPrimaryChannel;
+
 	struct P2P_ROLE_FSM_INFO *prP2pRoleFsmInfo =
 		(struct P2P_ROLE_FSM_INFO *) NULL;
 	struct P2P_CONNECTION_REQ_INFO *prP2pConnReqInfo =
@@ -1464,9 +1555,10 @@ uint8_t rlmGetVhtS1ForAP(struct ADAPTER *prAdapter,
 			nicFreq2ChannelNum(
 				prP2pConnReqInfo->u4CenterFreq1 * 1000);
 	} else
-		ucFreq1Channel =
-			nicGetVhtS1(ucPrimaryChannel,
-				prBssInfo->ucVhtChannelWidth);
+		ucFreq1Channel = nicGetS1(
+			prBssInfo->eBand,
+			prBssInfo->ucPrimaryChannel,
+			prBssInfo->ucVhtChannelWidth);
 
 	return ucFreq1Channel;
 }
@@ -1512,10 +1604,11 @@ void rlmGetChnlInfoForCSA(struct ADAPTER *prAdapter,
 				ucCh, eBandCsa) / 1000;
 	ucCsaChnlS1 = nicGetVhtS1(ucCh,
 			rlmGetVhtOpBwByBssOpBw(prRfChnlInfo->ucChnlBw));
-	prRfChnlInfo->u4CenterFreq1 = (ucCsaChnlS1 != 0)
-		? (nicChannelNum2Freq(
-				ucCsaChnlS1, eBandCsa) / 1000) :
-				prRfChnlInfo->u2PriChnlFreq;
+	prRfChnlInfo->u4CenterFreq1 =
+		nicGetS1Freq(
+			eBandCsa,
+			prRfChnlInfo->ucChannelNum,
+			rlmGetVhtOpBwByBssOpBw(prRfChnlInfo->ucChnlBw));
 	prRfChnlInfo->u4CenterFreq2 = 0;
 
 	/* check domain info valid */

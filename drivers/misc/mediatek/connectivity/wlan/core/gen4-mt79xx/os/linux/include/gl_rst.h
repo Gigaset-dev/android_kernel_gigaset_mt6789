@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/os/linux/include
  *     /gl_rst.h#1
@@ -118,6 +119,7 @@ struct RESET_STRUCT {
 	struct work_struct rst_trigger_work;
 	uint32_t rst_trigger_flag;
 #endif
+	u_int8_t fgIsInitialized;
 };
 
 #if CFG_WMT_RESET_API_SUPPORT
@@ -199,10 +201,6 @@ extern int mtk_wcn_wmt_assert_keyword(enum ENUM_WMTDRV_TYPE type,
 	unsigned char *keyword);
 #endif /* CFG_ENABLE_KEYWORD_EXCEPTION_MECHANISM */
 #else /* CFG_WMT_RESET_API_SUPPORT */
-
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-extern bool halPreventFwOwnEn(IN u_int8_t fgEnable);
-#endif /* CFG_CHIP_RESET_KO_SUPPORT */
 
 #endif /* CFG_WMT_RESET_API_SUPPORT */
 #endif /* CFG_CHIP_RESET_SUPPORT */
@@ -326,7 +324,9 @@ u_int8_t kalIsResetting(void);
 u_int8_t kalIsRstPreventFwOwn(void);
 
 #if CFG_CHIP_RESET_SUPPORT
-void glResetInit(struct GLUE_INFO *prGlueInfo);
+typedef void(*wlanRemoveFunc) (void);
+void glResetInit(struct GLUE_INFO *prGlueInfo, wlanRemoveFunc pfRemove);
+void glReseProbeDone(struct GLUE_INFO *prGlueInfo, int32_t i4Status);
 
 void glResetUninit(void);
 
@@ -365,6 +365,9 @@ u_int8_t kalIsWholeChipResetting(void);
 void glSetRstReasonString(char *reason);
 
 #endif /*end of CFG_SUPPORT_CONNINFRA == 0*/
+#if CFG_CHIP_RESET_KO_SUPPORT
+void resetkoNotifyFunc(unsigned int event, void *data);
+#endif
 
 #else
 

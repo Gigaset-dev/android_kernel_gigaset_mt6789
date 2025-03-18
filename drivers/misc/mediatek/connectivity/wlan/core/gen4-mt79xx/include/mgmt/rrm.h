@@ -1,6 +1,6 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2019 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
 
 #ifndef _RRM_H
@@ -189,6 +189,10 @@ void rrmScheduleNextRm(struct ADAPTER *prAdapter,
 	uint8_t ucBssIndex);
 
 void rrmUpdateBssTimeTsf(struct ADAPTER *prAdapter, struct BSS_DESC *prBssDesc);
+
+#if (CFG_SUPPORT_WIFI_6G == 1)
+uint8_t rrmCheckIs6GOpClass(uint8_t ucOpClass);
+#endif
 
 void rrmCollectBeaconReport(IN struct ADAPTER *prAdapter,
 	IN struct BSS_DESC *prBssDesc, IN uint8_t ucBssIndex);

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
  * Copyright (c) 2021 MediaTek Inc.
  */
@@ -120,6 +120,26 @@ const struct nla_policy
 			[MTK_WLAN_VENDOR_ATTR_NDP_SERVICE_NAME] = {
 				.type = NLA_BINARY,
 				.len = NAN_MAX_SERVICE_NAME_LEN },
+			[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_DEST_MAC_ADDR] = {
+				.type = NLA_BINARY,
+				.len = NAN_MAC_ADDR_LEN },
+			[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_SRC_MAC_ADDR] = {
+				.type = NLA_BINARY,
+				.len = NAN_MAC_ADDR_LEN },
+			[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_BSSID] = {
+				.type = NLA_BINARY,
+				.len = NAN_MAC_ADDR_LEN },
+			[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_MAP_ID] = {
+				.type = NLA_U8 },
+			[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_TIMEOUT] = {
+				.type = NLA_U16 },
+			[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_SECURITY] = {
+				.type = NLA_U8 },
+			[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_TOKEN] = {
+				.type = NLA_U16 },
+			[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_PAYLOAD] = {
+				.type = NLA_BINARY,
+				.len = NAN_MAX_OOB_ACTION_DATA_LEN },
 	};
 
 /*----------------------------------------------------------------------------*/
@@ -147,7 +167,7 @@ nanNdiCreateRspEvent(struct ADAPTER *prAdapter,
 
 	DBGLOG(NAN, INFO, "Send NDI Create Rsp event\n");
 
-	wiphy = priv_to_wiphy(prAdapter->prGlueInfo);
+	wiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
 	wdev = (wlanGetNetDev(prAdapter->prGlueInfo, AIS_DEFAULT_INDEX))
 		       ->ieee80211_ptr;
 	u2CreateRspLen = (3 * sizeof(uint32_t)) + sizeof(uint16_t) +
@@ -233,7 +253,7 @@ nanNdiDeleteRspEvent(struct ADAPTER *prAdapter,
 
 	DBGLOG(NAN, INFO, "Send NDI Delete Rsp event\n");
 
-	wiphy = priv_to_wiphy(prAdapter->prGlueInfo);
+	wiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
 	wdev = (wlanGetNetDev(prAdapter->prGlueInfo, AIS_DEFAULT_INDEX))
 		       ->ieee80211_ptr;
 	u2CreateRspLen = (3 * sizeof(uint32_t)) + sizeof(uint16_t) +
@@ -324,7 +344,7 @@ nanNdpInitiatorRspEvent(struct ADAPTER *prAdapter,
 
 	DBGLOG(NAN, INFO, "[%s] Send NDP Initiator Rsp event\n", __func__);
 
-	wiphy = priv_to_wiphy(prAdapter->prGlueInfo);
+	wiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
 	wdev = (wlanGetNetDev(prAdapter->prGlueInfo, AIS_DEFAULT_INDEX))
 		       ->ieee80211_ptr;
 	u2InitiatorRspLen = (4 * sizeof(uint32_t)) + (1 * sizeof(uint16_t)) +
@@ -422,11 +442,11 @@ nanNdpResponderRspEvent(struct ADAPTER *prAdapter,
 
 	DBGLOG(NAN, INFO, "Send NDP Response event\n");
 
-	wiphy = priv_to_wiphy(prAdapter->prGlueInfo);
+	wiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
 	wdev = (wlanGetNetDev(prAdapter->prGlueInfo, AIS_DEFAULT_INDEX))
 		       ->ieee80211_ptr;
-	u2ResponderRspLen = (3 * sizeof(uint32_t)) + sizeof(uint16_t) +
-			    (4 * NLA_HDRLEN) + NLMSG_HDRLEN;
+	u2ResponderRspLen = (5 * sizeof(uint32_t)) + sizeof(uint16_t) +
+			    MAC_ADDR_LEN + (4 * NLA_HDRLEN) + NLMSG_HDRLEN;
 
 	skb = kalCfg80211VendorEventAlloc(wiphy, wdev, u2ResponderRspLen,
 					  WIFI_EVENT_SUBCMD_NDP, GFP_KERNEL);
@@ -446,6 +466,29 @@ nanNdpResponderRspEvent(struct ADAPTER *prAdapter,
 
 	if (unlikely(nla_put_u16(skb, MTK_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID,
 				 prNDP->u2TransId) < 0)) {
+		DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+		kfree_skb(skb);
+		return -EFAULT;
+	}
+
+	if (unlikely(nla_put_u32(skb,
+				 MTK_WLAN_VENDOR_ATTR_NDP_SERVICE_INSTANCE_ID,
+				 prNDP->ucPublishId) < 0)) {
+		DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+		kfree_skb(skb);
+		return -EFAULT;
+	}
+
+	if (unlikely(nla_put_u32(skb, MTK_WLAN_VENDOR_ATTR_NDP_INSTANCE_ID,
+				 prNDP->ucNDPID) < 0)) {
+		DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+		kfree_skb(skb);
+		return -EFAULT;
+	}
+
+	if (unlikely(nla_put(skb,
+			     MTK_WLAN_VENDOR_ATTR_NDP_PEER_DISCOVERY_MAC_ADDR,
+			     MAC_ADDR_LEN, prNDP->aucPeerNDIAddr) < 0)) {
 		DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
 		kfree_skb(skb);
 		return -EFAULT;
@@ -507,7 +550,7 @@ nanNdpEndRspEvent(struct ADAPTER *prAdapter, struct _NAN_NDP_INSTANCE_T *prNDP,
 
 	DBGLOG(NAN, INFO, "Send NDI End Rsp event\n");
 
-	wiphy = priv_to_wiphy(prAdapter->prGlueInfo);
+	wiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
 	wdev = (wlanGetNetDev(prAdapter->prGlueInfo, AIS_DEFAULT_INDEX))
 		       ->ieee80211_ptr;
 	u2EndRspLen = (3 * sizeof(uint32_t)) + sizeof(uint16_t) +
@@ -558,6 +601,105 @@ nanNdpEndRspEvent(struct ADAPTER *prAdapter, struct _NAN_NDP_INSTANCE_T *prNDP,
 	}
 	if (unlikely(nla_put_u16(skb, MTK_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID,
 				 prNDP->u2TransId) < 0)) {
+		DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+		kfree_skb(skb);
+		return -EFAULT;
+	}
+
+	cfg80211_vendor_event(skb, GFP_KERNEL);
+	return WLAN_STATUS_SUCCESS;
+}
+
+/*----------------------------------------------------------------------------*/
+/*!
+ * \brief After Out-of-bound Action frame TxDone, send ack response to wifi hal
+ *
+ * \param[in]
+ *
+ * \return WLAN_STATUS
+ */
+/*----------------------------------------------------------------------------*/
+uint32_t
+nanNdpOOBActionTxDoneEvent(struct ADAPTER *prAdapter,
+			uint16_t ucTokenId,
+			uint32_t rTxDoneStatus)
+{
+	struct sk_buff *skb = NULL;
+	struct wiphy *wiphy;
+	struct wireless_dev *wdev;
+	uint16_t u2OOBActionTxDoneLen;
+
+	if (prAdapter == NULL) {
+		DBGLOG(NAN, ERROR, "[%s] prAdapter is NULL\n", __func__);
+		return WLAN_STATUS_INVALID_DATA;
+	}
+
+	DBGLOG(NAN, ERROR,
+		"Send OOB Action tx done event rTxDoneStatus: %d\n",
+		rTxDoneStatus);
+	DBGLOG(NAN, INFO, "Send OOB Action frame tx done event\n");
+
+	wiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
+	wdev = (wlanGetNetDev(prAdapter->prGlueInfo, AIS_DEFAULT_INDEX))
+		       ->ieee80211_ptr;
+	u2OOBActionTxDoneLen = (3 * sizeof(uint32_t)) + (2 * sizeof(uint16_t)) +
+			    (4 * NLA_HDRLEN) + NLMSG_HDRLEN;
+
+	skb = kalCfg80211VendorEventAlloc(wiphy, wdev, u2OOBActionTxDoneLen,
+					  WIFI_EVENT_SUBCMD_NDP, GFP_KERNEL);
+
+	if (!skb) {
+		DBGLOG(REQ, ERROR, "Allocate skb failed\n");
+		return -ENOMEM;
+	}
+
+	if (unlikely(nla_put_u32(skb, MTK_WLAN_VENDOR_ATTR_NDP_SUBCMD,
+			MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_TX_STATUS) <
+			0)) {
+		DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+		kfree_skb(skb);
+		return -EFAULT;
+	}
+
+	/* to pass sanity check, put 20 (OOB Action Tx) in transaction id */
+	if (unlikely(nla_put_u16(skb, MTK_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID,
+				 20) < 0)) {
+		DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+		kfree_skb(skb);
+		return -EFAULT;
+	}
+
+	if (unlikely(nla_put_u16(skb, MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_TOKEN,
+				 ucTokenId) < 0)) {
+		DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+		kfree_skb(skb);
+		return -EFAULT;
+	}
+
+	/* prNDP no NanInternalStatusType field,
+	 * set NAN_I_STATUS_SUCCESS and NAN_I_STATUS_TIMEOUT as workaround
+	 */
+	if (rTxDoneStatus == WLAN_STATUS_SUCCESS) {
+		if (unlikely(nla_put_u32(skb,
+			    MTK_WLAN_VENDOR_ATTR_NDP_DRV_RESPONSE_STATUS_TYPE,
+			    NAN_I_STATUS_SUCCESS) < 0)) {
+			DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+			kfree_skb(skb);
+			return -EFAULT;
+		}
+	} else {
+		if (unlikely(nla_put_u32(skb,
+			    MTK_WLAN_VENDOR_ATTR_NDP_DRV_RESPONSE_STATUS_TYPE,
+			    NAN_I_STATUS_TIMEOUT) < 0)) {
+			DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+			kfree_skb(skb);
+			return -EFAULT;
+		}
+	}
+
+	/* to pass sanity check, put 0 (success) in DRV_RETURN_VALUE */
+	if (unlikely(nla_put_u32(skb, MTK_WLAN_VENDOR_ATTR_NDP_DRV_RETURN_VALUE,
+				 0) < 0)) {
 		DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
 		kfree_skb(skb);
 		return -EFAULT;
@@ -683,7 +825,7 @@ nanNdpInitiatorReqHandler(struct GLUE_INFO *prGlueInfo, struct nlattr **tb) {
 	struct _NAN_CMD_DATA_REQUEST rNanCmdDataRequest;
 	struct NanDataReqReceive rDataRcv;
 	uint32_t rStatus = WLAN_STATUS_SUCCESS;
-	uint8_t aucPassphrase[64];
+	uint8_t aucPassphrase[64] = {0};
 	uint8_t aucSalt[] = { 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
 				 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
@@ -811,7 +953,6 @@ nanNdpInitiatorReqHandler(struct GLUE_INFO *prGlueInfo, struct nlattr **tb) {
 			kalMemCopy(rNanCmdDataRequest.aucSpecificInfo,
 				nla_data(tb[MTK_WLAN_VENDOR_ATTR_NDP_APP_INFO]),
 				nla_len(tb[MTK_WLAN_VENDOR_ATTR_NDP_APP_INFO]));
-
 		DBGLOG(NAN, INFO, "[%s] AppInfoLen = %d\n",
 			__func__, rNanCmdDataRequest.u2SpecificInfoLength);
 		}
@@ -853,7 +994,7 @@ uint32_t
 nanNdpResponderReqHandler(struct GLUE_INFO *prGlueInfo, struct nlattr **tb) {
 	struct _NAN_CMD_DATA_RESPONSE rNanCmdDataResponse;
 	uint32_t rStatus = WLAN_STATUS_SUCCESS;
-	uint8_t aucPassphrase[64];
+	uint8_t aucPassphrase[64] = {0};
 	uint8_t aucSalt[] = { 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
 				 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 	struct BSS_INFO *prBssInfo;
@@ -908,7 +1049,7 @@ nanNdpResponderReqHandler(struct GLUE_INFO *prGlueInfo, struct nlattr **tb) {
 
 	/* Get transaction ID */
 	if (tb[MTK_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID]) {
-		rNanCmdDataResponse.u2NdpTransactionId = nla_get_u32(
+		rNanCmdDataResponse.u2NdpTransactionId = nla_get_u16(
 			tb[MTK_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID]);
 		DBGLOG(NAN, ERROR, "Get NDP Transaction ID =%d\n",
 			rNanCmdDataResponse.u2NdpTransactionId);
@@ -923,9 +1064,13 @@ nanNdpResponderReqHandler(struct GLUE_INFO *prGlueInfo, struct nlattr **tb) {
 	}
 
 	/* Security type */
-	if (tb[MTK_WLAN_VENDOR_ATTR_NDP_CSID])
+	if (tb[MTK_WLAN_VENDOR_ATTR_NDP_CSID]) {
 		rNanCmdDataResponse.ucSecurity =
 			nla_get_u32(tb[MTK_WLAN_VENDOR_ATTR_NDP_CSID]);
+		DBGLOG(NAN, INFO,
+			"[Data Resp] Security: %d\n",
+			rNanCmdDataResponse.ucSecurity);
+	}
 
 	/* App Info */
 	if (tb[MTK_WLAN_VENDOR_ATTR_NDP_APP_INFO]) {
@@ -979,14 +1124,15 @@ nanNdpResponderReqHandler(struct GLUE_INFO *prGlueInfo, struct nlattr **tb) {
 			   nla_data(tb[MTK_WLAN_VENDOR_ATTR_NDP_PMK]),
 			   nla_len(tb[MTK_WLAN_VENDOR_ATTR_NDP_PMK]));
 #if (ENABLE_SEC_UT_LOG == 1)
-		DBGLOG(NAN, INFO, "PMK from APP\n");
+		DBGLOG(NAN, INFO,
+			"[Data Resp] PMK from APP\n");
 		dumpMemory8(nla_data(tb[MTK_WLAN_VENDOR_ATTR_NDP_PMK]),
 			    nla_len(tb[MTK_WLAN_VENDOR_ATTR_NDP_PMK]));
 #endif
 	}
 	/* PASSPHRASE */
 	if (tb[MTK_WLAN_VENDOR_ATTR_NDP_PASSPHRASE]) {
-		DBGLOG(NAN, INFO, "[%s] PASSPHRASE\n", __func__);
+		DBGLOG(NAN, INFO, "[Data Resp] PASSPHRASE\n");
 		kalMemCopy(aucPassphrase,
 			   nla_data(tb[MTK_WLAN_VENDOR_ATTR_NDP_PASSPHRASE]),
 			   nla_len(tb[MTK_WLAN_VENDOR_ATTR_NDP_PASSPHRASE]));
@@ -1055,7 +1201,7 @@ nanNdpEndReqHandler(struct GLUE_INFO *prGlueInfo, struct nlattr **tb) {
 
 	/* Get transaction ID */
 	if (tb[MTK_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID]) {
-		rNanCmdDataEnd.u2NdpTransactionId = nla_get_u32(
+		rNanCmdDataEnd.u2NdpTransactionId = nla_get_u16(
 			tb[MTK_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID]);
 		DBGLOG(NAN, ERROR, "Get NDP Transaction ID =%d\n",
 			rNanCmdDataEnd.u2NdpTransactionId);
@@ -1067,6 +1213,130 @@ nanNdpEndReqHandler(struct GLUE_INFO *prGlueInfo, struct nlattr **tb) {
 			i * sizeof(uint32_t));
 		rStatus = nanCmdDataEnd(prGlueInfo->prAdapter, &rNanCmdDataEnd);
 	}
+	return rStatus;
+}
+
+/*----------------------------------------------------------------------------*/
+/*!
+ * \brief Handle NDP initiator request vendor cmd.
+ *
+ * \param[in] prGlueInfo: Pointer to glue info structure.
+ *
+ * \param[in] tb: NDP vendor cmd attributes.
+ *
+ * \return WLAN_STATUS
+ */
+/*----------------------------------------------------------------------------*/
+uint32_t
+nanNdpOOBActionTxHandler(struct GLUE_INFO *prGlueInfo, struct nlattr **tb)
+{
+	uint32_t rStatus = WLAN_STATUS_SUCCESS;
+	struct ADAPTER *prAdapter = NULL;
+	struct BSS_INFO *prBssInfo = NULL;
+	struct _NAN_SPECIFIC_BSS_INFO_T *prNanSpecificBssInfo = NULL;
+	struct _NAN_CMD_OOB_ACTION *prNanCmdOOBAction = NULL;
+
+	prAdapter = prGlueInfo->prAdapter;
+	if (prAdapter == NULL) {
+		DBGLOG(NAN, ERROR, "prAdapter is null\n");
+		return -EINVAL;
+	}
+
+	/* Get BSS info */
+	prNanSpecificBssInfo = nanGetSpecificBssInfo(
+		prAdapter,
+		NAN_BSS_INDEX_BAND0);
+	if (prNanSpecificBssInfo == NULL) {
+		DBGLOG(NAN, ERROR, "prNanSpecificBssInfo is null\n");
+		return -EINVAL;
+	}
+
+	prBssInfo = GET_BSS_INFO_BY_INDEX(
+			prAdapter,
+			prNanSpecificBssInfo->ucBssIndex);
+	if (prBssInfo == NULL) {
+		DBGLOG(NAN, ERROR, "prBssInfo is null\n");
+		return -EINVAL;
+	}
+
+	prNanCmdOOBAction = &prAdapter->rNanCmdOOBAction;
+	kalMemZero(prNanCmdOOBAction, sizeof(struct _NAN_CMD_OOB_ACTION));
+
+	/* Get transaction ID */
+	if (!tb[MTK_WLAN_VENDOR_ATTR_NDP_TRANSACTION_ID]) {
+		DBGLOG(NAN, ERROR, "Get NDP Transaction ID error!\n");
+		return -EINVAL;
+	}
+
+	if (!tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_PAYLOAD]) {
+		DBGLOG(NAN, ERROR, "Get OOB action frame payload error!\n");
+		return -EINVAL;
+	}
+
+	if (tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_DEST_MAC_ADDR]) {
+		kalMemCopy(
+			prNanCmdOOBAction->aucDestAddress,
+			nla_data(
+			tb[
+			MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_DEST_MAC_ADDR]),
+			NAN_MAC_ADDR_LEN);
+	}
+
+	if (tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_SRC_MAC_ADDR]) {
+		kalMemCopy(
+			prNanCmdOOBAction->aucSrcAddress,
+			nla_data(
+			tb[
+			MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_SRC_MAC_ADDR]),
+			NAN_MAC_ADDR_LEN);
+	}
+
+	if (tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_SRC_MAC_ADDR]) {
+		kalMemCopy(
+			prNanCmdOOBAction->aucBssid,
+			nla_data(
+				tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_BSSID]),
+			NAN_MAC_ADDR_LEN);
+	}
+
+	if (tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_MAP_ID]) {
+		prNanCmdOOBAction->ucMapId =
+			nla_get_u8(
+			tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_MAP_ID]);
+	}
+
+	if (tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_TIMEOUT]) {
+		prNanCmdOOBAction->ucTimeout =
+			nla_get_u16(
+			tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_TIMEOUT]);
+	}
+
+	if (tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_SECURITY]) {
+		prNanCmdOOBAction->ucSecurity =
+			nla_get_u8(
+			tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_SECURITY]);
+	}
+
+	if (tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_TOKEN]) {
+		prNanCmdOOBAction->ucToken =
+			nla_get_u16(
+			tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_TOKEN]);
+	}
+
+	prNanCmdOOBAction->ucPayloadLen = nla_len(
+		tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_PAYLOAD]);
+
+	kalMemCopy(
+		prNanCmdOOBAction->aucPayload,
+		nla_data(
+			tb[MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_PAYLOAD]),
+			prNanCmdOOBAction->ucPayloadLen);
+
+	prAdapter->ucNanOobNum++;
+	DBGLOG(NAN, LOUD, "OOB frame dump: len[%d] wait[%d]\n",
+		prNanCmdOOBAction->ucPayloadLen,
+		prAdapter->ucNanOobNum);
+
 	return rStatus;
 }
 
@@ -1106,11 +1376,11 @@ nanNdpDataIndEvent(IN struct ADAPTER *prAdapter,
 		return WLAN_STATUS_FAILURE;
 	}
 
-	wiphy = priv_to_wiphy(prAdapter->prGlueInfo);
+	wiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
 	wdev = (wlanGetNetDev(prAdapter->prGlueInfo, AIS_DEFAULT_INDEX))
 		       ->ieee80211_ptr;
-	u2IndiEventLen = (3 * sizeof(uint32_t)) + (2 * MAC_ADDR_LEN) +
-			 prNDP->u2AppInfoLen + NAN_SCID_DEFAULT_LEN +
+	u2IndiEventLen = (5 * sizeof(uint32_t)) + (2 * MAC_ADDR_LEN) +
+			 prNDP->u2AttrListLength + NAN_SCID_DEFAULT_LEN +
 			 (6 * NLA_HDRLEN) + NLMSG_HDRLEN;
 
 	skb = kalCfg80211VendorEventAlloc(wiphy, wdev, u2IndiEventLen,
@@ -1142,7 +1412,7 @@ nanNdpDataIndEvent(IN struct ADAPTER *prAdapter,
 		kfree_skb(skb);
 		return -EFAULT;
 	}
-	kalMemCopy(g_InitiatorMacAddr, prNDP->aucPeerNDIAddr, MAC_ADDR_LEN);
+
 	DBGLOG(NAN, INFO, "[%s] gInitiatorMacAddr = " MACSTR "\n", __func__,
 	       MAC2STR(g_InitiatorMacAddr));
 
@@ -1161,7 +1431,44 @@ nanNdpDataIndEvent(IN struct ADAPTER *prAdapter,
 		return -EFAULT;
 	}
 
-	if (prNDP->u2PeerAppInfoLen) {
+	if (prNDP->fgSecurityRequired) {
+		if (unlikely(nla_put_u32(skb,
+				MTK_WLAN_VENDOR_ATTR_NDP_CONFIG_SECURITY,
+				NAN_DP_CONFIG_SECURITY) < 0)) {
+			DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+			kfree_skb(skb);
+			return -EFAULT;
+		}
+	} else {
+		if (unlikely(nla_put_u32(skb,
+				MTK_WLAN_VENDOR_ATTR_NDP_CONFIG_SECURITY,
+				NAN_DP_CONFIG_NO_SECURITY) < 0)) {
+			DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+			kfree_skb(skb);
+			return -EFAULT;
+		}
+	}
+
+	if (prNDP->fgQoSRequired) {
+		if (unlikely(nla_put_u32(skb,
+				MTK_WLAN_VENDOR_ATTR_NDP_CONFIG_QOS,
+				NAN_DP_CONFIG_QOS) < 0)) {
+			DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+			kfree_skb(skb);
+			return -EFAULT;
+		}
+	} else {
+		if (unlikely(nla_put_u32(skb,
+				MTK_WLAN_VENDOR_ATTR_NDP_CONFIG_QOS,
+				NAN_DP_CONFIG_NO_QOS) < 0)) {
+			DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+			kfree_skb(skb);
+			return -EFAULT;
+		}
+	}
+
+#if 0
+	if (prNDP->pucPeerAppInfo) {
 		if (unlikely(nla_put(skb, MTK_WLAN_VENDOR_ATTR_NDP_APP_INFO,
 				     prNDP->u2PeerAppInfoLen,
 				     prNDP->pucPeerAppInfo) < 0)) {
@@ -1170,6 +1477,20 @@ nanNdpDataIndEvent(IN struct ADAPTER *prAdapter,
 			return -EFAULT;
 		}
 	}
+#endif
+	if (prNDP->pucAttrList) {
+		if (unlikely(nla_put(skb, MTK_WLAN_VENDOR_ATTR_NDP_APP_INFO,
+				prNDP->u2AttrListLength,
+				prNDP->pucAttrList) < 0)) {
+			DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+			kfree_skb(skb);
+			return -EFAULT;
+		}
+	}
+
+	if (prNDP->pucAttrList)
+		DBGLOG(NAN, INFO, "[%s] u2PeerAppInfoLen = %d\n", __func__,
+		prNDP->u2AttrListLength);
 
 /* Todo:
  * 1. QoS currently not support.
@@ -1231,7 +1552,7 @@ nanNdpDataConfirmEvent(IN struct ADAPTER *prAdapter,
 		return WLAN_STATUS_FAILURE;
 	}
 
-	wiphy = priv_to_wiphy(prAdapter->prGlueInfo);
+	wiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
 	wdev = (wlanGetNetDev(prAdapter->prGlueInfo, AIS_DEFAULT_INDEX))
 		       ->ieee80211_ptr;
 	u2ConfirmEventLen = (4 * sizeof(uint32_t)) + MAC_ADDR_LEN +
@@ -1280,7 +1601,7 @@ nanNdpDataConfirmEvent(IN struct ADAPTER *prAdapter,
 	if (prNDP->fgCarryIPV6)
 		DBGLOG(NAN, INFO, "[%s] fgCarryIPV6 = %d\n",
 		__func__, prNDP->aucRspInterfaceId);
-
+#if 0
 	if (prNDP->pucPeerAppInfo &&
 	    unlikely(nla_put(skb, MTK_WLAN_VENDOR_ATTR_NDP_APP_INFO,
 	    prNDP->u2PeerAppInfoLen,
@@ -1293,6 +1614,20 @@ nanNdpDataConfirmEvent(IN struct ADAPTER *prAdapter,
 	if (prNDP->pucPeerAppInfo)
 		DBGLOG(NAN, INFO, "[%s] u2PeerAppInfoLen = %d\n", __func__,
 		prNDP->u2PeerAppInfoLen);
+#endif
+	if (prNDP->pucAttrList) {
+		if (unlikely(nla_put(skb, MTK_WLAN_VENDOR_ATTR_NDP_APP_INFO,
+				prNDP->u2AttrListLength,
+				prNDP->pucAttrList) < 0)) {
+			DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+			kfree_skb(skb);
+			return -EFAULT;
+		}
+	}
+
+	if (prNDP->pucAttrList)
+		DBGLOG(NAN, INFO, "[%s] u2PeerAppInfoLen = %d\n", __func__,
+		prNDP->u2AttrListLength);
 
 	if (unlikely(nla_put_u32(skb, MTK_WLAN_VENDOR_ATTR_NDP_RESPONSE_CODE,
 				 prNDP->ucReasonCode) < 0)) {
@@ -1349,13 +1684,17 @@ nanNdpDataTerminationEvent(IN struct ADAPTER *prAdapter,
 		return WLAN_STATUS_INVALID_DATA;
 	}
 
+	*pu2NDPInstance = prNDP->ucNDPID;
+
 	DBGLOG(NAN, INFO, "Send NDP Data Termination event\n");
 
-	wiphy = priv_to_wiphy(prAdapter->prGlueInfo);
+	wiphy = GLUE_GET_WIPHY(prAdapter->prGlueInfo);
 	wdev = (wlanGetNetDev(prAdapter->prGlueInfo, AIS_DEFAULT_INDEX))
 		       ->ieee80211_ptr;
 	u2ConfirmEventLen = sizeof(uint32_t) + NLMSG_HDRLEN + (2 * NLA_HDRLEN) +
-			    1 * sizeof(*pu2NDPInstance);
+			    sizeof(*pu2NDPInstance) +
+			    NAN_MAC_ADDR_LEN +
+			    sizeof(uint16_t);
 
 	skb = kalCfg80211VendorEventAlloc(wiphy, wdev, u2ConfirmEventLen,
 					  WIFI_EVENT_SUBCMD_NDP, GFP_KERNEL);
@@ -1375,6 +1714,20 @@ nanNdpDataTerminationEvent(IN struct ADAPTER *prAdapter,
 	if (unlikely(nla_put(skb, MTK_WLAN_VENDOR_ATTR_NDP_INSTANCE_ID_ARRAY,
 			     1 * sizeof(*pu2NDPInstance),
 			     pu2NDPInstance) < 0)) {
+		DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+		kfree_skb(skb);
+		return -EFAULT;
+	}
+
+	if (unlikely(nla_put_u16(skb, MTK_WLAN_VENDOR_ATTR_NDP_PUB_ID,
+				 prNDP->ucPublishId) < 0)) {
+		DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
+		kfree_skb(skb);
+		return -EFAULT;
+	}
+
+	if (unlikely(nla_put(skb, MTK_WLAN_VENDOR_ATTR_NDP_NDI_MAC_ADDR,
+			     MAC_ADDR_LEN, prNDP->aucPeerNDIAddr) < 0)) {
 		DBGLOG(REQ, ERROR, "nla_put_nohdr failed\n");
 		kfree_skb(skb);
 		return -EFAULT;
@@ -1425,7 +1778,7 @@ mtk_cfg80211_vendor_ndp(struct wiphy *wiphy, struct wireless_dev *wdev,
 		return -EINVAL;
 	}
 
-	prGlueInfo = (struct GLUE_INFO *)wiphy_priv(wiphy);
+	WIPHY_PRIV(wiphy, prGlueInfo);
 	if (prGlueInfo == NULL) {
 		DBGLOG(NAN, ERROR, "[%s] prGlueInfo is NULL\n", __func__);
 		return -EINVAL;
@@ -1467,6 +1820,10 @@ mtk_cfg80211_vendor_ndp(struct wiphy *wiphy, struct wireless_dev *wdev,
 	/* Command to initiate a NAN data path end */
 	case MTK_WLAN_VENDOR_ATTR_NDP_END_REQUEST:
 		rStatus = nanNdpEndReqHandler(prGlueInfo, tb);
+		break;
+	/* Command to initiate a Out-of-bound action frame tx */
+	case MTK_WLAN_VENDOR_ATTR_NDP_OOB_ACTION_TX:
+		rStatus = nanNdpOOBActionTxHandler(prGlueInfo, tb);
 		break;
 	default:
 		return -EOPNOTSUPP;

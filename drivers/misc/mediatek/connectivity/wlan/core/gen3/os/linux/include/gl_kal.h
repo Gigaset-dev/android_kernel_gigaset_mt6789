@@ -1242,6 +1242,8 @@ VOID nicConfigProcSetCamCfgWrite(BOOLEAN enabled);
 VOID kalSetEmiMpuProtection(phys_addr_t emiPhyBase, UINT_32 size, BOOLEAN enable);
 BOOLEAN kalIsValidMacAddr(IN const UINT_8 *addr);
 
+int kalMaskMemCmp(const void *cs, const void *ct, const void *mask, size_t count);
+
 BOOLEAN kalScanParseRandomMac(
 	IN P_GLUE_INFO_T prGlueInfo,
 	IN struct cfg80211_scan_request *request,

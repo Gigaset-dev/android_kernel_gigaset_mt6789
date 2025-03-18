@@ -1064,7 +1064,10 @@ int mtk_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev, struct cf
 				break;
 #endif
 			case WLAN_AKM_SUITE_SAE:
-				eAuthMode = AUTH_MODE_WPA3_SAE;
+				if (sme->auth_type == NL80211_AUTHTYPE_SAE)
+					eAuthMode = AUTH_MODE_WPA3_SAE;
+				else
+					eAuthMode = AUTH_MODE_OPEN;
 				u4AkmSuite = RSN_CIPHER_SUITE_SAE;
 				break;
 			case WLAN_AKM_SUITE_OWE:
@@ -1318,6 +1321,9 @@ int mtk_cfg80211_connect(struct wiphy *wiphy, struct net_device *ndev, struct cf
 
 	rNewSsid.u4CenterFreq = sme->channel ? sme->channel->center_freq : 0;
 	rNewSsid.pucBssid = (UINT_8 *)sme->bssid;
+#if KERNEL_VERSION(3, 15, 0) <= CFG80211_VERSION_CODE
+	rNewSsid.pucBssidHint = (uint8_t *)sme->bssid_hint;
+#endif
 	rNewSsid.pucSsid = (UINT_8 *)sme->ssid;
 	rNewSsid.u4SsidLen = sme->ssid_len;
 
@@ -1621,7 +1627,31 @@ int mtk_cfg80211_set_pmksa(struct wiphy *wiphy, struct net_device *ndev, struct 
 /*----------------------------------------------------------------------------*/
 int mtk_cfg80211_del_pmksa(struct wiphy *wiphy, struct net_device *ndev, struct cfg80211_pmksa *pmksa)
 {
+	P_GLUE_INFO_T prGlueInfo = NULL;
+	uint32_t rStatus;
+	uint32_t u4BufLen;
+	PARAM_PMKID_T rPmkid;
+	uint8_t ucBssIndex = 0;
 
+	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
+	ASSERT(prGlueInfo);
+
+	DBGLOG(REQ, INFO, "mtk_cfg80211_del_pmksa " MACSTR "\n",
+		MAC2STR(pmksa->bssid));
+
+	if (!IS_BSS_INDEX_VALID(ucBssIndex) || pmksa == NULL)
+		return -EINVAL;
+
+	rPmkid.u4Length = sizeof(PARAM_PMKID_T);
+	rPmkid.u4BSSIDInfoCount = 1;
+	COPY_MAC_ADDR(rPmkid.arBSSIDInfo->arBSSID, pmksa->bssid);
+	kalMemCopy(rPmkid.arBSSIDInfo->arPMKID, pmksa->pmkid, IW_PMKID_LEN);
+
+	rStatus = kalIoctl(prGlueInfo, wlanoidDelPmkid, &rPmkid,
+			   sizeof(PARAM_PMKID_T),
+			   FALSE, FALSE, FALSE, &u4BufLen);
+	if (rStatus != WLAN_STATUS_SUCCESS)
+		DBGLOG(INIT, ERROR, "add pmkid error:%x\n", rStatus);
 	return 0;
 }
 

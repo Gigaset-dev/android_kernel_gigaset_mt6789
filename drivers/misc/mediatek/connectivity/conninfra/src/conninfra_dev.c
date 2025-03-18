@@ -185,8 +185,10 @@ struct wmt_platform_bridge g_plat_bridge = {
 #else
 	.conninfra_reg_is_bus_hang_cb = conninfra_conn_is_bus_hang,
 #endif
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0))
 	.debug_write_cb = conninfra_dbg_write,
 	.debug_read_cb = conninfra_dbg_read,
+#endif
 };
 
 
@@ -215,11 +217,18 @@ static struct conninfra_dev_cb g_conninfra_dev_cb = {
 	.conninfra_pmic_event_notifier = conninfra_dev_pmic_event_cb,
 };
 
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+static int conninfra_thermal_get_temp_cb(struct thermal_zone_device *tz,
+		int *temp);
+static const struct thermal_zone_device_ops tz_conninfra_thermal_ops = {
+	.get_temp = conninfra_thermal_get_temp_cb,
+};
+#else
 static int conninfra_thermal_get_temp_cb(void *data, int *temp);
 static const struct thermal_zone_of_device_ops tz_conninfra_thermal_ops = {
 	.get_temp = conninfra_thermal_get_temp_cb,
 };
-
+#endif
 
 /*******************************************************************************
 *                              F U N C T I O N S
@@ -339,7 +348,9 @@ static int conninfra_mmap(struct file *pFile, struct vm_area_struct *pVma)
 		pVma->vm_start, pVma->vm_end,
 		pVma->vm_end - pVma->vm_start, bufId);
 
+#if (KERNEL_VERSION(5, 10, 0) >= LINUX_VERSION_CODE)
 	pVma->vm_flags &= ~(VM_WRITE | VM_MAYWRITE);
+#endif
 
 	if (bufId == 0) {
 		if (pVma->vm_end - pVma->vm_start > addr_info->emi_size)
@@ -459,7 +470,12 @@ static int conninfra_thermal_query_cb(void)
 }
 
 /* for Linux thermal framework */
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+static int conninfra_thermal_get_temp_cb(struct thermal_zone_device *tz,
+		int *temp)
+#else
 static int conninfra_thermal_get_temp_cb(void *data, int *temp)
+#endif
 {
 	int ret;
 
@@ -497,8 +513,13 @@ static void conninfra_register_thermal_callback(void)
 	}
 
 	/* register thermal zone */
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	tz = devm_thermal_of_zone_register(
+		&pdev->dev, 0, NULL, &tz_conninfra_thermal_ops);
+#else
 	tz = devm_thermal_zone_of_sensor_register(
 		&pdev->dev, 0, NULL, &tz_conninfra_thermal_ops);
+#endif
 
 	if (IS_ERR(tz)) {
 		ret = PTR_ERR(tz);
@@ -620,7 +641,7 @@ static void conninfra_register_power_throttling_callback(void)
 }
 
 /************************************************************************/
-static int conninfra_dev_do_drv_init()
+static int conninfra_dev_do_drv_init(void)
 {
 	static int init_done = 0;
 	int iret = 0;
@@ -724,7 +745,11 @@ static int conninfra_dev_init(void)
 		goto err1;
 	}
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,4,0))
+	pConninfraClass = class_create(CONNINFRA_DEVICE_NAME);
+#else
 	pConninfraClass = class_create(THIS_MODULE, CONNINFRA_DEVICE_NAME);
+#endif
 	if (IS_ERR(pConninfraClass)) {
 		pr_err("class create fail, error code(%ld)\n",
 						PTR_ERR(pConninfraClass));

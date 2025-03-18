@@ -30,6 +30,7 @@ enum fm_drv_err_t {
 	FM_EPATCH,
 	FM_ENOMEM,
 	FM_EINUSE,		/* other client is using this object */
+	FM_ENOVCN28,
 	FM_EMAX
 };
 

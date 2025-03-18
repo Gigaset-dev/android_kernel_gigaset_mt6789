@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
  * Copyright (c) 2021 MediaTek Inc.
  */
@@ -189,7 +189,8 @@ nanRangingInstanceInit(struct ADAPTER *prAdapter,
 	cnmTimerInitTimer(prAdapter,
 			  &(prRanging->ranging_ctrl.rRangingSessionTimer),
 			  (PFN_MGMT_TIMEOUT_FUNC)nanRangingSessionTimeout,
-			  (unsigned long)prRanging);
+			  (unsigned long)prRanging,
+			  TIMER_WAKELOCK_AUTO);
 
 	nanRangingFsmStep(prAdapter, prRanging, RANGING_STATE_INIT);
 }

@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/
  *      MT6620_WIFI_DRIVER_V2_3/include/nic/wlan_def.h#1
@@ -39,6 +40,10 @@
 #define DISCONNECT_REASON_CODE_REASSOCIATION    5
 #define DISCONNECT_REASON_CODE_ROAMING          6
 #define DISCONNECT_REASON_CODE_CHIPRESET        7
+#define DISCONNECT_REASON_CODE_LOCALLY            8
+#define DISCONNECT_REASON_CODE_RADIO_LOST_TX_ERR  9
+#define DISCONNECT_REASON_CODE_DEL_IFACE          10
+#define DISCONNECT_REASON_CODE_TEST_MODE          11
 
 /* The rate definitions */
 #define TX_MODE_CCK             0x00
@@ -365,7 +370,7 @@
 
 /* Authentication Retry Limit */
 #define TX_AUTH_ASSOCI_RETRY_LIMIT                  2
-#define TX_AUTH_ASSOCI_RETRY_LIMIT_FOR_ROAMING      1
+#define TX_AUTH_ASSOCI_RETRY_LIMIT_FOR_ROAMING      2
 
 /* WMM-2.2.1 WMM Information Element */
 #define ELEM_MAX_LEN_WMM_INFO       7

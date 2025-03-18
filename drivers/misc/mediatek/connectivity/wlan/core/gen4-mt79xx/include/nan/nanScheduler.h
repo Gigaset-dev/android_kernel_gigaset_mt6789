@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
  * Copyright (c) 2021 MediaTek Inc.
  */
@@ -11,6 +11,8 @@
 #define NAN_SEND_PKT_TIME_SLOT 16
 #define NAN_SEND_PKT_TIME_GUARD_TIME 2
 
+#define NAN_MAX_NDC_RECORD (NAN_MAX_CONN_CFG + 1) /* one for default NDC */
+
 /* the number of availability attribute per NAN station */
 #define NAN_NUM_AVAIL_DB 2
 /* the number of availability entry per NAN availability attribute */
@@ -20,7 +22,10 @@
 
 #define NAN_NUM_PEER_SCH_DESC 50
 
-#define NAN_TIMELINE_MGMT_CHNL_LIST_NUM 10 /* need to align with FW */
+#define NAN_TIMELINE_MGMT_SIZE          2  /* need to align with FW */
+#define NAN_TIMELINE_MGMT_CHNL_LIST_NUM 4 /* need to align with FW */
+
+#define NAN_MAX_POTENTIAL_CHNL_LIST 5
 
 #define NAN_CRB_NEGO_MAX_TRANSACTION 20
 
@@ -39,7 +44,7 @@
 	(NAN_TIME_BITMAP_CONTROL_SIZE + NAN_TIME_BITMAP_LENGTH_SIZE +          \
 	 NAN_TIME_BITMAP_MAX_SIZE)
 
-#define NAN_DEFAULT_MAP_ID 1
+#define NAN_DEFAULT_MAP_ID 0
 
 #define NAN_MAX_CONN_CFG 8 /* the max supported concurrent NAN data path */
 
@@ -50,11 +55,21 @@
 #define NAN_QOS_MIN_SLOTS_LOW_BOUND 1
 #define NAN_QOS_MIN_SLOTS_UP_BOUND 30
 #define NAN_DEFAULT_NDL_QUOTA_LOW_BOUND 3
-#define NAN_DEFAULT_NDL_QUOTA_UP_BOUND 30
+#define NAN_BITMAP_LOG "%08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x %08x"
+#if (CFG_SUPPORT_NAN_CUST_DW_CHNL == 0)
+#define NAN_DEFAULT_NDL_QUOTA_UP_BOUND 31
+#else
+#define NAN_DEFAULT_NDL_QUOTA_UP_BOUND 32
+#endif
 #define NAN_DEFAULT_RANG_QUOTA_LOW_BOUND 1
 #define NAN_DEFAULT_RANG_QUOTA_UP_BOUND 3
 
 #define NAN_INVALID_MAP_ID 0xFF
+
+#define NAN_MAX_DEFAULT_TIMELINE_NUM		2
+	/* Default timeline channel number */
+#define NAN_MAX_NONNAN_TIMELINE_NUM		1
+	/* Non-Nan timeline number */
 
 enum _NAN_CHNL_BW_MAP {
 	NAN_CHNL_BW_20 = 0,
@@ -89,6 +104,19 @@ union _NAN_BAND_CHNL_CTRL {
 	} rChannel;
 
 	uint32_t u4RawData;
+};
+
+union _NAN_AVAIL_ENTRY_CTRL {
+	struct {
+		uint16_t u2Type : 3;
+		uint16_t u2Preference : 2;
+		uint16_t u2Util : 3;
+		uint16_t u2RxNss : 4;
+		uint16_t u2TimeMapAvail : 1;
+		uint16_t u2Rsvd : 3;
+	} rField;
+
+	uint16_t u2RawData;
 };
 
 enum _ENUM_NAN_NEGO_TYPE_T {
@@ -145,6 +173,178 @@ struct _NAN_SCHED_EVENT_NAN_ATTR_T {
 	uint8_t aucNanAttr[1000];
 };
 
+enum _ENUM_NAN_SYNC_SCH_UPDATE_STATE_T {
+	ENUM_NAN_SYNC_SCH_UPDATE_STATE_IDLE = 0,
+	ENUM_NAN_SYNC_SCH_UPDATE_STATE_PREPARE,
+	ENUM_NAN_SYNC_SCH_UPDATE_STATE_CHECK,
+	ENUM_NAN_SYNC_SCH_UPDATE_STATE_RUN,
+	ENUM_NAN_SYNC_SCH_UPDATE_STATE_DONE, /* 4 */
+
+	ENUM_NAN_SYNC_SCH_UPDATE_STATE_NUM
+};
+
+enum _ENUM_NAN_WINDOW_T {
+	ENUM_NAN_DW,
+	ENUM_NAN_FAW,
+	ENUM_NAN_IDLE_WINDOW,
+};
+
+struct _NAN_DEVICE_CAPABILITY_T {
+	uint8_t fgValid;
+	uint8_t ucMapId;
+	uint8_t ucSupportedBand;
+	uint8_t ucOperationMode;
+	uint8_t ucDw24g;
+	uint8_t ucDw5g;
+	uint8_t ucOvrDw24gMapId;
+	uint8_t ucOvrDw5gMapId;
+	uint8_t ucNumTxAnt;
+	uint8_t ucNumRxAnt;
+	uint8_t ucCapabilitySet;
+
+	uint16_t u2MaxChnlSwitchTime;
+};
+
+struct _NAN_NDC_CTRL_T {
+	uint8_t fgValid;
+	uint8_t aucNdcId[NAN_NDC_ATTRIBUTE_ID_LENGTH];
+	uint8_t aucRsvd[1];
+	struct _NAN_SCHEDULE_TIMELINE_T arTimeline[NAN_TIMELINE_MGMT_SIZE];
+};
+
+struct _NAN_PEER_NDC_CTRL_T {
+	uint8_t fgValid;
+	uint8_t aucNdcId[NAN_NDC_ATTRIBUTE_ID_LENGTH];
+	uint8_t aucRsvd[1];
+	struct _NAN_SCHEDULE_TIMELINE_T arTimeline[NAN_NUM_AVAIL_DB];
+};
+
+struct _NAN_AVAILABILITY_TIMELINE_T {
+	uint8_t fgActive;
+
+	union _NAN_AVAIL_ENTRY_CTRL rEntryCtrl;
+
+	uint8_t ucNumBandChnlCtrl;
+	union _NAN_BAND_CHNL_CTRL arBandChnlCtrl[NAN_NUM_BAND_CHNL_ENTRY];
+
+	uint32_t au4AvailMap[NAN_TOTAL_DW];
+};
+
+struct _NAN_AVAILABILITY_DB_T {
+	uint8_t ucMapId;
+
+	struct _NAN_AVAILABILITY_TIMELINE_T
+		arAvailEntryList[NAN_NUM_AVAIL_TIMELINE];
+};
+
+struct _NAN_PEER_SCH_DESC_T {
+	struct LINK_ENTRY rLinkEntry;
+
+	uint8_t aucNmiAddr[MAC_ADDR_LEN];
+
+	OS_SYSTIME rUpdateTime;
+
+	uint8_t fgUsed;   /* indicate the SCH DESC is used by a SCH REC */
+	uint32_t u4SchIdx; /* valid only when fgUsed is TRUE */
+
+	uint32_t u4AvailAttrToken;
+	struct _NAN_AVAILABILITY_DB_T arAvailAttr[NAN_NUM_AVAIL_DB];
+
+	uint32_t u4DevCapAttrToken;
+	struct _NAN_DEVICE_CAPABILITY_T arDevCapability[NAN_NUM_AVAIL_DB + 1];
+
+	uint32_t u4QosMinSlots;
+	uint32_t u4QosMaxLatency;
+
+	/* for peer proposal cache during shedule negotiation */
+	struct _NAN_PEER_NDC_CTRL_T rSelectedNdcCtrl;
+
+	uint8_t fgImmuNdlTimelineValid;
+	struct _NAN_SCHEDULE_TIMELINE_T arImmuNdlTimeline[NAN_NUM_AVAIL_DB];
+
+	uint8_t fgRangingTimelineValid;
+	struct _NAN_SCHEDULE_TIMELINE_T arRangingTimeline[NAN_NUM_AVAIL_DB];
+};
+
+struct _NAN_CHANNEL_TIMELINE_T {
+	uint8_t fgValid;
+	uint8_t aucRsvd[1];
+	union _NAN_AVAIL_ENTRY_CTRL rEntryCtrl;
+	union _NAN_BAND_CHNL_CTRL rChnlInfo;
+
+	int32_t i4Num; /* track the number of slot in availability map */
+	uint32_t au4AvailMap[NAN_TOTAL_DW];
+};
+
+struct _NAN_TIMELINE_MGMT_T {
+	uint8_t ucMapId;
+
+	/* for committed availability type */
+	struct _NAN_CHANNEL_TIMELINE_T
+		arChnlList[NAN_TIMELINE_MGMT_CHNL_LIST_NUM];
+
+	/* for conditional availability type */
+	uint8_t fgChkCondAvailability;
+	struct _NAN_CHANNEL_TIMELINE_T
+		arCondChnlList[NAN_TIMELINE_MGMT_CHNL_LIST_NUM];
+
+	/* for custom committed FAW */
+	struct _NAN_CHANNEL_TIMELINE_T
+		arCustChnlList[NAN_TIMELINE_MGMT_CHNL_LIST_NUM];
+};
+
+/* NAN Scheduler Control Block */
+struct _NAN_SCHEDULER_T {
+	uint8_t fgInit;
+
+	uint8_t fgEn2g;
+	uint8_t fgEn5gH;
+	uint8_t fgEn5gL;
+
+	uint8_t ucNanAvailAttrSeqId; /* shared by all availability attr */
+	uint16_t u2NanAvailAttrControlField;     /* tracking changed flags */
+	uint16_t u2NanCurrAvailAttrControlField; /* tracking changed flags */
+
+	struct _NAN_NDC_CTRL_T arNdcCtrl[NAN_MAX_NDC_RECORD];
+
+	struct LINK rPeerSchDescList;
+	struct LINK rFreePeerSchDescList;
+	struct _NAN_PEER_SCH_DESC_T arPeerSchDescArray[NAN_NUM_PEER_SCH_DESC];
+
+	uint8_t fgAttrDevCapValid;
+	struct _NAN_ATTR_DEVICE_CAPABILITY_T rAttrDevCap;
+
+	uint32_t u4NumOfPotentialChnlList[NAN_TIMELINE_MGMT_SIZE];
+	struct _NAN_CHNL_ENTRY_T
+		arPotentialChnlList[NAN_TIMELINE_MGMT_SIZE]
+		[NAN_MAX_POTENTIAL_CHNL_LIST];
+
+	struct TIMER rAvailAttrCtrlResetTimer;
+
+	uint8_t ucCommitDwInterval;
+};
+
+struct _NAN_CUST_TIMELINE_PROFILE_T {
+	uint8_t ucChnl;
+	enum ENUM_BAND eBand;
+	uint32_t u4SlotBitmap;
+};
+
+struct _NAN_NONNAN_NETWORK_TIMELINE_T {
+	enum ENUM_NETWORK_TYPE eNetworkType;
+	union _NAN_BAND_CHNL_CTRL rChnlInfo;
+	uint32_t u4SlotBitmap;
+};
+
+struct _NAN_SCHED_EVENT_DEV_CAP_T {
+	uint16_t u2MaxChnlSwitchTimeUs;
+	uint8_t aucRsvd[2];
+};
+
+struct _NAN_SCHEDULER_T *nanGetScheduler(struct ADAPTER *prAdapter);
+struct _NAN_TIMELINE_MGMT_T *
+nanGetTimelineMgmt(struct ADAPTER *prAdapter, uint8_t ucIdx);
+
 uint32_t nanSchedNegoApplyCustChnlList(struct ADAPTER *prAdapter);
 
 uint32_t nanSchedInit(struct ADAPTER *prAdapter);
@@ -162,12 +362,13 @@ uint32_t nanSchedNegoGenLocalCrbProposal(struct ADAPTER *prAdapter);
 uint32_t nanSchedNegoChkRmtCrbProposal(struct ADAPTER *prAdapter,
 				       uint32_t *pu4RejectCode);
 
-unsigned char nanSchedNegoIsRmtCrbConflict(
+uint8_t nanSchedNegoIsRmtCrbConflict(
 	struct ADAPTER *prAdapter,
 	struct _NAN_SCHEDULE_TIMELINE_T arTimeline[NAN_NUM_AVAIL_DB],
-	unsigned char *pfgEmptyMapSet, uint32_t au4EmptyMap[NAN_TOTAL_DW]);
+	unsigned char *pfgEmptyMapSet,
+	uint32_t au4EmptyMap[NAN_TIMELINE_MGMT_SIZE][NAN_TOTAL_DW]);
 
-unsigned char nanSchedNegoInProgress(struct ADAPTER *prAdapter);
+uint8_t nanSchedNegoInProgress(struct ADAPTER *prAdapter);
 void nanSchedNegoStop(struct ADAPTER *prAdapter);
 uint32_t nanSchedNegoStart(
 	struct ADAPTER *prAdapter, uint8_t *pucNmiAddr,
@@ -241,7 +442,9 @@ uint32_t nanGetPeerDevCapability(struct ADAPTER *prAdapter,
 				 uint8_t *pucNmiAddr, uint8_t ucMapID,
 				 uint32_t *pu4RetValue);
 
-uint8_t nanGetPeerMinBw(struct ADAPTER *prAdapter, uint8_t *pucNmiAddr);
+uint8_t nanGetPeerMinBw(struct ADAPTER *prAdapter,
+			 uint8_t *pucNmiAddr,
+			 enum ENUM_BAND eBand);
 
 uint8_t nanGetPeerMaxBw(struct ADAPTER *prAdapter, uint8_t *pucNmiAddr);
 
@@ -249,23 +452,25 @@ uint32_t nanSchedDbgDumpPeerAvailability(struct ADAPTER *prAdapter,
 					 uint8_t *pucNmiAddr);
 
 enum _ENUM_NAN_WINDOW_T nanWindowType(struct ADAPTER *prAdapter,
-				      uint16_t u2SlotIdx);
+			      uint16_t u2SlotIdx, uint8_t ucTimeLineIdx);
 uint32_t nanUtilCheckBitOneCnt(struct ADAPTER *prAdapter, uint8_t *pucBitMask,
 			      uint32_t u4Size);
 void nanUtilDump(struct ADAPTER *prAdapter,
 		uint8_t *pucMsg, uint8_t *pucContent, uint32_t u4Length);
 uint32_t nanUtilCalAttributeToken(struct _NAN_ATTR_HDR_T *prNanAttr);
 
-unsigned char nanGetFeatureNDPE(struct ADAPTER *prAdapter);
-unsigned char nanGetFeaturePeerNDPE(struct ADAPTER *prAdapter,
+uint8_t nanGetFeatureNDPE(struct ADAPTER *prAdapter);
+uint8_t nanGetFeaturePeerNDPE(struct ADAPTER *prAdapter,
 		uint8_t *pucNmiAddr);
 
 union _NAN_BAND_CHNL_CTRL nanQueryChnlInfoBySlot(struct ADAPTER *prAdapter,
 		uint16_t u2SlotIdx,
 		uint32_t **ppau4AvailMap,
-		unsigned char fgCommitOrCond);
+		unsigned char fgCommitOrCond,
+		uint8_t ucTimeLineIdx);
 uint8_t nanQueryPrimaryChnlBySlot(struct ADAPTER *prAdapter,
-		uint16_t u2SlotIdx, unsigned char fgCommitOrCond);
+		uint16_t u2SlotIdx, unsigned char fgCommitOrCond,
+		uint8_t ucTimeLineIdx);
 union _NAN_BAND_CHNL_CTRL nanQueryPeerChnlInfoBySlot(struct ADAPTER *prAdapter,
 		uint32_t u4SchIdx,
 		uint32_t u4AvailDatabaseIdx,
@@ -306,7 +511,7 @@ uint32_t nanSchedCmdMapStaRecord(IN struct ADAPTER *prAdapter,
 				 enum NAN_BSS_ROLE_INDEX eRoleIdx,
 				 uint8_t ucStaRecIdx, uint8_t ucNdpCxtId);
 
-unsigned char
+uint8_t
 nanSchedPeerSchRecordIsValid(struct ADAPTER *prAdapter, uint32_t u4SchIdx);
 uint32_t
 nanSchedQueryStaRecIdx(struct ADAPTER *prAdapter, uint32_t u4SchIdx,
@@ -328,5 +533,63 @@ nanSchedGetSchRecBandByMac(struct ADAPTER *prAdapter, uint8_t *pucNmiAddr);
 
 extern union _NAN_BAND_CHNL_CTRL g_rNullChnl;
 
+enum _ENUM_NAN_SYNC_SCH_UPDATE_STATE_T
+nanSchedNegoSyncSchUpdateFsmStep(
+	IN struct ADAPTER *prAdapter,
+	IN enum _ENUM_NAN_SYNC_SCH_UPDATE_STATE_T eNextState);
+
+#if (CFG_SUPPORT_NAN_CUSTOMIZATION_VERSION == 1)
+uint32_t
+nanSchedInitDefChnlMap(struct ADAPTER *prAdapter);
+
+uint32_t
+nanSchedUpdateDefChnlInfo(struct ADAPTER *prAdapter);
+
+uint32_t
+nanSchedUpdateChnlInfoByAis(struct ADAPTER *prAdapter);
+
+uint32_t
+nanSchedFawDefConfigCmd(struct ADAPTER *prAdapter, uint8_t ucChnl,
+	enum ENUM_BAND eBand, uint32_t u4SlotBitmap, uint8_t ucApply);
+#endif /* (CFG_SUPPORT_NAN_CUSTOMIZATION_VERSION == 1) */
+
+#if (CFG_SUPPORT_NAN_AVAILABILITY_CONTROL_BY_UPPER_LAYER == 1)
+uint32_t
+nanSchedResetCommitedAvailability(struct ADAPTER *prAdapter);
+uint32_t
+nanSchedResetPotentialAvailability(struct ADAPTER *prAdapter);
+uint32_t
+nanSchedConfigCommitedAvailability(struct ADAPTER *prAdapter,
+	uint8_t ucMapIdx,
+	union _NAN_BAND_CHNL_CTRL rChnlInfo,
+	union _NAN_AVAIL_ENTRY_CTRL rEntryCtrl,
+	uint32_t *pu4AvailMap);
+uint32_t
+nanSchedConfigPotentialAvailability(struct ADAPTER *prAdapter,
+	uint8_t ucMapIdx,
+	union _NAN_BAND_CHNL_CTRL rChnlInfo,
+	union _NAN_AVAIL_ENTRY_CTRL rEntryCtrl,
+	uint32_t *pu4AvailMap);
+uint32_t
+nanSchedConfigNdcAvailability(struct ADAPTER *prAdapter,
+	uint8_t ucMapIdx,
+	uint32_t *pu4AvailMap,
+	uint8_t *pucNdcId);
+
+uint32_t
+nanSchedAddPotentialAvailability(struct ADAPTER *prAdapter,
+	uint8_t *pucBuf, uint8_t ucTimeLineIdx);
+
+uint32_t
+nanSchedCmdUpdatePotentialChnlAvail(IN struct ADAPTER *prAdapter);
+uint32_t
+nanParserInterpretTimeBitmapField(struct ADAPTER *prAdapter,
+		  uint16_t u2TimeBitmapCtrl,
+		  uint8_t ucTimeBitmapLength,
+		  uint8_t *pucTimeBitmap, uint32_t *pu4AvailMap);
+void
+nanSchedReleaseUnusedNdcCtrl(IN struct ADAPTER *prAdapter);
+
+#endif
 #endif
 #endif /* _NAN_SCHEDULER_H_ */

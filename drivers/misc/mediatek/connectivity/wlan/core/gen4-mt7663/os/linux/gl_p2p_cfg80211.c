@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
  ** Id: @(#) gl_p2p_cfg80211.c@@
  */
@@ -464,7 +418,12 @@ struct wireless_dev *mtk_p2p_cfg80211_add_iface(struct wiphy *wiphy,
 		/* net device initialize */
 
 		/* register for net device */
+#if KERNEL_VERSION(5, 12, 0) <= CFG80211_VERSION_CODE
+		if (cfg80211_register_netdevice(prP2pInfo->aprRoleHandler)
+			< 0) {
+#else
 		if (register_netdevice(prP2pInfo->aprRoleHandler) < 0) {
+#endif
 			DBGLOG(P2P, TRACE, "mtk_p2p_cfg80211_add_iface 456\n");
 			DBGLOG(INIT, WARN,
 				"unable to register netdevice for p2p\n");
@@ -509,7 +468,7 @@ struct wireless_dev *mtk_p2p_cfg80211_add_iface(struct wiphy *wiphy,
 					prGlueInfo->prAdapter
 						->prP2pInfo->u4DeviceNum << 2;
 		}
-		kalMemCopy(prNewNetDevice->dev_addr, rMacAddr, ETH_ALEN);
+		kal_eth_hw_addr_set(prNewNetDevice, rMacAddr);
 		kalMemCopy(prNewNetDevice->perm_addr, rMacAddr, ETH_ALEN);
 
 		DBGLOG(P2P, TRACE,
@@ -722,6 +681,13 @@ int mtk_p2p_cfg80211_del_iface(struct wiphy *wiphy, struct wireless_dev *wdev)
 #endif
 	GLUE_RELEASE_SPIN_LOCK(prGlueInfo, SPIN_LOCK_NET_DEV);
 
+	/* Wait for wlanSchedCfg80211WorkQueue() complete */
+#if CFG_SUPPORT_CFG80211_AUTH
+#if CFG_SUPPORT_CFG80211_QUEUE
+	flush_delayed_work(&cfg80211_workq);
+#endif
+#endif
+
 	/* prepare for removal */
 	if (netif_carrier_ok(UnregRoleHander))
 		netif_carrier_off(UnregRoleHander);
@@ -729,7 +695,11 @@ int mtk_p2p_cfg80211_del_iface(struct wiphy *wiphy, struct wireless_dev *wdev)
 	netif_tx_stop_all_queues(UnregRoleHander);
 
 	/* Here are functions which need rtnl_lock */
+#if KERNEL_VERSION(5, 12, 0) <= CFG80211_VERSION_CODE
+	cfg80211_unregister_netdevice(UnregRoleHander);
+#else
 	unregister_netdevice(UnregRoleHander);
+#endif
 	/* free is called at destructor */
 	/* free_netdev(UnregRoleHander); */
 
@@ -1474,6 +1444,9 @@ int mtk_p2p_cfg80211_set_power_mgmt(struct wiphy *wiphy,
 
 	P2P_WIPHY_PRIV(wiphy, prGlueInfo);
 
+	if (prGlueInfo->prAdapter->rWifiVar.ucDisP2pPs)
+		return 0;
+
 	if (enabled)
 		ePowerMode = Param_PowerModeFast_PSP;
 	else
@@ -1514,7 +1487,7 @@ int mtk_p2p_cfg80211_start_ap(struct wiphy *wiphy,
 	uint8_t *pucBuffer = (uint8_t *) NULL;
 	uint8_t ucRoleIdx = 0;
 	struct cfg80211_chan_def *chandef;
-	struct RF_CHANNEL_INFO rRfChnlInfo;
+	struct RF_CHANNEL_INFO rRfChnlInfo = {0};
 	uint8_t ucLoopCnt = 0;
 
 	/* RF_CHANNEL_INFO_T rRfChnlInfo; */
@@ -1800,11 +1773,25 @@ static int mtk_p2p_cfg80211_start_radar_detection_impl(struct wiphy *wiphy,
 					cnmMemAlloc(prGlueInfo->prAdapter,
 					RAM_TYPE_BUF,
 					sizeof(struct cfg80211_chan_def));
+			if (prGlueInfo->prP2PInfo[ucRoleIdx]->chandef == NULL) {
+				i4Rslt = -ENOMEM;
+				break;
+			}
+			kalMemZero(prGlueInfo->prP2PInfo[ucRoleIdx]->chandef,
+					sizeof(struct cfg80211_chan_def));
 
 			prGlueInfo->prP2PInfo[ucRoleIdx]->chandef->chan =
 				(struct ieee80211_channel *)
 					cnmMemAlloc(prGlueInfo->prAdapter,
 					RAM_TYPE_BUF,
+					sizeof(struct ieee80211_channel));
+			if (prGlueInfo->prP2PInfo[ucRoleIdx]->chandef->chan
+				== NULL) {
+				i4Rslt = -ENOMEM;
+				break;
+			}
+			kalMemZero(prGlueInfo->prP2PInfo[ucRoleIdx]
+				->chandef->chan,
 					sizeof(struct ieee80211_channel));
 		}
 
@@ -1913,7 +1900,7 @@ int mtk_p2p_cfg80211_channel_switch(struct wiphy *wiphy,
 		(struct MSG_P2P_SET_NEW_CHANNEL *) NULL;
 	uint8_t *pucBuffer = (uint8_t *) NULL;
 	uint8_t ucRoleIdx = 0;
-	struct RF_CHANNEL_INFO rRfChnlInfo;
+	struct RF_CHANNEL_INFO rRfChnlInfo = {0};
 	struct BSS_INFO *prBssInfo;
 	uint8_t ucBssIndex;
 	uint32_t u4Len = 0;
@@ -1950,7 +1937,8 @@ int mtk_p2p_cfg80211_channel_switch(struct wiphy *wiphy,
 				(struct cfg80211_chan_def *)
 				cnmMemAlloc(prAdapter,
 				RAM_TYPE_BUF, sizeof(struct cfg80211_chan_def));
-
+			kalMemZero(prGlueInfo->prP2PInfo[ucRoleIdx]->chandef,
+				sizeof(struct cfg80211_chan_def));
 			prGlueInfo->prP2PInfo[ucRoleIdx]->chandef->chan =
 				(struct ieee80211_channel *)
 				cnmMemAlloc(prAdapter,
@@ -3019,6 +3007,79 @@ int mtk_p2p_cfg80211_change_bss(struct wiphy *wiphy,
 
 	return i4Rslt;
 }				/* mtk_p2p_cfg80211_change_bss */
+#if CFG_SUPPORT_SOFTAP_OWE
+int mtk_p2p_cfg80211_change_station(
+	struct wiphy *wiphy,
+	struct net_device *ndev,
+	const u8 *mac,
+	struct station_parameters *params)
+{
+	struct GLUE_INFO *prGlueInfo = NULL;
+	struct BSS_INFO *prBssInfo;
+	uint8_t ucBssIndex = 0;
+
+	P2P_WIPHY_PRIV(wiphy, prGlueInfo);
+	if (!prGlueInfo)
+		return -EINVAL;
+
+	ucBssIndex = wlanGetBssIdx(ndev);
+
+	if (!IS_BSS_INDEX_VALID(ucBssIndex))
+		return -EINVAL;
+
+	prBssInfo =
+		GET_BSS_INFO_BY_INDEX(
+		prGlueInfo->prAdapter,
+		ucBssIndex);
+	if (prBssInfo &&
+		(prBssInfo->u4RsnSelectedAKMSuite ==
+		RSN_AKM_SUITE_OWE)) {
+		DBGLOG(P2P, INFO,
+			"[OWE] Bypass set station\n");
+		return 0;
+	}
+
+	DBGLOG(REQ, WARN,
+		"P2P/AP don't support this function\n");
+
+	return -EFAULT;
+}
+
+int mtk_p2p_cfg80211_add_station(
+	struct wiphy *wiphy,
+	struct net_device *ndev,
+	const u8 *mac)
+{
+	struct GLUE_INFO *prGlueInfo = NULL;
+	struct BSS_INFO *prBssInfo;
+	uint8_t ucBssIndex = 0;
+
+	P2P_WIPHY_PRIV(wiphy, prGlueInfo);
+	if (!prGlueInfo)
+		return -EINVAL;
+
+	ucBssIndex = wlanGetBssIdx(ndev);
+	if (!IS_BSS_INDEX_VALID(ucBssIndex))
+		return -EINVAL;
+
+	prBssInfo =
+		GET_BSS_INFO_BY_INDEX(
+		prGlueInfo->prAdapter,
+		ucBssIndex);
+	if (prBssInfo &&
+		(prBssInfo->u4RsnSelectedAKMSuite ==
+		RSN_AKM_SUITE_OWE)) {
+		DBGLOG(P2P, INFO,
+			"[OWE] Bypass add station\n");
+		return 0;
+	}
+
+	DBGLOG(REQ, WARN,
+		"P2P/AP don't support this function\n");
+
+	return -EFAULT;
+}
+#endif /* CFG_SUPPORT_SOFTAP_OWE */
 
 #if KERNEL_VERSION(3, 16, 0) <= CFG80211_VERSION_CODE
 #if KERNEL_VERSION(3, 19, 0) <= CFG80211_VERSION_CODE
@@ -3357,6 +3418,12 @@ int mtk_p2p_cfg80211_disconnect(struct wiphy *wiphy,
 		(struct MSG_P2P_CONNECTION_ABORT *) NULL;
 	uint8_t aucBCAddr[] = BC_MAC_ADDR;
 	uint8_t ucRoleIdx = 0;
+#if CFG_SUPPORT_CFG80211_AUTH
+#if (CFG_ADVANCED_80211_MLO == 1) || \
+	KERNEL_VERSION(6, 0, 0) <= CFG80211_VERSION_CODE
+	struct cfg80211_assoc_failure assoc_failure_data = {0};
+#endif
+#endif
 
 	do {
 		if ((wiphy == NULL) || (dev == NULL))
@@ -3374,8 +3441,19 @@ int mtk_p2p_cfg80211_disconnect(struct wiphy *wiphy,
 #if CFG_SUPPORT_CFG80211_AUTH
 		if (prGlueInfo->prAdapter->rWifiVar.
 			prP2PConnSettings[ucRoleIdx]->bss) {
+#if (CFG_ADVANCED_80211_MLO == 1) || \
+	KERNEL_VERSION(6, 0, 0) <= CFG80211_VERSION_CODE
+			assoc_failure_data.ap_mld_addr = NULL;
+			assoc_failure_data.bss[0] =
+				prGlueInfo->prAdapter->rWifiVar.
+					prP2PConnSettings[ucRoleIdx]->bss;
+			assoc_failure_data.timeout = true;
+			cfg80211_assoc_failure(dev, &assoc_failure_data);
+#else
 			cfg80211_assoc_timeout(dev,
-				prGlueInfo->prAdapter->rWifiVar.prP2PConnSettings[ucRoleIdx]->bss);
+				prGlueInfo->prAdapter->rWifiVar.
+					prP2PConnSettings[ucRoleIdx]->bss);
+#endif
 			DBGLOG(P2P, EVENT, "assoc timeout notify[%d]\n", ucRoleIdx);
 			prGlueInfo->prAdapter->rWifiVar.
 				prP2PConnSettings[ucRoleIdx]->bss = NULL;
@@ -3646,6 +3724,34 @@ void mtk_p2p_cfg80211_mgmt_frame_register(IN struct wiphy *wiphy,
 					"Close packet filer action frame.\n");
 			}
 			break;
+#if (CFG_SUPPORT_SOFTAP_WPA3 == 1)
+		case MAC_FRAME_AUTH:
+			if (reg) {
+				*pu4P2pPacketFilter
+					|= PARAM_PACKET_FILTER_AUTH;
+				DBGLOG(P2P, TRACE,
+					"Open packet filer auth request\n");
+			} else {
+				*pu4P2pPacketFilter
+					&= ~PARAM_PACKET_FILTER_AUTH;
+				DBGLOG(P2P, TRACE,
+					"Close packet filer auth request\n");
+			}
+			break;
+		case MAC_FRAME_ASSOC_REQ:
+			if (reg) {
+				*pu4P2pPacketFilter
+					|= PARAM_PACKET_FILTER_ASSOC_REQ;
+				DBGLOG(P2P, TRACE,
+					"Open packet filer assoc request\n");
+			} else {
+				*pu4P2pPacketFilter
+					&= ~PARAM_PACKET_FILTER_ASSOC_REQ;
+				DBGLOG(P2P, TRACE,
+					"Close packet filer assoc request\n");
+			}
+			break;
+#endif
 		default:
 			DBGLOG(P2P, ERROR,
 				"Ask frog to add code for mgmt:%x\n",
@@ -3708,6 +3814,12 @@ int mtk_p2p_cfg80211_testmode_cmd(struct wiphy *wiphy,
 	P2P_WIPHY_PRIV(wiphy, prGlueInfo);
 
 	DBGLOG(P2P, INFO, "mtk_p2p_cfg80211_testmode_cmd\n");
+
+	if (len < sizeof(struct NL80211_DRIVER_TEST_PARAMS)) {
+		DBGLOG(P2P, WARN, "len [%d] is invalid!\n",
+			len);
+		return -EINVAL;
+	}
 
 	if (data && len) {
 		prParams = (struct NL80211_DRIVER_TEST_PARAMS *) data;
@@ -3829,6 +3941,12 @@ int mtk_p2p_cfg80211_testmode_cmd(struct wiphy *wiphy, void *data, int len)
 
 	DBGLOG(P2P, TRACE, "mtk_p2p_cfg80211_testmode_cmd\n");
 
+	if (len < sizeof(struct NL80211_DRIVER_TEST_PARAMS)) {
+		DBGLOG(P2P, WARN, "len [%d] is invalid!\n",
+			len);
+		return -EINVAL;
+	}
+
 	if (data && len) {
 		prParams = (struct NL80211_DRIVER_TEST_PARAMS *) data;
 	} else {
@@ -3948,6 +4066,12 @@ int mtk_p2p_cfg80211_testmode_hotspot_config_cmd(IN struct wiphy *wiphy,
 	ASSERT(wiphy);
 
 	P2P_WIPHY_PRIV(wiphy, prGlueInfo);
+
+	if (len < sizeof(struct NL80211_DRIVER_HOTSPOT_CONFIG_PARAMS)) {
+		DBGLOG(P2P, WARN, "len [%d] is invalid!\n",
+			len);
+		return -EINVAL;
+	}
 
 	if (data && len) {
 		prParams = (struct NL80211_DRIVER_HOTSPOT_CONFIG_PARAMS *) data;
@@ -4153,6 +4277,12 @@ int mtk_p2p_cfg80211_testmode_p2p_sigma_cmd(IN struct wiphy *wiphy,
 	/* prP2pConnSettings =
 	 * prGlueInfo->prAdapter->rWifiVar.prP2PConnSettings;
 	 */
+
+	if (len < sizeof(struct NL80211_DRIVER_P2P_SIGMA_PARAMS)) {
+		DBGLOG(P2P, WARN, "len [%d] is invalid!\n",
+			len);
+		return -EINVAL;
+	}
 
 	if (data && len)
 		prParams = (struct NL80211_DRIVER_P2P_SIGMA_PARAMS *) data;
@@ -4435,6 +4565,12 @@ int mtk_p2p_cfg80211_testmode_hotspot_block_list_cmd(IN struct wiphy *wiphy,
 
 	P2P_WIPHY_PRIV(wiphy, prGlueInfo);
 
+	if (len < sizeof(struct NL80211_DRIVER_hotspot_block_PARAMS)) {
+		DBGLOG(P2P, WARN, "len [%d] is invalid!\n",
+			len);
+		return -EINVAL;
+	}
+
 	if (data && len)
 		prParams = (struct NL80211_DRIVER_hotspot_block_PARAMS *) data;
 	else
@@ -4472,10 +4608,12 @@ int mtk_p2p_cfg80211_testmode_sw_cmd(IN struct wiphy *wiphy,
 
 	DBGLOG(P2P, TRACE, "--> %s()\n", __func__);
 
-	if (data && len)
+	if (len < sizeof(struct NL80211_DRIVER_SW_CMD_PARAMS))
+		rstatus = WLAN_STATUS_INVALID_LENGTH;
+	else if (!data)
+		rstatus = WLAN_STATUS_INVALID_DATA;
+	else {
 		prParams = (struct NL80211_DRIVER_SW_CMD_PARAMS *) data;
-
-	if (prParams) {
 		if (prParams->set == 1) {
 			rstatus = kalIoctl(prGlueInfo,
 				(PFN_OID_HANDLER_FUNC) wlanoidSetSwCtrlWrite,

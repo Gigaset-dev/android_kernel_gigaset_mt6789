@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
  * Copyright (c) 2021 MediaTek Inc.
  */
@@ -563,6 +563,10 @@ nanNdpeAttrUpdateNdp(IN struct ADAPTER *prAdapter,
 		return WLAN_STATUS_INVALID_DATA;
 	}
 
+	u2CountLen = OFFSET_OF(struct _NAN_ATTR_NDPE_T, ucDialogToken);
+	DBGLOG(NAN, INFO, "u2CountLen : %d\n", u2CountLen);
+	DBGLOG(NAN, INFO, "prAttrNDPE->u2Length : %d\n", prAttrNDPE->u2Length);
+
 	/* 1. move pivot to optional field */
 	pucPivot = &(prAttrNDPE->ucPublishID);
 	u2CountLen = OFFSET_OF(struct _NAN_ATTR_NDPE_T, ucPublishID) -
@@ -759,10 +763,11 @@ nanNdpeAttrUpdateNdp(IN struct ADAPTER *prAdapter,
 		u2CountLen += MAC_ADDR_LEN;
 	}
 
-	DBGLOG(NAN, INFO, "[%s] NDPE TLV len = %d\n", __func__,
+	DBGLOG(NAN, ERROR, "[%s] NDPE TLV len = %d\n", __func__,
 		prAttrNDPE->u2Length - u2CountLen);
 	dumpMemory8(pucPivot, prAttrNDPE->u2Length - u2CountLen);
 
+if (0) {
 	if (!nanGetFeatureIsSigma(prAdapter) &&
 		prAttrNDPE->u2Length > u2CountLen) {
 		if (prNDP->pucPeerAppInfo != NULL)
@@ -884,7 +889,7 @@ nanNdpeAttrUpdateNdp(IN struct ADAPTER *prAdapter,
 				      aucValue) +
 			    prTLV->u2Length;
 	}
-
+}
 	return WLAN_STATUS_SUCCESS;
 }
 
@@ -1593,6 +1598,55 @@ nanSharedKeyAttrHandler(
  * \return Status
  */
 /*----------------------------------------------------------------------------*/
+uint8_t g_pbuf[] = {
+	0x0f, 0x09, 0x00, 0x00, 0x01, 0x04, 0x14
+	, 0x01, 0x22, 0x88, 0x13, 0x08, 0x12, 0x17
+	, 0x00, 0xdf, 0x80, 0x00, 0x12, 0x00, 0x01
+	, 0x12, 0x20, 0x00, 0x08, 0xff, 0x00, 0x00
+	, 0x00, 0xff, 0x00, 0x00, 0x00, 0x81, 0x51
+	, 0x20, 0x00, 0x00, 0x12, 0x17, 0x00, 0xdf
+	, 0x81, 0x00, 0x12, 0x00, 0x01, 0x12, 0x20
+	, 0x00, 0x08, 0x00, 0xff, 0x00, 0x00, 0x00
+	, 0xff, 0x00, 0x00, 0x81, 0x80, 0x20, 0x00
+	, 0x01, 0x13, 0x0c, 0x00, 0x00, 0x49, 0xd7
+	, 0xda, 0x00, 0xad, 0x01, 0x00, 0x18, 0x00
+	, 0x01, 0x02, 0x13, 0x0d, 0x00, 0x00, 0x11
+	, 0x71, 0xe5, 0x02, 0x59, 0x00, 0x01, 0x18
+	, 0x00, 0x02, 0x00, 0x02, 0x14, 0x04, 0x00
+	, 0x5c, 0x00, 0x00, 0x0c, 0x15, 0x03, 0x00
+	, 0x00, 0xff, 0xff, 0x1d, 0x6f, 0x00, 0x00
+	, 0x2d, 0x1a, 0x2d, 0x00, 0x1b, 0xff, 0xff
+	, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	, 0x3d, 0x16, 0x95, 0x00, 0x00, 0x00, 0x00
+	, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	, 0x00, 0x00, 0x00, 0xbf, 0x0c, 0x32, 0x70
+	, 0x81, 0x0f, 0xfa, 0xff, 0x00, 0x00, 0xfa
+	, 0xff, 0x00, 0x00, 0xc0, 0x05, 0x00, 0x95
+	, 0x00, 0x00, 0x00, 0xdd, 0x05, 0x00, 0x90
+	, 0x4c, 0x04, 0x0f, 0xff, 0x1c, 0x23, 0x01
+	, 0x08, 0x08, 0x00, 0x00, 0x80, 0x44, 0x30
+	, 0x02, 0x00, 0x1d, 0x00, 0x9f, 0x08, 0x00
+	, 0x0c, 0x00, 0xfa, 0xff, 0xfa, 0xff, 0x39
+	, 0x1c, 0xc7, 0x71, 0x1c, 0x07, 0x29, 0x60
+	, 0x00, 0x5c, 0x00, 0x00, 0x5e, 0x54, 0x9a
+	, 0xda, 0x00, 0xad, 0x01, 0x08, 0x01, 0x01
+	, 0x51, 0x00, 0x50, 0x6f, 0x9a, 0x02, 0xdd
+	, 0x4a, 0x00, 0x00, 0x17, 0xf2, 0x01, 0x01
+	, 0x00, 0x01, 0x02, 0x40, 0x00, 0x7d, 0x13
+	, 0x21, 0xf7, 0xa9, 0x89, 0xdd, 0x79, 0x42
+	, 0xa4, 0x6d, 0xcc, 0xa1, 0x63, 0x4b, 0xe7
+	, 0xbb, 0x23, 0x54, 0x2f, 0xd1, 0x82, 0x04
+	, 0xa8, 0x92, 0x01, 0x88, 0xfb, 0x6e, 0xf0
+	, 0xd6, 0x90, 0x69, 0x88, 0x9d, 0x7c, 0x9b
+	, 0x02, 0xbd, 0xb6, 0x1a, 0x28, 0xab, 0x54
+	, 0x9f, 0x09, 0x56, 0xfe, 0xcd, 0x82, 0xda
+	, 0x23, 0xa2, 0x42, 0x3a, 0x50, 0xe3, 0xca
+	, 0xf6, 0x27, 0x18, 0xc8, 0x13, 0x09
+};
+
 uint32_t
 nanNdpParseAttributes(struct ADAPTER *prAdapter,
 		enum _NAN_ACTION_T eNanAction,
@@ -1637,6 +1691,7 @@ nanNdpParseAttributes(struct ADAPTER *prAdapter,
 	/* 1. always backup whole pucNanAttrList first
 	 * for NAN-SEC & Data Response purposes
 	 */
+
 	if (nanNdpBufferNanAttrLists(prAdapter, pucNanAttrList,
 				     u2NanAttrListLength,
 				     prNDP) != WLAN_STATUS_SUCCESS)
@@ -2538,15 +2593,6 @@ nanDataEngineDevCapAttrAppend(struct ADAPTER *prAdapter,
 	}
 }
 
-/*----------------------------------------------------------------------------*/
-/*!
- * \brief            NAN Attribute Length Estimation - NAN Availability
- *
- * \param[in]
- *
- * \return Status
- */
-/*----------------------------------------------------------------------------*/
 uint16_t
 nanDataEngineNanAvailAttrLength(struct ADAPTER *prAdapter,
 				struct _NAN_NDL_INSTANCE_T *prNDL,
@@ -2564,7 +2610,7 @@ nanDataEngineNanAvailAttrLength(struct ADAPTER *prAdapter,
 	nanSchedGetAvailabilityAttr(prAdapter, &pucAvailabilityAttr,
 				    &pu4AvailabilityAttrLength);
 
-	return pu4AvailabilityAttrLength;
+		return pu4AvailabilityAttrLength;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -3695,7 +3741,8 @@ nanDataEngineSetupStaRec(IN struct ADAPTER *prAdapter,
 	if (nanGetPeerDevCapability(prAdapter, ENUM_NAN_DEVCAP_RX_ANT_NUM,
 				    prNDL->aucPeerMacAddr, NAN_INVALID_MAP_ID,
 				    &u4PeerNSS) == WLAN_STATUS_SUCCESS) {
-		ucPeerBW = nanGetPeerMinBw(prAdapter, prNDL->aucPeerMacAddr);
+		ucPeerBW = nanGetPeerMinBw(prAdapter, prNDL->aucPeerMacAddr,
+		       prBssInfo->eBand);
 		DBGLOG(NAN, INFO, "[%s] PeerBW %d , PeerNSS %d\n", __func__,
 		       ucPeerBW, u4PeerNSS);
 	} else {
@@ -3748,10 +3795,16 @@ nanDataEngineSetupStaRec(IN struct ADAPTER *prAdapter,
 		prStaRec->u2HtCapInfo &= ~HT_CAP_INFO_RX_STBC;
 
 	/* Set Short GI Tx capability */
-	if (IS_FEATURE_FORCE_ENABLED(prWifiVar->ucTxShortGI)) {
+	if ((IS_FEATURE_FORCE_ENABLED(prWifiVar->ucTxShortGI) &&
+			IS_BSS_AIS(prBssInfo)) ||
+		(IS_FEATURE_FORCE_ENABLED(prWifiVar->ucTxShortGI4P2p) &&
+			IS_BSS_P2P(prBssInfo))) {
 		prStaRec->u2HtCapInfo |= HT_CAP_INFO_SHORT_GI_20M;
 		prStaRec->u2HtCapInfo |= HT_CAP_INFO_SHORT_GI_40M;
-	} else if (IS_FEATURE_DISABLED(prWifiVar->ucTxShortGI)) {
+	} else if ((IS_FEATURE_DISABLED(prWifiVar->ucTxShortGI) &&
+				IS_BSS_AIS(prBssInfo)) ||
+			(IS_FEATURE_DISABLED(prWifiVar->ucTxShortGI4P2p) &&
+				IS_BSS_P2P(prBssInfo))) {
 		prStaRec->u2HtCapInfo &= ~HT_CAP_INFO_SHORT_GI_20M;
 		prStaRec->u2HtCapInfo &= ~HT_CAP_INFO_SHORT_GI_40M;
 	}
@@ -3796,11 +3849,17 @@ nanDataEngineSetupStaRec(IN struct ADAPTER *prAdapter,
 			prStaRec->u4VhtCapInfo &= ~VHT_CAP_INFO_VHT_TXOP_PS;
 
 		/* Set Tx Short GI capability */
-		if (IS_FEATURE_FORCE_ENABLED(prWifiVar->ucTxShortGI)) {
+		if ((IS_FEATURE_FORCE_ENABLED(prWifiVar->ucTxShortGI) &&
+				IS_BSS_AIS(prBssInfo)) ||
+			(IS_FEATURE_FORCE_ENABLED(prWifiVar->ucTxShortGI4P2p) &&
+				IS_BSS_P2P(prBssInfo))) {
 			prStaRec->u4VhtCapInfo |= VHT_CAP_INFO_SHORT_GI_80;
 			prStaRec->u4VhtCapInfo |=
 				VHT_CAP_INFO_SHORT_GI_160_80P80;
-		} else if (IS_FEATURE_DISABLED(prWifiVar->ucTxShortGI)) {
+		} else if ((IS_FEATURE_DISABLED(prWifiVar->ucTxShortGI) &&
+				  IS_BSS_AIS(prBssInfo)) ||
+			  (IS_FEATURE_DISABLED(prWifiVar->ucTxShortGI4P2p) &&
+				  IS_BSS_P2P(prBssInfo))) {
 			prStaRec->u4VhtCapInfo &= ~VHT_CAP_INFO_SHORT_GI_80;
 			prStaRec->u4VhtCapInfo &=
 				~VHT_CAP_INFO_SHORT_GI_160_80P80;

@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   cmm_asic_connac2x.c
 *    \brief  Internal driver stack will export the required procedures here for
 * GLUE Layer.
@@ -1517,29 +1518,29 @@ u_int8_t asicConnac2xUsbResume(IN struct ADAPTER *prAdapter,
 			IN struct GLUE_INFO *prGlueInfo)
 {
 	uint8_t count = 0;
+	int ret = 0;
 	struct mt66xx_chip_info *prChipInfo = NULL;
 	struct BUS_INFO *prBusInfo;
 	uint32_t u4Value, u4Idx, u4Loop;
 	uint32_t u4PollingFail = FALSE;
 	struct CHIP_DBG_OPS *prDbgOps;
 
+
 	prChipInfo = prAdapter->chip_info;
 	prBusInfo = prChipInfo->bus_info;
 	prDbgOps = prChipInfo->prDebugOps;
 
-#if 0 /* enable it if need to do bug fixing by vender request */
 	/* NOTE: USB bus may not really do suspend and resume*/
 	ret = usb_control_msg(prGlueInfo->rHifInfo.udev,
 			  usb_sndctrlpipe(prGlueInfo->rHifInfo.udev, 0),
-			  VND_REQ_FEATURE_SET,
+			  VND_REQ_USB_SUSPEND_RESUME,
 			  prBusInfo->u4device_vender_request_out,
 			  FEATURE_SET_WVALUE_RESUME, 0, NULL, 0,
 			  VENDOR_TIMEOUT_MS);
-	if (ret)
+
+	if (ret < 0)
 		DBGLOG(HAL, ERROR,
-		"VendorRequest FeatureSetResume ERROR: %x\n",
-		(unsigned int)ret);
-#endif
+		"VendorRequest status: %d\n", ret);
 
 	glUsbSetState(&prGlueInfo->rHifInfo, USB_STATE_PRE_RESUME);
 
@@ -1619,7 +1620,6 @@ u_int8_t asicConnac2xUsbResume(IN struct ADAPTER *prAdapter,
 
 	/* To trigger CR4 path */
 	wlanSendDummyCmd(prAdapter, FALSE);
-	glUsbSetState(&prGlueInfo->rHifInfo, USB_STATE_LINK_UP);
 	halEnableInterrupt(prAdapter);
 
 	cnmTimerStartTimer(prAdapter, &rSerSyncTimer,
@@ -2085,7 +2085,7 @@ void asicConnac2xRxPerfIndProcessRXV(IN struct ADAPTER *prAdapter,
 	/* REMOVE DATA RATE Parsing Logic:Workaround only for 6885*/
 	/* Since MT6885 can not get Rx Data Rate dur to RXV HW Bug*/
 
-	if (ucBssIndex >= BSSID_NUM)
+	if (!(IS_BSS_INDEX_AIS(prAdapter, ucBssIndex)))
 		return;
 
 	/* can't parse radiotap info if no rx vector */
@@ -2101,7 +2101,6 @@ void asicConnac2xRxPerfIndProcessRXV(IN struct ADAPTER *prAdapter,
 	if (prStaRec) {
 		ucWlanIdx = prStaRec->ucWlanIndex;
 	} else {
-		DBGLOG(SW4, ERROR, "prStaRecOfAP is null\n");
 		return;
 	}
 

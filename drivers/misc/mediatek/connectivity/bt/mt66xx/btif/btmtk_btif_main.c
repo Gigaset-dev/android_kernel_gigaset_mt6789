@@ -115,7 +115,7 @@ static int32_t bt_reg_init(void)
 				(unsigned long) of_iomap(node, i);
 			of_get_address(node, i, &(base_addr->size), &flag);
 
-			BTMTK_DBG("Get Index(%d) phy(0x%zx) baseAddr=(0x%zx) size=(0x%zx)",
+			BTMTK_DBG("Get Index(%d) phy(0x%zx) baseAddr=(0x%zx) size=(0x%llx)",
 				i, base_addr->phy_addr, base_addr->vir_addr,
 				base_addr->size);
 		}
@@ -177,12 +177,12 @@ int btmtk_disp_notify_cb(struct notifier_block *nb, unsigned long value, void *v
 				goto end;
 		}
 
-		if(cif_dev->bt_state == FUNC_ON) {
-			BTMTK_INFO("%s: blank state [%ld]->[%ld], and send cmd", __func__, cif_dev->blank_state, new_state);
+		if (cif_dev->bt_state == FUNC_ON) {
+			BTMTK_INFO("%s: blank state [%d]->[%d], and send cmd", __func__, cif_dev->blank_state, new_state);
 			cif_dev->blank_state = new_state;
 			btmtk_intcmd_wmt_blank_status(g_sbdev->hdev, cif_dev->blank_state);
 		} else {
-			BTMTK_INFO("%s: blank state [%ld]->[%ld]", __func__, cif_dev->blank_state, new_state);
+			BTMTK_INFO("%s: blank state [%d]->[%d]", __func__, cif_dev->blank_state, new_state);
 			cif_dev->blank_state = new_state;
 		}
 	}
@@ -219,7 +219,7 @@ static int btmtk_fb_notifier_callback(struct notifier_block
 			goto end;
 	}
 
-	if(cif_dev->bt_state == FUNC_ON) {
+	if (cif_dev->bt_state == FUNC_ON) {
 		BTMTK_INFO("%s: blank state [%ld]->[%ld], and send cmd", __func__, cif_dev->blank_state, new_state);
 		cif_dev->blank_state = new_state;
 		btmtk_intcmd_wmt_blank_status(g_sbdev->hdev, cif_dev->blank_state);
@@ -265,6 +265,9 @@ static int btmtk_pm_notifier_callback(struct notifier_block *nb,
 				BTMTK_INFO("%s: bt_state[%d], event[%ld]",
 						__func__, cif_dev->bt_state, event);
 			}
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0))
+			fallthrough;
+#endif
 		case PM_POST_SUSPEND:
 			if(cif_dev->bt_state == FUNC_ON) {
 				bt_dump_bgfsys_suspend_wakeup_debug();
@@ -1237,7 +1240,7 @@ int32_t btmtk_wcn_btif_open(void)
  * Return Value:
  *     0 if success, otherwise error code
  */
-int32_t btmtk_wcn_btif_close()
+int32_t btmtk_wcn_btif_close(void)
 {
 	int32_t ret = 0;
 	struct btmtk_btif_dev *cif_dev = (struct btmtk_btif_dev *)g_sbdev->cif_dev;
@@ -1486,7 +1489,8 @@ int btmtk_btif_event_filter(struct btmtk_dev *bdev, struct sk_buff *skb)
 			return 1; // this event is filtered
 		} else {
 			// may be normal packet, continue put skb to rx queue
-			BTMTK_INFO("%s: may be normal packet!", __func__);
+			BTMTK_WARN("%s: may be normal packet!", __func__);
+			btmtk_cif_dump_rxd_backtrace();
 		}
 	}
 
@@ -1541,7 +1545,7 @@ static int btmtk_cif_probe(struct platform_device *pdev)
 	cif_dev->pdev = pdev;
 	g_sbdev->chip_id = 0x6631;
 	if (bt_reg_init()) {
-		BTMTK_ERR("%s: Error allocating memory remap");
+		BTMTK_ERR("%s: Error allocating memory remap", __func__);
 		return -1;
 	}
 

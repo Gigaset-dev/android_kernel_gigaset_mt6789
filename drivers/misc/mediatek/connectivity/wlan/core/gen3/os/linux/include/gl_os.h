@@ -1088,6 +1088,13 @@ INT_32 cfgCreateProcEntry(P_GLUE_INFO_T prGlueInfo);
 INT_32 cfgRemoveProcEntry(void);
 #endif
 
+extern const uint8_t *kalFindIeMatchMask(uint8_t eid,
+				const uint8_t *ies, int len,
+				const uint8_t *match,
+				int match_len, int match_offset,
+				const uint8_t *match_mask);
+extern const uint8_t *kalFindIeExtIE(uint8_t eid, uint8_t exteid, const uint8_t *ies, int len);
+
 typedef UINT_8 (*file_buf_handler) (PVOID ctx, const CHAR __user *buf, UINT_16 length);
 extern VOID register_file_buf_handler(file_buf_handler handler, PVOID ctx, UINT_8 ucType);
 extern void update_driver_loaded_status(uint8_t loaded);

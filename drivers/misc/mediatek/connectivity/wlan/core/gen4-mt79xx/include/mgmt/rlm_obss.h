@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/
  *						include/mgmt/rlm_obss.h#1
@@ -41,6 +42,8 @@
 #define OBSS_SCAN_MIN_INTERVAL  10	/* In unit of sec */
 
 #define PUBLIC_ACTION_MAX_LEN   200	/* In unit of byte */
+
+#define OBSS_SCAN_SEQ_NUM       (0x33)
 
 /* P2P GO only */
 /* Define default OBSS Scan parameters (from MIB in spec.) */
@@ -92,6 +95,9 @@ void rlmObssScanDone(struct ADAPTER *prAdapter,
 
 void rlmObssTriggerScan(struct ADAPTER *prAdapter,
 			struct BSS_INFO *prBssInfo);
+
+void rlmObssAbortScan(struct ADAPTER *prAdapter,
+			uint8_t ucBssIndex);
 
 /*******************************************************************************
  *                              F U N C T I O N S

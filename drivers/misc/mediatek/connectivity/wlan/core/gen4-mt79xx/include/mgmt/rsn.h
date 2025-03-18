@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: include/mgmt/rsn.h#1
  */
@@ -35,6 +36,7 @@
 #define RSN_CIPHER_SUITE_WEP104         0x05AC0F00
 #if CFG_SUPPORT_802_11W
 #define RSN_CIPHER_SUITE_AES_128_CMAC   0x06AC0F00
+#define RSN_CIPHER_SUITE_BIP_CMAC_128   0x06AC0F00
 #endif
 #define RSN_CIPHER_SUITE_GROUP_NOT_USED 0x07AC0F00
 #define RSN_CIPHER_SUITE_GCMP           0x08AC0F00
@@ -126,6 +128,15 @@
 #define RSN_AUTH_MFP_REQUIRED   2	/* MFP required */
 #endif
 
+/* Extended RSN Capabilities */
+/* bits 0-3: Field length (n-1) */
+#define WLAN_RSNX_CAPAB_PROTECTED_TWT 4
+#define WLAN_RSNX_CAPAB_SAE_H2E 5
+#define WLAN_RSNX_CAPAB_SAE_PK 6
+#define WLAN_RSNX_CAPAB_SECURE_LTF 8
+#define WLAN_RSNX_CAPAB_SECURE_RTT 9
+#define WLAN_RSNX_CAPAB_PROT_RANGE_NEG 10
+
 #define GTK_REKEY_CMD_MODE_OFFLOAD_ON		0
 #define GTK_REKEY_CMD_MODE_OFLOAD_OFF		1
 #define GTK_REKEY_CMD_MODE_SET_BCMC_PN		2
@@ -162,6 +173,7 @@
  */
 #define RSN_IE(fp)              ((struct RSN_INFO_ELEM *) fp)
 #define WPA_IE(fp)              ((struct WPA_INFO_ELEM *) fp)
+#define RSNX_IE(fp)             ((struct RSNX_INFO_ELEM *) fp)
 
 #define ELEM_MAX_LEN_ASSOC_RSP_WSC_IE          (32 - ELEM_HDR_LEN)
 #define ELEM_MAX_LEN_TIMEOUT_IE          (5)
@@ -204,6 +216,11 @@ void rsnGenerateWPAIE(IN struct ADAPTER *prAdapter,
 
 void rsnGenerateRSNIE(IN struct ADAPTER *prAdapter,
 		      IN struct MSDU_INFO *prMsduInfo);
+
+#if (CFG_SAP_SUPPORT_WPA3_H2E == 1)
+void rsnGenerateRSNXIE(IN struct ADAPTER *prAdapter,
+		      IN struct MSDU_INFO *prMsduInfo);
+#endif
 
 u_int8_t
 rsnParseCheckForWFAInfoElem(IN struct ADAPTER *prAdapter,
@@ -251,6 +268,9 @@ void rsnGenerateWSCIE(IN struct ADAPTER *prAdapter,
 uint32_t rsnCheckBipKeyInstalled(IN struct ADAPTER
 				 *prAdapter, IN struct STA_RECORD *prStaRec);
 
+uint8_t rsnCheckBipGmacKeyInstall(IN struct ADAPTER
+				 *prAdapter, IN struct STA_RECORD *prStaRec);
+
 uint8_t rsnCheckSaQueryTimeout(
 	IN struct ADAPTER *prAdapter, IN uint8_t ucBssIdx);
 
@@ -282,6 +302,8 @@ void rsnApStartSaQuery(IN struct ADAPTER *prAdapter,
 void rsnApSaQueryAction(IN struct ADAPTER *prAdapter,
 			IN struct SW_RFB *prSwRfb);
 
+uint8_t rsnCheckBipGmac(IN struct ADAPTER *prAdapter,
+			IN struct SW_RFB *prSwRfb);
 #endif /* CFG_SUPPORT_802_11W */
 
 #if CFG_SUPPORT_AAA
@@ -302,10 +324,11 @@ uint32_t rsnCalculateFTIELen(struct ADAPTER *prAdapter, uint8_t ucBssIdx,
 
 void rsnGenerateFTIE(IN struct ADAPTER *prAdapter,
 		     IN OUT struct MSDU_INFO *prMsduInfo);
-#if CFG_SUPPORT_OWE
+#if CFG_SUPPORT_OWE || CFG_SUPPORT_SOFTAP_OWE
 void rsnGenerateOWEIE(IN struct ADAPTER *prAdapter,
 		      IN OUT struct MSDU_INFO *prMsduInfo);
-
+#endif
+#if CFG_SUPPORT_OWE
 uint32_t rsnCalOweIELen(IN struct ADAPTER *prAdapter,
 	IN uint8_t ucBssIndex, struct STA_RECORD *prStaRec);
 
@@ -317,6 +340,10 @@ void rsnGenerateRSNXE(IN struct ADAPTER *prAdapter,
 uint32_t rsnCalRSNXELen(IN struct ADAPTER *prAdapter,
 	IN uint8_t ucBssIndex, struct STA_RECORD *prStaRec);
 #endif
+
+u_int8_t rsnParseRsnxIE(struct ADAPTER *prAdapter,
+	struct RSNX_INFO_ELEM *prInfoElem,
+	struct RSNX_INFO *prRsnxeInfo);
 
 /*******************************************************************************
  *                              F U N C T I O N S

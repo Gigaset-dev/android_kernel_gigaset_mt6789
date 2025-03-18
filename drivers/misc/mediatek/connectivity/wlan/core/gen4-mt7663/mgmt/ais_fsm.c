@@ -1,54 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual license.  When you use or
- * distribute this software, you may choose to be licensed under
- * version 2 of the GNU General Public License ("GPLv2 License")
- * or BSD License.
- *
- * GPLv2 License
- *
- * Copyright(C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- *
- * BSD LICENSE
- *
- * Copyright(C) 2016 MediaTek Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright (c) 2021 MediaTek Inc.
+ */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/mgmt/ais_fsm.c#4
  */
@@ -80,6 +34,10 @@
 #define AIS_FSM_STATE_SEARCH_ACTION_PHASE_0	0
 #define AIS_FSM_STATE_SEARCH_ACTION_PHASE_1	1
 #define AIS_FSM_STATE_SEARCH_ACTION_PHASE_2	2
+
+#if (CFG_SUPPORT_AUTO_SCC == 1)
+#define AIS_GO_SYNC_CHNL_TIMEOUT_SEC	5
+#endif
 
 /*******************************************************************************
  *                             D A T A   T Y P E S
@@ -116,6 +74,11 @@ static uint8_t *apucDebugAisState[AIS_STATE_NUM] = {
 	(uint8_t *) DISP_STRING("DISCONNECTING"),
 	(uint8_t *) DISP_STRING("REQ_REMAIN_ON_CHANNEL"),
 	(uint8_t *) DISP_STRING("REMAIN_ON_CHANNEL")
+#if (CFG_SUPPORT_AUTO_SCC == 1)
+	, (uint8_t *) DISP_STRING("GO_SYNC_CHANNEL")
+	, (uint8_t *) DISP_STRING("GO_SYNC_CH_DONE")
+#endif
+
 };
 
 /*******************************************************************************
@@ -343,43 +306,60 @@ void aisFsmInit(IN struct ADAPTER *prAdapter)
 	cnmTimerInitTimer(prAdapter,
 			  &prAisFsmInfo->rBGScanTimer,
 			  (PFN_MGMT_TIMEOUT_FUNC) aisFsmRunEventBGSleepTimeOut,
-			  (unsigned long)NULL);
+			  (unsigned long)NULL,
+			  TIMER_WAKELOCK_AUTO);
 
 	cnmTimerInitTimer(prAdapter,
 			  &prAisFsmInfo->rIbssAloneTimer,
 			  (PFN_MGMT_TIMEOUT_FUNC)
-			  aisFsmRunEventIbssAloneTimeOut, (unsigned long)NULL);
+			  aisFsmRunEventIbssAloneTimeOut, (unsigned long)NULL,
+			  TIMER_WAKELOCK_AUTO);
 
 	cnmTimerInitTimer(prAdapter,
 			  &prAisFsmInfo->rScanDoneTimer,
 			  (PFN_MGMT_TIMEOUT_FUNC) aisFsmRunEventScanDoneTimeOut,
-			  (unsigned long)NULL);
+			  (unsigned long)NULL,
+			  TIMER_WAKELOCK_AUTO);
 
 	cnmTimerInitTimer(prAdapter,
 			  &prAisFsmInfo->rJoinTimeoutTimer,
 			  (PFN_MGMT_TIMEOUT_FUNC) aisFsmRunEventJoinTimeout,
-			  (unsigned long)NULL);
+			  (unsigned long)NULL,
+			  TIMER_WAKELOCK_AUTO);
 
 	cnmTimerInitTimer(prAdapter,
 			  &prAisFsmInfo->rChannelTimeoutTimer,
 			  (PFN_MGMT_TIMEOUT_FUNC) aisFsmRunEventChannelTimeout,
-			  (unsigned long)NULL);
+			  (unsigned long)NULL,
+			  TIMER_WAKELOCK_AUTO);
 
 	cnmTimerInitTimer(prAdapter,
 			  &prAisFsmInfo->rDeauthDoneTimer,
 			  (PFN_MGMT_TIMEOUT_FUNC) aisFsmRunEventDeauthTimeout,
-			  (unsigned long)NULL);
+			  (unsigned long)NULL,
+			  TIMER_WAKELOCK_AUTO);
 
 	cnmTimerInitTimer(prAdapter,
 			  &prAisFsmInfo->rWaitOkcPMKTimer,
 			  (PFN_MGMT_TIMEOUT_FUNC) aisFsmSetOkcTimeout,
-			  (unsigned long)NULL);
+			  (unsigned long)NULL,
+			  TIMER_WAKELOCK_AUTO);
 
 	cnmTimerInitTimer(prAdapter,
 			  &prAisFsmInfo->rSecModeChangeTimer,
 			  (PFN_MGMT_TIMEOUT_FUNC)
 			  aisFsmRunEventSecModeChangeTimeout,
-			  (unsigned long)NULL);
+			  (unsigned long)NULL,
+			  TIMER_WAKELOCK_AUTO);
+
+#if (CFG_SUPPORT_AUTO_SCC == 1)
+	cnmTimerInitTimer(prAdapter,
+			  &prAisFsmInfo->rGoSyncChannelTimer,
+			  (PFN_MGMT_TIMEOUT_FUNC)
+			  aisFsmRunEventGoSyncChannelTimeout,
+			  (unsigned long)NULL,
+			  TIMER_WAKELOCK_AUTO);
+#endif
 
 	/* 4 <1.2> Initiate PWR STATE */
 	SET_NET_PWR_STATE_IDLE(prAdapter, prAisBssInfo->ucBssIndex);
@@ -690,6 +670,12 @@ void aisFsmStateInit_JOIN(IN struct ADAPTER *prAdapter,
 
 		/* We do roaming while the medium is connected */
 		prStaRec->fgIsReAssoc = TRUE;
+#if CFG_SUPPORT_CFG80211_AUTH
+		prAisFsmInfo->ucAvailableAuthTypes =
+			(uint8_t) prAdapter->prGlueInfo->rWpaInfo.u4AuthAlg;
+		DBGLOG(AIS, INFO, "JOIN INIT: Auth Algorithm for Roaming:%d\n",
+			prAisFsmInfo->ucAvailableAuthTypes);
+#else
 
 		/* TODO(Kevin): We may call a sub function to
 		 * acquire the Roaming Auth Type
@@ -706,7 +692,7 @@ void aisFsmStateInit_JOIN(IN struct ADAPTER *prAdapter,
 			    prAisSpecificBssInfo->ucRoamingAuthTypes;
 			break;
 		}
-
+#endif
 		prStaRec->ucTxAuthAssocRetryLimit =
 		    TX_AUTH_ASSOCI_RETRY_LIMIT_FOR_ROAMING;
 	}
@@ -1171,6 +1157,7 @@ void aisFsmSteps(IN struct ADAPTER *prAdapter, enum ENUM_AIS_STATE eNextState)
 				prConnSettings->fgIsConnInitialized = FALSE;
 #endif
 			prAisReq = aisFsmGetNextRequest(prAdapter);
+
 			cnmTimerStopTimer(prAdapter,
 					  &prAisFsmInfo->rScanDoneTimer);
 			cnmTimerStopTimer(prAdapter,
@@ -1423,10 +1410,31 @@ void aisFsmSteps(IN struct ADAPTER *prAdapter, enum ENUM_AIS_STATE eNextState)
 						 */
 						prAisFsmInfo->prTargetBssDesc =
 						    prBssDesc;
+#if (CFG_SUPPORT_AUTO_SCC == 1)
+						/* If ais channel connected is
+						 * the same as GO or
+						 * no GO.
+						 * Connection run as normal
+						 */
+						DBGLOG(AIS, STATE,
+							"Connect Target CH= %d\n",
+							prAisFsmInfo
+							->prTargetBssDesc
+							->ucChannelNum);
 
+						eNextState =
+							(cnmIsSCCAutoSwitch(
+							    prAdapter,
+							    prAisFsmInfo
+							    ->prTargetBssDesc
+							    ->ucChannelNum)) ?
+						    AIS_STATE_GO_SYNC_CHANNEL :
+						    AIS_STATE_REQ_CHANNEL_JOIN;
+#else
 						/* Transit to channel acquire */
 						eNextState =
 						    AIS_STATE_REQ_CHANNEL_JOIN;
+#endif
 						fgIsTransition = TRUE;
 
 						/* increase connection trial
@@ -1619,7 +1627,31 @@ void aisFsmSteps(IN struct ADAPTER *prAdapter, enum ENUM_AIS_STATE eNextState)
 					prAisFsmInfo->ucConnTrialCount++;
 
 					/* Transit to channel acquire */
-					eNextState = AIS_STATE_REQ_CHANNEL_JOIN;
+#if (CFG_SUPPORT_AUTO_SCC == 1)
+					/* If ais channel connected is
+					 * the same as GO or
+					 * no GO.
+					 * Connection run as normal
+					 */
+					DBGLOG(AIS, STATE,
+						"Roaming to Target CH= %d\n",
+						prAisFsmInfo
+						->prTargetBssDesc
+						->ucChannelNum);
+
+					eNextState =
+						(cnmIsSCCAutoSwitch(
+							prAdapter,
+							prAisFsmInfo
+							->prTargetBssDesc
+							->ucChannelNum)) ?
+						AIS_STATE_GO_SYNC_CHANNEL :
+						AIS_STATE_REQ_CHANNEL_JOIN;
+#else
+					/* Transit to channel acquire */
+					eNextState =
+						AIS_STATE_REQ_CHANNEL_JOIN;
+#endif
 					/* Find target AP to roaming
 					 * and set
 					 *   fgTargetChnlScanIssued
@@ -1695,13 +1727,6 @@ void aisFsmSteps(IN struct ADAPTER *prAdapter, enum ENUM_AIS_STATE eNextState)
 			break;
 
 		case AIS_STATE_SCAN:
-#if CFG_SUPPORT_CFG80211_AUTH
-			/*clear all bss Desc to avoid the bss
-			 *in driver and supplicant is not sync
-			 */
-			scanRemoveAllBssDesc(prAdapter);
-#endif
-			kal_fallthrough;
 		case AIS_STATE_ONLINE_SCAN:
 		case AIS_STATE_LOOKING_FOR:
 
@@ -2196,6 +2221,12 @@ void aisFsmSteps(IN struct ADAPTER *prAdapter, enum ENUM_AIS_STATE eNextState)
 #endif /* CFG_SUPPORT_ADHOC */
 
 		case AIS_STATE_NORMAL_TR:
+#if (CFG_SUPPORT_AUTO_SCC == 1)
+			if (cnmIsSCCAutoSwitch(prAdapter,
+					prAisBssInfo->ucPrimaryChannel))
+				cnmSCCAutoSwitchMode(prAdapter,
+					prAisBssInfo->ucPrimaryChannel);
+#endif
 			if (timerPendingTimer(&prAisFsmInfo->
 					rJoinTimeoutTimer)) {
 				/* Don't do anything when rJoinTimeoutTimer
@@ -2325,7 +2356,24 @@ void aisFsmSteps(IN struct ADAPTER *prAdapter, enum ENUM_AIS_STATE eNextState)
 			prAisBssInfo->fgIsNetRequestInActive = FALSE;
 #endif
 			break;
+#if (CFG_SUPPORT_AUTO_SCC == 1)
+		case AIS_STATE_GO_SYNC_CHANNEL:
+			/* has decided to do CSA */
+			cnmSCCAutoSwitchMode(prAdapter,
+				prAisFsmInfo->prTargetBssDesc->ucChannelNum);
 
+			/* start timer
+			 * if timeout, still fall into MCC
+			 */
+			cnmTimerStartTimer(prAdapter,
+				&prAisFsmInfo->rGoSyncChannelTimer,
+				SEC_TO_MSEC(AIS_GO_SYNC_CHNL_TIMEOUT_SEC));
+			break;
+		case AIS_STATE_GO_SYNC_CH_DONE:
+			eNextState = AIS_STATE_REQ_CHANNEL_JOIN;
+			fgIsTransition = TRUE;
+			break;
+#endif
 		default:
 			/* Make sure we have handle all STATEs */
 			ASSERT(0);
@@ -4821,6 +4869,15 @@ void aisFsmRunEventSecModeChangeTimeout(IN struct ADAPTER *prAdapter,
 	aisBssSecurityChanged(prAdapter);
 }
 
+#if (CFG_SUPPORT_AUTO_SCC == 1)
+void aisFsmRunEventGoSyncChannelTimeout(IN struct ADAPTER *prAdapter,
+					unsigned long ulParamPtr)
+{
+	aisFsmSteps(prAdapter,
+		AIS_STATE_GO_SYNC_CH_DONE);
+}
+#endif
+
 #if defined(CFG_TEST_MGMT_FSM) && (CFG_TEST_MGMT_FSM != 0)
 /*----------------------------------------------------------------------------*/
 /*!
@@ -4929,7 +4986,9 @@ void aisFsmScanRequest(IN struct ADAPTER *prAdapter,
 				/* 802.1x might not finished yet, pend it for
 				 * later handling ..
 				 */
-				aisFsmInsertRequest(prAdapter,
+				if (aisFsmIsRequestPending(prAdapter,
+					AIS_REQUEST_SCAN, FALSE) == FALSE)
+					aisFsmInsertRequest(prAdapter,
 						    AIS_REQUEST_SCAN);
 			} else {
 				if (prAisFsmInfo->fgIsChannelGranted == TRUE) {
@@ -4947,7 +5006,10 @@ void aisFsmScanRequest(IN struct ADAPTER *prAdapter,
 			wlanClearScanningResult(prAdapter);
 			aisFsmSteps(prAdapter, AIS_STATE_SCAN);
 		} else {
-			aisFsmInsertRequest(prAdapter, AIS_REQUEST_SCAN);
+			if (aisFsmIsRequestPending(prAdapter,
+				AIS_REQUEST_SCAN, FALSE) == FALSE)
+				aisFsmInsertRequest(prAdapter,
+					AIS_REQUEST_SCAN);
 		}
 	} else {
 		DBGLOG(SCN, WARN, "Scan Request dropped. (state: %d)\n",
@@ -5016,7 +5078,9 @@ aisFsmScanRequestAdv(IN struct ADAPTER *prAdapter,
 				/* 802.1x might not finished yet, pend it for
 				 * later handling ..
 				 */
-				aisFsmInsertRequest(prAdapter,
+				if (aisFsmIsRequestPending(prAdapter,
+					AIS_REQUEST_SCAN, FALSE) == FALSE)
+					aisFsmInsertRequest(prAdapter,
 						    AIS_REQUEST_SCAN);
 			} else {
 				if (prAisFsmInfo->fgIsChannelGranted == TRUE) {
@@ -5034,7 +5098,10 @@ aisFsmScanRequestAdv(IN struct ADAPTER *prAdapter,
 			wlanClearScanningResult(prAdapter);
 			aisFsmSteps(prAdapter, AIS_STATE_SCAN);
 		} else {
-			aisFsmInsertRequest(prAdapter, AIS_REQUEST_SCAN);
+			if (aisFsmIsRequestPending(prAdapter,
+				AIS_REQUEST_SCAN, FALSE) == FALSE)
+				aisFsmInsertRequest(prAdapter,
+					AIS_REQUEST_SCAN);
 		}
 	} else if (prAdapter->rWifiVar.rRmReqParams.rBcnRmParam.eState ==
 		   RM_ON_GOING) {
@@ -5304,11 +5371,13 @@ void aisBssLinkDown(IN struct ADAPTER *prAdapter)
 	struct BSS_INFO *prAisBssInfo;
 	u_int8_t fgDoAbortIndication = FALSE;
 	struct CONNECTION_SETTINGS *prConnSettings;
+	struct AIS_FSM_INFO *prAisFsmInfo;
 
 	ASSERT(prAdapter);
 
 	prAisBssInfo = prAdapter->prAisBssInfo;
 	prConnSettings = &(prAdapter->rWifiVar.rConnSettings);
+	prAisFsmInfo = &(prAdapter->rWifiVar.rAisFsmInfo);
 
 	/* 4 <1> Diagnose Connection for Beacon Timeout Event */
 	if (prAisBssInfo->eConnectionState == PARAM_MEDIA_STATE_CONNECTED) {
@@ -5323,6 +5392,11 @@ void aisBssLinkDown(IN struct ADAPTER *prAdapter)
 			fgDoAbortIndication = TRUE;
 		}
 	}
+
+	/* disconnect during join state */
+	if (prAisFsmInfo->eCurrentState == AIS_STATE_JOIN)
+		fgDoAbortIndication = TRUE;
+
 	/* 4 <2> invoke abort handler */
 	if (fgDoAbortIndication) {
 #if CFG_DISCONN_DEBUG_FEATURE
@@ -6531,8 +6605,10 @@ void aisSendNeighborRequest(struct ADAPTER *prAdapter)
 	kalMemZero(aucBuffer, sizeof(aucBuffer));
 	prSSIDIE = (struct SUB_ELEMENT_LIST *)&aucBuffer[0];
 	prSSIDIE->rSubIE.ucSubID = ELEM_ID_SSID;
-	COPY_SSID(&prSSIDIE->rSubIE.aucOptInfo[0], prSSIDIE->rSubIE.ucLength,
-		  prBssInfo->aucSSID, prBssInfo->ucSSIDLen);
+	/* to fix memcpy: detect field-spanning write */
+	COPY_SSID(
+	&aucBuffer[sizeof(*prSSIDIE) - sizeof(prSSIDIE->rSubIE.aucOptInfo)],
+	prSSIDIE->rSubIE.ucLength, prBssInfo->aucSSID, prBssInfo->ucSSIDLen);
 	rlmTxNeighborReportRequest(prAdapter, prBssInfo->prStaRecOfAP,
 				   prSSIDIE);
 }

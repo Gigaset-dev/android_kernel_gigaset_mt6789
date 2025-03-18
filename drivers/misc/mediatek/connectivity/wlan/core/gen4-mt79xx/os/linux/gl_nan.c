@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: @(#) gl_nan.c@@
  */
@@ -66,6 +67,7 @@
 
 struct wireless_dev *g_aprNanRoleWdev[NAN_BSS_INDEX_NUM];
 struct _GL_NAN_INFO_T g_aprNanMultiDev[NAN_BSS_INDEX_NUM];
+uint8_t g_ucNanMacAddr[PARAM_MAC_ADDR_LEN];
 
 static unsigned char *nifname = NAN_INF_NAME;
 
@@ -121,6 +123,8 @@ static netdev_tx_t nanHardStartXmit(IN struct sk_buff *prSkb,
 static int nanDoIOCTL(struct net_device *prDev, struct ifreq *prIFReq,
 		      int i4Cmd);
 
+static int nanSetMacAddress(struct net_device *ndev, void *addr);
+
 /*----------------------------------------------------------------------------*/
 /*!
  * \brief A function for prDev->init
@@ -160,6 +164,7 @@ const struct net_device_ops nan_netdev_ops = {
 	.ndo_select_queue = wlanSelectQueue,
 	.ndo_init = nanInit,
 	.ndo_uninit = nanUninit,
+	.ndo_set_mac_address = nanSetMacAddress,
 };
 
 /*******************************************************************************
@@ -742,6 +747,20 @@ glRegisterNAN(struct GLUE_INFO *prGlueInfo, const char *prDevName)
 
 	/* change to local administrated address */
 	rRandMacAddr[0] ^= (eRole + 1) << 3;
+
+	//0A:08:22:CA:0C:2D
+
+	if (prGlueInfo->prAdapter->rWifiVar.ucNanMacAddrOverride > 0) {
+		if (prGlueInfo->prAdapter->rWifiVar.ucNanMacAddrOverride == 1)
+			wlanHwAddrToBin(
+			prGlueInfo->prAdapter->rWifiVar.aucNanMacAddrStr,
+			g_ucNanMacAddr);
+		COPY_MAC_ADDR(rRandMacAddr, g_ucNanMacAddr);
+		DBGLOG(NAN, INFO, "Type: %d, Set mac:" MACSTR"\n",
+			prGlueInfo->prAdapter->rWifiVar.ucNanMacAddrOverride,
+			MAC2STR(rRandMacAddr));
+	}
+
 	kalMemCopy(prNanDev->dev_addr, rRandMacAddr, ETH_ALEN);
 	kalMemCopy(prNanDev->perm_addr, prNanDev->dev_addr, ETH_ALEN);
 
@@ -767,12 +786,9 @@ glRegisterNAN(struct GLUE_INFO *prGlueInfo, const char *prDevName)
 
 	/* initialize NAN Security Engine */
 	nan_sec_wpa_supplicant_start();
-	/*
-	 * Send request to CNM module
-	 *	- If DBDC is going to be enabled/disabled, the request will
-	 *	  be held to wait for DBDC switch done.
-	 */
-	nanDevSendEnableRequestToCnm(prAdapter);
+
+	/* Set NAN config to FW */
+	nanDevSetConfig(prAdapter);
 
 	prAdapter->rNanNetRegState = ENUM_NET_REG_STATE_UNREGISTERED;
 
@@ -843,11 +859,6 @@ glUnregisterNAN(struct GLUE_INFO *prGlueInfo)
 		return FALSE;
 	}
 
-	if (prAdapter->fgIsNanSendRequestToCnm)
-		nanDevSendAbortRequestToCnm(prAdapter);
-
-	nanDevDisableRequest(prAdapter);
-
 	/* uninitialize NAN Data Engine */
 	nanDataEngineUninit(prAdapter);
 
@@ -857,13 +868,14 @@ glUnregisterNAN(struct GLUE_INFO *prGlueInfo)
 	nan_sec_hostapd_deinit();
 	/* Clear pending cipher suite */
 	nanSecFlushCipherList();
+
 	/* uninitialize NAN Scheduler */
 	nanSchedUninit(prAdapter);
 
 	/* 4 <1> Uninit NAN dev FSM */
 	/* Uninit NAN device FSM */
 	/* only do nanDevFsmUninit, when unregister all nan device */
-	nanDevFsmUninit(prGlueInfo->prAdapter, ucIdx);
+	nanDevFsmUninit(prGlueInfo->prAdapter);
 
 	/* 4 <3> Free Wiphy & netdev */
 	prNANInfo = prGlueInfo->aprNANDevInfo[ucIdx];
@@ -968,6 +980,7 @@ nanRemove(struct GLUE_INFO *prGlueInfo)
 
 	kfree(g_aprNanRoleWdev[ucIdx]);
 	g_aprNanRoleWdev[ucIdx] = NULL;
+
 	return TRUE;
 }
 void
@@ -991,7 +1004,8 @@ nanSetSuspendMode(struct GLUE_INFO *prGlueInfo, unsigned char fgEnable)
 	}
 
 	kalSetNetAddressFromInterface(prGlueInfo, prDev, fgEnable);
-	wlanNotifyFwSuspend(prGlueInfo, prDev, fgEnable);
+	wlanNotifyFwSuspend(prGlueInfo, prDev, fgEnable,
+			SUSPEND_MODE_SOURCE_NAN);
 }
 
 /* Net Device Hooks */
@@ -1019,6 +1033,9 @@ nanOpen(IN struct net_device *prDev)
 
 	/* 2. carrier on & start TX queue */
 	/*DFS todo 20161220_DFS*/
+
+	if (!netif_carrier_ok(prDev))
+		netif_carrier_on(prDev);
 
 	netif_tx_start_all_queues(prDev);
 
@@ -1377,6 +1394,48 @@ nanDoIOCTL(struct net_device *prDev, struct ifreq *prIfReq, int i4Cmd)
 
 	return ret;
 } /* end of p2pDoIOCTL() */
+
+/*---------------------------------------------------------------------------*/
+/*!
+ * \brief To override nan interface address
+ *
+ * \param[in] prDev Net device requested.
+ * \param[in] addr  Pointer to address
+ *
+ * \retval 0 For success.
+ * \retval -E2BIG For user's buffer size is too small.
+ * \retval -EFAULT For fail.
+ *
+ */
+/*---------------------------------------------------------------------------*/
+int nanSetMacAddress(struct net_device *ndev, void *addr)
+{
+	struct ADAPTER *prAdapter = NULL;
+	struct GLUE_INFO *prGlueInfo = NULL;
+	struct sockaddr *sa = NULL;
+
+	prGlueInfo = *((struct GLUE_INFO **) netdev_priv(ndev));
+	if (!prGlueInfo) {
+		DBGLOG(NAN, ERROR, "prGlueInfo error!\n");
+		return -EFAULT;
+	}
+
+	prAdapter = prGlueInfo->prAdapter;
+	if (!prAdapter) {
+		DBGLOG(NAN, ERROR, "prAdapter error!\n");
+		return -EFAULT;
+	}
+
+	sa = (struct sockaddr *)addr;
+	DBGLOG(NAN, ERROR, "Get Mac address from host: " MACSTR ".\n",
+		MAC2STR(sa->sa_data));
+
+	COPY_MAC_ADDR(g_ucNanMacAddr, sa->sa_data);
+	nanDevSetNmiAddress(prAdapter, sa->sa_data);
+	nanDevSetNdiAddress(prAdapter, sa->sa_data);
+
+	return 0;
+}
 
 /*----------------------------------------------------------------------------*/
 /*!

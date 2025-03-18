@@ -353,6 +353,10 @@ void rlmRspGenerateExtCapIE(struct ADAPTER *prAdapter,
 void rlmRspGenerateHtOpIE(struct ADAPTER *prAdapter,
 			  struct MSDU_INFO *prMsduInfo);
 
+void rlmGenerateHtTPEIE(
+	struct ADAPTER *prAdapter,
+	struct MSDU_INFO *prMsduInfo);
+
 void rlmRspGenerateErpIE(struct ADAPTER *prAdapter,
 			 struct MSDU_INFO *prMsduInfo);
 

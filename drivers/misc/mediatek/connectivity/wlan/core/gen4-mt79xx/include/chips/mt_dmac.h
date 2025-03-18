@@ -1,7 +1,19 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
  * Copyright (c) 2021 MediaTek Inc.
  */
+
+/*
+	Module Name:
+	mt_dmac.h
+
+	Abstract:
+	Ralink Wireless Chip MAC related definition & structures
+
+	Revision History:
+	Who			When		  What
+	--------	----------	  -------------------------------------
+*/
 
 #ifndef __MT_DMAC_H__
 #define __MT_DMAC_H__

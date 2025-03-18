@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/
  *							include/mgmt/rlm.h#2
@@ -459,7 +460,8 @@ void rlmGenerateMTKOuiIE(struct ADAPTER *prAdapter,
 			 struct MSDU_INFO *prMsduInfo);
 
 u_int8_t rlmParseCheckMTKOuiIE(IN struct ADAPTER *prAdapter,
-			       IN uint8_t *pucBuf, IN uint32_t *pu4Cap);
+			       IN uint8_t ucBssIndex, IN uint8_t *pucBuf,
+			       IN uint32_t *pu4Cap);
 
 void rlmGenerateCsaIE(struct ADAPTER *prAdapter,
 		      struct MSDU_INFO *prMsduInfo);
@@ -547,6 +549,10 @@ void rlmRspGenerateVhtOpIE(struct ADAPTER *prAdapter,
 
 void rlmFillVhtOpIE(struct ADAPTER *prAdapter,
 		    struct BSS_INFO *prBssInfo, struct MSDU_INFO *prMsduInfo);
+
+void rlmGenerateVhtTPEIE(
+	struct ADAPTER *prAdapter,
+	struct MSDU_INFO *prMsduInfo);
 
 void rlmRspGenerateVhtOpNotificationIE(struct ADAPTER
 			       *prAdapter, struct MSDU_INFO *prMsduInfo);
@@ -728,9 +734,10 @@ void rlmTransferHe6gOpInfor(IN uint8_t ucChannelNum,
 	OUT uint8_t *pucCenterFreqS2,
 	OUT enum ENUM_CHNL_EXT *peSco);
 
-void rlmModifyHE6GBwPara(uint8_t *pucHe6gChannelFrequencyS1,
-			uint8_t *pucHe6gChannelFrequencyS2,
-			uint8_t *pucHe6gChannelWidth);
+void rlmModifyHE6GBwPara(uint8_t ucHe6gChannelWidth,
+	uint8_t ucHe6gPrimaryChannel,
+	uint8_t *pucHe6gChannelFrequencyS1,
+	uint8_t *pucHe6gChannelFrequencyS2);
 #endif
 
 void rlmReviseMaxBw(
@@ -740,6 +747,13 @@ void rlmReviseMaxBw(
 	enum ENUM_CHANNEL_WIDTH *peChannelWidth,
 	uint8_t *pucS1,
 	uint8_t *pucPrimaryCh);
+
+enum ENUM_CHNL_EXT rlmReviseSco(
+	enum ENUM_CHANNEL_WIDTH eChannelWidth,
+	uint8_t ucPrimaryCh,
+	uint8_t ucS1,
+	enum ENUM_CHNL_EXT eScoOrigin,
+	uint8_t ucMaxBandwidth);
 
 void rlmSetMaxTxPwrLimit(IN struct ADAPTER *prAdapter, int8_t cLimit,
 			 uint8_t ucEnable);

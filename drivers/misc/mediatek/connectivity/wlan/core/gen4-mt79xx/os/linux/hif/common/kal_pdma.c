@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /******************************************************************************
  *[File]             kal_pdma.c
  *[Version]          v1.0
@@ -9,8 +10,6 @@
  *[Author]
  *[Description]
  *    The program provides PCIE HIF driver
- *[Copyright]
- *    Copyright (C) 2010 MediaTek Incorporation. All Rights Reserved.
  ******************************************************************************/
 
 
@@ -562,6 +561,29 @@ static uint8_t kalGetSwAmsduNum(struct GLUE_INFO *prGlueInfo,
 		return 0;
 
 	return prStaRec->ucMaxMpduCount;
+}
+
+void kalAcquireHifOwnLock(struct ADAPTER *prAdapter)
+{
+	/* if direct trx,  set drv/fw own will be called
+	 *  in softirq/tasklet/thread context,
+	 *  if normal trx, set drv/fw own will only
+	 *  be called in thread context
+	 */
+	if (HAL_IS_TX_DIRECT(prAdapter) || HAL_IS_RX_DIRECT(prAdapter))
+		spin_lock_bh(
+			&prAdapter->prGlueInfo->rSpinLock[SPIN_LOCK_SET_OWN]);
+	else
+		KAL_ACQUIRE_MUTEX(prAdapter, MUTEX_SET_OWN);
+}
+
+void kalReleaseHifOwnLock(struct ADAPTER *prAdapter)
+{
+	if (HAL_IS_TX_DIRECT(prAdapter) || HAL_IS_RX_DIRECT(prAdapter))
+		spin_unlock_bh(
+			&prAdapter->prGlueInfo->rSpinLock[SPIN_LOCK_SET_OWN]);
+	else
+		KAL_RELEASE_MUTEX(prAdapter, MUTEX_SET_OWN);
 }
 
 u_int8_t kalDevWriteData(IN struct GLUE_INFO *prGlueInfo,

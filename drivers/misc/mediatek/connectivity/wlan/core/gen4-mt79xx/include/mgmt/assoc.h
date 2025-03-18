@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/
  *							include/mgmt/assoc.h#1
@@ -82,12 +83,19 @@ assocProcessRxDisassocFrame(IN struct ADAPTER *prAdapter,
 				IN uint8_t aucBSSID[],
 				OUT uint16_t *pu2ReasonCode);
 
+uint32_t
+wlanSetDisassociate(IN struct ADAPTER *prAdapter, IN void *pvSetBuffer,
+		IN uint32_t u4SetBufferLen, IN uint8_t ucBssIndex);
+
 uint32_t assocProcessRxAssocReqFrame(IN struct ADAPTER
 				*prAdapter, IN struct SW_RFB *prSwRfb,
 				OUT uint16_t *pu2StatusCode);
 
 uint32_t assocSendReAssocRespFrame(IN struct ADAPTER
 				*prAdapter, IN struct STA_RECORD *prStaRec);
+
+struct MSDU_INFO *assocComposeReAssocRespFrame(IN struct ADAPTER *prAdapter,
+				IN struct STA_RECORD *prStaRec);
 
 uint16_t assocBuildCapabilityInfo(IN struct ADAPTER
 				*prAdapter, IN struct STA_RECORD *prStaRec);

@@ -1,8 +1,7 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
  * Copyright (c) 2021 MediaTek Inc.
  */
-
 
 #ifndef _NAN_DATA_ENGINE_H
 #define _NAN_DATA_ENGINE_H
@@ -63,6 +62,8 @@ extern struct net_device *gPrDev;
 #define ENABLE_NDP_UT_LOG 1
 
 #define NAN_CATEGORY_HDR_OFFSET 7
+
+#define NAN_MAX_OOB_ACTION_DATA_LEN	960
 
 /****************************************************
  *                    Local part
@@ -345,6 +346,12 @@ struct _NAN_DATA_PATH_INFO_T {
 	uint8_t ucNDLNum;
 
 	uint8_t aucLocalNMIAddr[MAC_ADDR_LEN]; /* NMI */
+	uint8_t aucLocalNDIAddr[MAC_ADDR_LEN]; /* NDI is same as NMI*/
+	/* The current version only supports single NDI.
+	 * This NDI is always same as NMI.
+	 * After multiple NDIs are supported,
+	 * this function will be revised.
+	 */
 	uint8_t ucSeqNum; /* used to assign event SeqNum Generation */
 	uint16_t u2TransId;
 
@@ -438,6 +445,20 @@ struct _NAN_CMD_DATA_END {
 	uint8_t aucInitiatorDataAddress[6];
 	uint8_t aucReserved[2];
 };
+
+struct _NAN_CMD_OOB_ACTION {
+	uint8_t ucReasonCode; /* refer to NAN_REASON_CODE_* */
+	uint8_t aucDestAddress[6];
+	uint8_t aucSrcAddress[6];
+	uint8_t aucBssid[6];
+	uint8_t ucMapId;	/* 0: 2G4, 1: 5G */
+	uint16_t ucTimeout;	/* unit: ms */
+	uint8_t ucSecurity;	/* 1: sec, 0: open */
+	uint16_t ucToken;
+	uint8_t aucPayload[NAN_MAX_OOB_ACTION_DATA_LEN];
+	uint8_t ucPayloadLen;
+};
+
 
 struct _NAN_PARAMETER_NDL_SCH {
 	uint8_t ucType; /* bit#0: unicast */
@@ -541,7 +562,7 @@ uint32_t nanCmdDataEnd(IN struct ADAPTER *prAdapter,
 uint32_t nanUpdateNdlSchedule(IN struct ADAPTER *prAdapter,
 			      struct _NAN_PARAMETER_NDL_SCH *prNanparamUDSCH);
 
-uint32_t nanCmdDataUpdtae(IN struct ADAPTER *prAdapter,
+uint32_t nanCmdDataUpdate(IN struct ADAPTER *prAdapter,
 			  struct _NAN_PARAMETER_NDL_SCH *prNanUpdateSchParam);
 
 /* Incoming NAN Action Frame Handlers */
@@ -610,6 +631,9 @@ uint32_t nanNdpSendDataPathKeyInstall(IN struct ADAPTER *prAdapter,
 uint32_t nanNdpSendDataPathTermination(IN struct ADAPTER *prAdapter,
 				       struct _NAN_NDP_INSTANCE_T *prNDP);
 
+uint32_t nanNdpSendOOBAction(struct ADAPTER *prAdapter,
+				struct _NAN_CMD_OOB_ACTION *prNanCmdOOBAction);
+
 uint32_t nanNdlSendScheduleRequest(IN struct ADAPTER *prAdapter,
 				   struct _NAN_NDL_INSTANCE_T *prNDL);
 
@@ -646,6 +670,10 @@ uint32_t nanDPSecurityInstallTxDone(IN struct ADAPTER *prAdapter,
 uint32_t nanDPTerminationTxDone(IN struct ADAPTER *prAdapter,
 				IN struct MSDU_INFO *prMsduInfo,
 				IN enum ENUM_TX_RESULT_CODE rTxDoneStatus);
+
+uint32_t nanNdpOOBActionTxDone(IN struct ADAPTER *prAdapter,
+		IN struct MSDU_INFO *prMsduInfo,
+		IN enum ENUM_TX_RESULT_CODE rTxDoneStatus);
 
 uint32_t
 nanDataEngineScheduleReqTxDone(IN struct ADAPTER *prAdapter,

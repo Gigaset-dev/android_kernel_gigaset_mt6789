@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /******************************************************************************
  *[File]             pcie.c
  *[Version]          v1.0
@@ -9,8 +10,6 @@
  *[Author]
  *[Description]
  *    The program provides PCIE HIF driver
- *[Copyright]
- *    Copyright (C) 2010 MediaTek Incorporation. All Rights Reserved.
  ******************************************************************************/
 
 
@@ -36,10 +35,7 @@
 #endif
 
 #include "mt66xx_reg.h"
-#if CFG_ALLOC_IRQ_VECTORS_IN_WIFI_DRV
 #include <linux/irq.h>
-#endif
-
 
 /*******************************************************************************
  *                              C O N S T A N T S
@@ -106,6 +102,10 @@ static const struct pci_device_id mtk_pci_ids[] = {
 	{	PCI_DEVICE(MTK_PCI_VENDOR_ID, NIC7902_PCIe_DEVICE_ID),
 		.driver_data = (kernel_ulong_t)&mt66xx_driver_data_mt7902},
 #endif /* MT7902 */
+#ifdef MT7926
+	{	PCI_DEVICE(MTK_PCI_VENDOR_ID, NIC7926_PCIe_DEVICE_ID),
+		.driver_data = (kernel_ulong_t)&mt66xx_driver_data_mt7926},
+#endif /* MT7926 */
 #ifdef MT7933
 	{	PCI_DEVICE(MTK_PCI_VENDOR_ID, NIC7933_PCIe_DEVICE_ID),
 		.driver_data = (kernel_ulong_t)&mt66xx_driver_data_mt7933},
@@ -217,6 +217,81 @@ static void pcieDumpRx(struct GL_HIF_INFO *prHifInfo,
  */
 /*----------------------------------------------------------------------------*/
 static void *CSRBaseAddress;
+#if defined(CONFIG_SMP)
+static int mtk_pci_irq_set_smp_affinity(struct pci_dev *pdev)
+{
+	struct GLUE_INFO *prGlueInfo = NULL;
+	struct ADAPTER *prAdapter = NULL;
+	uint32_t ucAffinity = 0;
+	struct cpumask *onlinemask = NULL;
+	struct cpumask *mask = NULL;
+	int ret = -1;
+
+	prGlueInfo = (struct GLUE_INFO *)pci_get_drvdata(pdev);
+	if (!prGlueInfo) {
+		DBGLOG(HAL, ERROR, "pci_get_drvdata fail!\n");
+		goto out;
+	}
+
+	prAdapter = prGlueInfo->prAdapter;
+	if (!prAdapter) {
+		DBGLOG(HAL, ERROR, "prAdapter is NULL!\n");
+		goto out;
+	}
+
+	ucAffinity = prAdapter->rWifiVar.u4PciIrqSMPAffinity;
+	if (!ucAffinity) {
+		DBGLOG(HAL, INFO, "No need set affinity\n");
+		goto out;
+	}
+
+	onlinemask = kalMemAlloc(sizeof(struct cpumask), VIR_MEM_TYPE);
+	if (onlinemask == NULL) {
+		DBGLOG(HAL, INFO, "No need set affinity\n");
+		goto out;
+	}
+	kalMemZero(onlinemask, sizeof(struct cpumask));
+
+	mask = kalMemAlloc(sizeof(struct cpumask), VIR_MEM_TYPE);
+	if (mask == NULL) {
+		DBGLOG(HAL, INFO, "No need set affinity\n");
+		goto out;
+	}
+	kalMemZero(mask, sizeof(struct cpumask));
+
+	cpumask_copy(onlinemask, cpu_online_mask);
+
+
+	if (ucAffinity & onlinemask->bits[0]) {
+		mask->bits[0] = ucAffinity & onlinemask->bits[0];
+	} else {
+		DBGLOG(HAL, ERROR, "The affinity is out of cpu online mask!\n");
+		mask->bits[0] = onlinemask->bits[0] & 0xfe;
+	}
+#if KERNEL_VERSION(5, 4, 0) <= CFG80211_VERSION_CODE
+	ret = irq_set_affinity_hint(pdev->irq, mask);
+
+	if (ret) {
+		DBGLOG(HAL, INFO, "irq_set_affinity_hint failed(%d)\n", ret);
+		goto out;
+	}
+#endif
+
+
+	ret = 0;
+
+out:
+	if (onlinemask)
+		kalMemFree(onlinemask, VIR_MEM_TYPE, sizeof(struct cpumask));
+
+	if (mask)
+		kalMemFree(mask, VIR_MEM_TYPE, sizeof(struct cpumask));
+
+	return ret;
+
+
+}
+#endif
 
 static irqreturn_t mtk_pci_interrupt(int irq, void *dev_instance)
 {
@@ -254,6 +329,9 @@ static int mtk_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	int ret = 0;
 	struct mt66xx_chip_info *prChipInfo;
+#if defined(CONFIG_SMP)
+	int retSetIrq = 0;
+#endif
 
 	ASSERT(pdev);
 	ASSERT(id);
@@ -289,6 +367,12 @@ static int mtk_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	} else {
 		g_fgDriverProbed = TRUE;
 		g_u4DmaMask = prChipInfo->bus_info->u4DmaMask;
+#if defined(CONFIG_SMP)
+		retSetIrq = mtk_pci_irq_set_smp_affinity(pdev);
+		if (retSetIrq)
+			DBGLOG(INIT, INFO,
+				"mtk_pci_irq_set_smp_affinity failed\n");
+#endif
 	}
 #endif
 
@@ -337,7 +421,6 @@ static int mtk_pci_suspend(struct pci_dev *pdev, pm_message_t state)
 	}
 
 	prAdapter = prGlueInfo->prAdapter;
-	prGlueInfo->fgIsInSuspendMode = TRUE;
 	prErrRecoveryCtrl = &prGlueInfo->rHifInfo.rErrRecoveryCtl;
 
 	ACQUIRE_POWER_CONTROL_FROM_PM(prAdapter);
@@ -347,11 +430,16 @@ static int mtk_pci_suspend(struct pci_dev *pdev, pm_message_t state)
 
 #if CFG_ENABLE_WAKE_LOCK
 	prGlueInfo->rHifInfo.eSuspendtate = PCIE_STATE_SUSPEND_ENTERING;
-#endif
-
+	if (IS_FEATURE_ENABLED(prGlueInfo->prAdapter->rWifiVar.ucWow)) {
+		DBGLOG(HAL, STATE, ">> compile flag CFG_ENABLE_WAKE_LOCK\n");
+		aisPreSuspendFlow(prGlueInfo->prAdapter);
+		p2pRoleProcessPreSuspendFlow(prGlueInfo->prAdapter);
+	}
+#else
 	/* wait wiphy device do cfg80211 suspend done, then start hif suspend */
 	if (IS_FEATURE_ENABLED(prGlueInfo->prAdapter->rWifiVar.ucWow))
 		wlanWaitCfg80211SuspendDone(prGlueInfo);
+#endif
 
 	wlanSuspendPmHandle(prGlueInfo);
 
@@ -371,8 +459,6 @@ static int mtk_pci_suspend(struct pci_dev *pdev, pm_message_t state)
 		count++;
 	}
 	DBGLOG(HAL, ERROR, "pcie pre_suspend done\n");
-
-	prGlueInfo->rHifInfo.eSuspendtate = PCIE_STATE_SUSPEND;
 
 	/* Polling until HIF side PDMAs are all idle */
 	prBusInfo = prAdapter->chip_info->bus_info;
@@ -456,6 +542,7 @@ static int mtk_pci_suspend(struct pci_dev *pdev, pm_message_t state)
 		return -EAGAIN;
 	}
 
+	prGlueInfo->rHifInfo.eSuspendtate = PCIE_STATE_SUSPEND;
 	pci_save_state(pdev);
 	pci_set_power_state(pdev, pci_choose_state(pdev, state));
 
@@ -540,7 +627,6 @@ int mtk_pci_resume(struct pci_dev *pdev)
 	/* FW own */
 	RECLAIM_POWER_CONTROL_TO_PM(prGlueInfo->prAdapter, FALSE);
 
-	prGlueInfo->fgIsInSuspendMode = FALSE;
 	/* Allow upper layers to call the device hard_start_xmit routine. */
 	netif_tx_wake_all_queues(prGlueInfo->prDevHandler);
 
@@ -739,7 +825,7 @@ u_int8_t glBusInit(void *pvData)
 
 	pdev = (struct pci_dev *)pvData;
 
-	ret = pci_set_dma_mask(pdev, DMA_BIT_MASK(g_u4DmaMask));
+	ret = KAL_DMA_SET_MASK(pdev, DMA_BIT_MASK(g_u4DmaMask));
 	if (ret != 0) {
 		DBGLOG(INIT, INFO, "set DMA mask failed!errno=%d\n", ret);
 		return FALSE;
@@ -840,9 +926,8 @@ int32_t glBusSetIrq(void *pvData, void *pfnIsr, void *pvCookie)
 	prHifInfo = &prGlueInfo->rHifInfo;
 	pdev = prHifInfo->pdev;
 
-#if CFG_ALLOC_IRQ_VECTORS_IN_WIFI_DRV
-	DBGLOG(INIT, INFO, "free pci irq vectors\n");
-	pci_free_irq_vectors(pdev);
+#if KERNEL_VERSION(4, 8, 0) < LINUX_VERSION_CODE
+	DBGLOG(INIT, INFO, "alloc pci irq vectors\n");
 	ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_ALL_TYPES);
 	if (ret < 0) {
 		DBGLOG(INIT, ERROR, "alloc_irq_vectors fail(%d)\n", ret);
@@ -853,12 +938,15 @@ int32_t glBusSetIrq(void *pvData, void *pfnIsr, void *pvCookie)
 	prHifInfo->u4IrqId = pdev->irq;
 	ret = request_irq(prHifInfo->u4IrqId, mtk_pci_interrupt,
 		IRQF_SHARED, prNetDevice->name, prGlueInfo);
-	if (ret != 0)
+	if (ret != 0) {
+#if KERNEL_VERSION(4, 8, 0) < LINUX_VERSION_CODE
+		pci_free_irq_vectors(pdev);
+#endif
 		DBGLOG(INIT, INFO,
 			"glBusSetIrq: request_irq  ERROR(%d)\n", ret);
+	}
 	else if (prBusInfo->initPcieInt)
 		prBusInfo->initPcieInt(prGlueInfo);
-
 	return ret;
 }
 
@@ -897,6 +985,9 @@ void glBusFreeIrq(void *pvData, void *pvCookie)
 
 	synchronize_irq(pdev->irq);
 	free_irq(pdev->irq, prGlueInfo);
+#if KERNEL_VERSION(4, 8, 0) < LINUX_VERSION_CODE
+	pci_free_irq_vectors(pdev);
+#endif
 }
 
 u_int8_t glIsReadClearReg(uint32_t u4Address)

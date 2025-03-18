@@ -661,27 +661,34 @@ int btmtk_sdio_read_conn_infra_pc(u32 *val)
 EXPORT_SYMBOL(btmtk_sdio_read_conn_infra_pc);
 
 typedef bool (*wifi_driver_own)(uint8_t enable);
+#ifndef CFG_CHIP_RESET_KO_SUPPORT
 static wifi_driver_own wifi_driver_own_ptr = NULL;
+#endif
 static void btmtk_sdio_set_wifi_driver_own(uint8_t enable)
 {
 #ifdef CFG_CHIP_RESET_KO_SUPPORT
-	struct WIFI_NOTIFY_DESC *wifi_notify_desc = NULL;
+	struct ModuleMsg msg;
+	int ret = 0;
 
-	wifi_notify_desc = get_wifi_notify_callback();
-	if (!wifi_driver_own_ptr)
-		wifi_driver_own_ptr = wifi_notify_desc->BtNotifyWifiSubResetStep1;
+	msg.msgId = BT_TO_WIFI_SET_WIFI_DRIVER_OWN;
+	msg.input = &enable;
+	msg.output = &ret;
+
+	if (send_msg_to_module(RESET_MODULE_TYPE_BT, RESET_MODULE_TYPE_WIFI, &msg) != RESET_RETURN_STATUS_SUCCESS || (ret < 0)) {
+		BTMTK_ERR("%s: halPreventFwOwnEn fail", __func__);
+	}
 #else
 	if (!wifi_driver_own_ptr)
 		wifi_driver_own_ptr =
 			(wifi_driver_own)btmtk_kallsyms_lookup_name("halPreventFwOwnEn");
-#endif
-
 	if (wifi_driver_own_ptr) {
 		BTMTK_INFO("%s set wifi own to %d", __func__, enable);
 		wifi_driver_own_ptr(enable);
 	} else {
 		BTMTK_INFO("%s wifi_driver_own_ptr is NULL", __func__);
 	}
+#endif
+
 }
 
 int btmtk_sdio_set_driver_own_for_subsys_reset(int enable)
@@ -2031,11 +2038,6 @@ static int btmtk_cif_probe(struct sdio_func *func,
 			func->num);
 	DUMP_TIME_STAMP("probe_start");
 
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-	/* notify reset ko module BT probe start */
-	rstNotifyWholeChipRstStatus(RST_MODULE_BT, RST_MODULE_STATE_PROBE_START, NULL);
-#endif
-
 	/* sdio interface numbers  */
 	if (func->num != BTMTK_SDIO_FUNC) {
 		BTMTK_INFO("%s: func num is not match, func_num = %d", __func__, func->num);
@@ -2077,7 +2079,8 @@ static int btmtk_cif_probe(struct sdio_func *func,
 
 #ifdef CFG_CHIP_RESET_KO_SUPPORT
 	/* notify reset ko module BT probe done */
-	rstNotifyWholeChipRstStatus(RST_MODULE_BT, RST_MODULE_STATE_PROBE_DONE, NULL);
+	send_reset_event(RESET_MODULE_TYPE_BT, RFSM_EVENT_PROBED);
+	update_hif_info(HIF_INFO_SDIO_HOST, func);
 #endif
 
 	DUMP_TIME_STAMP("probe_end");
@@ -2110,6 +2113,9 @@ static void btmtk_cif_disconnect(struct sdio_func *func)
 
 	/* Set End/Error state */
 	btmtk_set_chip_state((void *)bdev, cif_state->ops_end);
+#ifdef CFG_CHIP_RESET_KO_SUPPORT
+	send_reset_event(RESET_MODULE_TYPE_BT, RFSM_EVENT_REMOVED);
+#endif
 }
 
 #ifdef CONFIG_PM
@@ -2490,10 +2496,6 @@ int btmtk_sdio_whole_reset(struct btmtk_dev *bdev)
 	cif_dev->patched = 0;
 	btmtk_sdio_set_wifi_driver_own(0);
 
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-	rstNotifyWholeChipRstStatus(RST_MODULE_BT, RST_MODULE_STATE_PRERESET, cif_dev->func);
-	ret = 0;
-#else
 	BTMTK_INFO("%s, mmc_remove_host", __func__);
 	mmc_remove_host(host);
 
@@ -2504,7 +2506,6 @@ int btmtk_sdio_whole_reset(struct btmtk_dev *bdev)
 	 */
 	BTMTK_INFO("%s, mmc_add_host", __func__);
 	ret = mmc_add_host(host);
-#endif
 
 	BTMTK_INFO("%s, mmc_add_host return %d", __func__, ret);
 	return ret;
@@ -2565,6 +2566,35 @@ static void btmtk_sdio_chip_reset_notify(struct btmtk_dev *bdev)
 	btmtk_sdio_set_wifi_driver_own(0);
 }
 
+#ifdef CFG_CHIP_RESET_KO_SUPPORT
+static void btmtk_sdio_resetko_notify(void *data)
+{
+	struct wifi_read_mcu_pc *read_mcu_args;
+	struct ModuleMsg *msg;
+	int *ret;
+
+	msg = (struct ModuleMsg *)data;
+
+	if (msg == NULL || msg->input == NULL || msg->output == NULL)
+		return;
+
+	switch (msg->msgId) {
+	case WIFI_TO_BT_READ_WIFI_MCU_PC:
+		read_mcu_args = (struct wifi_read_mcu_pc *)msg->input;
+		ret = (int *)(msg->output);
+		*ret = btmtk_sdio_read_wifi_mcu_pc(read_mcu_args->PcLogSel, read_mcu_args->pu4Val);
+		break;
+	case WIFI_TO_BT_SET_DRIVER_OWN:
+		ret = (int *)(msg->output);
+		*ret = btmtk_sdio_set_driver_own_for_subsys_reset(*((int *)(msg->input)));
+		break;
+	default:
+		BTMTK_ERR("Unknown msgid: %d", msg->msgId);
+		break;
+	}
+}
+#endif
+
 int btmtk_cif_register(void)
 {
 	int retval = 0;
@@ -2588,6 +2618,9 @@ int btmtk_cif_register(void)
 	hook.open_done = btmtk_sdio_open_done;
 	hook.dl_dma = btmtk_sdio_load_fw_patch_using_dma;
 	hook.dump_debug_sop = btmtk_sdio_dump_debug_sop;
+#ifdef CFG_CHIP_RESET_KO_SUPPORT
+	hook.resetko_notify = btmtk_sdio_resetko_notify;
+#endif
 	btmtk_reg_hif_hook(&hook);
 
 	btmtk_sdio_create_fw_own_timer(&g_sdio_dev);

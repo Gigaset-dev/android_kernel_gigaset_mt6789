@@ -291,16 +291,30 @@ static struct ieee80211_channel mtk_2ghz_channels[] = {
 #endif
 
 #if (CFG_SUPPORT_WIFI_6G == 1)
-#define CHAN6G(_channel, _flags)				\
-{								\
-	.band               = KAL_BAND_6GHZ,			\
-	.center_freq        = (5950 + (5 * (_channel))),	\
-	.freq_offset        = 0,				\
-	.hw_value           = (_channel),			\
-	.flags              = (_flags),				\
-	.max_antenna_gain   = 0,				\
-	.max_power          = 30,				\
-}
+#if KERNEL_VERSION(5, 8, 0) <= CFG80211_VERSION_CODE
+	#define CHAN6G(_channel, _flags)				\
+	{								\
+		.band               = KAL_BAND_6GHZ,			\
+		.center_freq        =	\
+			((_channel == 2) ? (5935) : (5950 + (5 * (_channel)))),\
+		.freq_offset        = 0,				\
+		.hw_value           = (_channel),			\
+		.flags              = (_flags),				\
+		.max_antenna_gain   = 0,				\
+		.max_power          = 30,				\
+	}
+#else
+	#define CHAN6G(_channel, _flags)				\
+	{								\
+		.band               = KAL_BAND_6GHZ,			\
+		.center_freq        =	\
+			((_channel == 2) ? (5935) : (5950 + (5 * (_channel)))),\
+		.hw_value           = (_channel),			\
+		.flags              = (_flags),				\
+		.max_antenna_gain   = 0,				\
+		.max_power          = 30,				\
+	}
+#endif
 #endif
 
 static struct ieee80211_channel mtk_5ghz_channels[] = {
@@ -338,6 +352,7 @@ static struct ieee80211_channel mtk_5ghz_channels[] = {
 #if (CFG_SUPPORT_WIFI_6G == 1)
 static struct ieee80211_channel mtk_6ghz_channels[] = {
 	/* UNII-5 */
+	CHAN6G(2, 0),
 	CHAN6G(1, 0),
 	CHAN6G(5, 0),
 	CHAN6G(9, 0),
@@ -3752,9 +3767,10 @@ void reset_p2p_mode(struct GLUE_INFO *prGlueInfo)
 			sizeof(struct PARAM_CUSTOM_P2P_SET_STRUCT),
 			FALSE, FALSE, TRUE, &u4BufLen);
 
-	if (rWlanStatus != WLAN_STATUS_SUCCESS)
+	if (rWlanStatus != WLAN_STATUS_SUCCESS) {
+		DBGLOG(INIT, ERROR, "set p2p mode failed\n");
 		p2pRemove(prGlueInfo);
-
+	}
 	DBGLOG(INIT, INFO,
 			"ret = 0x%08x\n", (uint32_t) rWlanStatus);
 }

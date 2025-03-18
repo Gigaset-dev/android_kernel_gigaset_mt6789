@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   mt7902.c
 *    \brief  Internal driver stack will export
 *    the required procedures here for GLUE Layer.
@@ -10,7 +11,7 @@
      from MediaTek 802.11 Wireless LAN driver stack to GLUE Layer.
 */
 
-#ifdef MT7902
+#if defined(MT7902) || defined(MT7926)
 
 /*******************************************************************************
 *                         C O M P I L E R   F L A G S
@@ -827,11 +828,6 @@ uint32_t mt7902CoDlImageSectGetPatchInfo(IN struct ADAPTER *prAdapter,
 			num_of_region,
 			le2cpu32(glo_desc->subsys));
 
-	if (num_of_region < 0) {
-		DBGLOG(INIT, WARN, "parse patch failed! num_of_region < 0.\n");
-		return WLAN_STATUS_FAILURE;
-	}
-
 	/* section map */
 	img_ptr += sizeof(struct PATCH_GLO_DESC);
 
@@ -868,7 +864,7 @@ uint32_t mt7902CoDlImageSectGetPatchInfo(IN struct ADAPTER *prAdapter,
 		region->img_size =
 			le2cpu32(sec_map->bin_info_spec.dl_size) +
 			le2cpu32(sec_map->bin_info_spec.align_len);
-		if (!(region->img_size % 16))
+		if ((region->img_size % 16))
 			DBGLOG(INIT, WARN,
 			       "%d Patch is not 16-byte aligned\n", eDlIdx);
 		region->img_ptr = pvFwImageMapFile +
@@ -1111,7 +1107,7 @@ uint32_t mt7902PatchCoDownload(IN struct ADAPTER *prAdapter,
 			       IN enum ENUM_IMG_DL_IDX_T eDlIdx)
 {
 	uint32_t u4FwSize = 0;
-	uint32_t u4Status = WLAN_STATUS_FAILURE;
+	uint32_t u4Status;
 	uint32_t u4DataMode;
 	uint32_t u4RemapAddr;
 	uint32_t u4SecInfo = 0;
@@ -1267,7 +1263,7 @@ void mt7902ConstructBtPatchName(struct GLUE_INFO *prGlueInfo,
 
 uint32_t mt7902DownloadBtPatch(IN struct ADAPTER *prAdapter)
 {
-	uint32_t u4Status = WLAN_STATUS_FAILURE;
+	uint32_t u4Status;
 
 	u4Status = mt7902PatchCoDownload(prAdapter, IMG_DL_IDX_BT_PATCH);
 
@@ -1321,7 +1317,7 @@ void mt7902ConstructZbPatchName(struct GLUE_INFO *prGlueInfo,
 
 uint32_t mt7902DownloadZbPatch(IN struct ADAPTER *prAdapter)
 {
-	uint32_t u4Status = WLAN_STATUS_FAILURE;
+	uint32_t u4Status;
 
 	u4Status = mt7902PatchCoDownload(prAdapter, IMG_DL_IDX_ZB_PATCH);
 
@@ -1674,4 +1670,4 @@ struct mt66xx_hif_driver_data mt66xx_driver_data_mt7902 = {
 	.chip_info = &mt66xx_chip_info_mt7902,
 };
 
-#endif /* MT7902 */
+#endif /* defined(MT7902) || defined(MT7926) */

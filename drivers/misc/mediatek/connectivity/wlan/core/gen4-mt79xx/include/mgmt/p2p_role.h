@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 #ifndef _P2P_ROLE_H
 #define _P2P_ROLE_H
 
@@ -105,9 +106,9 @@ struct MSG_P2P_CONNECTION_REQUEST {
 	uint8_t aucSrcMacAddr[MAC_ADDR_LEN];
 	enum ENUM_CHNL_EXT eChnlSco;
 	struct RF_CHANNEL_INFO rChannelInfo;
+	enum ENUM_PARAM_AUTH_MODE eAuthMode;
 	uint32_t u4IELen;
 	uint8_t aucIEBuf[1];
-	/* TODO: Auth Type, OPEN, SHARED, FT, EAP... */
 };
 
 struct MSG_P2P_CONNECTION_ABORT {
@@ -177,7 +178,7 @@ struct P2P_RADAR_INFO {
 
 struct MSG_P2P_SET_NEW_CHANNEL {
 	struct MSG_HDR rMsgHdr;
-	enum ENUM_CHANNEL_WIDTH eChannelWidth;
+	struct RF_CHANNEL_INFO rRfChannelInfo;
 	uint8_t ucRoleIdx;
 	uint8_t ucBssIndex;
 };

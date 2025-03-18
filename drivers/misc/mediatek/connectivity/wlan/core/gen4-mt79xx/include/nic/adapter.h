@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*! \file   adapter.h
  *  \brief  Definition of internal data structure for driver manipulation.
  *
@@ -80,6 +81,15 @@ enum {
 	ENUM_SW_TEST_MODE_SIGMA_WMMAC = 0x13,
 	ENUM_SW_TEST_MODE_SIGMA_VOICE_ENT = 0x14
 };
+
+#if (CFG_WIFI_RAM_COEX_SPDT_SHR_ANT_CTRL == 1)
+enum ENUM_DBDC_UPDATING_REASON {
+	DBDC_UPDATING_REASON_NULL,
+	DBDC_UPDATING_REASON_SWCH_SHR_ANT_TO_BT,
+	DBDC_UPDATING_REASON_SWCH_SHR_ANT_TO_WIFI,
+	DBDC_UPDATING_REASON_NUM
+};
+#endif
 
 struct ESS_SCAN_RESULT_T {
 	uint8_t aucBSSID[MAC_ADDR_LEN];
@@ -266,6 +276,7 @@ struct CONNECTION_SETTINGS {
 #if CFG_SUPPORT_WPA3_H2E
 	struct RSNXE rRsnXE;
 #endif
+	u_int8_t fgAuthOsenWithRSN;
 };
 
 struct BSS_INFO {
@@ -522,6 +533,13 @@ struct BSS_INFO {
 	uint8_t ucHeOpParams[HE_OP_BYTE_NUM];
 	uint8_t ucBssColorInfo;
 	uint16_t u2HeBasicMcsSet;
+	uint8_t ucColorAnnouncement; /* Record if receive announcement */
+	uint8_t ucColorSwitchCntdn;
+	uint8_t ucNewBssColorInfo;
+	uint64_t u64ExpectedTimestamp; /* the time to change bss color */
+#if (CFG_SUPPORT_WIFI_6G == 1)
+	struct _6G_OPER_INFOR_T r6gOperInfor;
+#endif
 #endif
 
 #if (CFG_SUPPORT_802_11V_MBSSID == 1)
@@ -640,6 +658,15 @@ struct BSS_INFO {
 	uint8_t fgHasStopTx;
 	u_int8_t fgIsSwitchingChnl;
 #endif
+
+#if (CFG_SAP_SUPPORT_WPA3_H2E == 1)
+	u_int8_t fgEnableH2E;
+#endif
+	u_int8_t fgIsApStaring;
+#if CFG_SUPPORT_DUAL_WTBL_GTK_REKEY_OFFLOAD
+	/*Indicate driver's dual GTK key auto added by it itself*/
+	uint32_t u4DualGTKKeyIndex;
+#endif
 };
 
 /* Support AP Selection */
@@ -718,6 +745,9 @@ struct AIS_SPECIFIC_BSS_INFO {
 	uint8_t *pucSaQueryTransId;
 	struct TIMER rSaQueryTimer;
 	u_int8_t fgBipKeyInstalled;
+	uint8_t aucIPN[6];
+	uint8_t aucIGTK[32];
+	uint8_t fgBipGmacKeyInstalled;
 #endif
 	uint8_t ucKeyAlgorithmId;
 
@@ -952,7 +982,9 @@ struct WIFI_VAR {
 	uint8_t ucP2pUapsd;
 
 	uint8_t ucTxShortGI;
+	uint8_t ucTxShortGI4P2p;
 	uint8_t ucRxShortGI;
+	uint8_t ucRxShortGI4P2p;
 	uint8_t ucTxLdpc;
 	uint8_t ucRxLdpc;
 	uint8_t ucTxStbc;
@@ -980,6 +1012,8 @@ struct WIFI_VAR {
 
 	uint8_t ucApWpsMode;
 	uint8_t ucApChannel;
+	uint16_t u2ApFreq;
+	uint8_t ucApAcsChannel[3];
 
 	uint8_t ucApSco;
 	uint8_t ucP2pGoSco;
@@ -1001,6 +1035,7 @@ struct WIFI_VAR {
 #if (CFG_SUPPORT_WIFI_6G == 1)
 	uint8_t ucP2p6gBandwidth;
 #endif
+	uint8_t ucDisallowAcs6G;
 
 	/* If enable, AP channel bandwidth Channel
 	 * Center Frequency Segment 0/1
@@ -1058,12 +1093,15 @@ struct WIFI_VAR {
 	uint32_t u4MtkOuiCap;
 	uint8_t aucMtkFeature[4];
 	u_int8_t ucGbandProbe256QAM;
+	u_int8_t ucP2pGband256QAM;
+	u_int8_t ucStaGband256QAM;
 #endif
 #if CFG_SUPPORT_VHT_IE_IN_2G
 	uint8_t ucVhtIeIn2g;
 #endif
 	u_int8_t fgCsaInProgress;
 	uint8_t ucChannelSwitchMode;
+	uint8_t ucNewOperatingClass;
 	uint8_t ucNewChannelNumber;
 	uint8_t ucChannelSwitchCount;
 	uint8_t ucSecondaryOffset;
@@ -1134,6 +1172,9 @@ struct WIFI_VAR {
 	/* p2p group interface use the same mac addr as p2p device interface */
 	uint8_t ucP2pShareMacAddr;
 	uint8_t ucSmartRTS;
+
+	/* The duration in ms to check TRX while the beacon timeout event */
+	uint32_t u4BeaconTimoutFilterDurationMs;
 
 	uint32_t u4UapsdAcBmp;
 	uint32_t u4MaxSpLen;
@@ -1247,6 +1288,10 @@ struct WIFI_VAR {
 	uint32_t u4PerfMonTpCoalescingIntTh;
 #endif
 
+	uint8_t fgSapBssColor;
+	uint8_t fgSapOverwriteAcsChnlBw;
+	uint8_t fgSapAuthPolicy;
+
 #if (CFG_SUPPORT_DYNAMIC_EDCCA == 1)
 	int32_t i4Ed2GNonEU;
 	int32_t i4Ed5GNonEU;
@@ -1264,7 +1309,7 @@ struct WIFI_VAR {
 	uint8_t ucDftQuotaStartOffset; /* Unit: NAN slot */
 	uint8_t ucDftNdcStartOffset;
 	uint8_t ucNanFixChnl;
-	unsigned char fgEnableNDPE;
+	uint8_t fgEnableNDPE;
 	uint8_t ucDftNdlQosQuotaVal;    /* Unit: NAN slot */
 	uint16_t u2DftNdlQosLatencyVal; /* Unit: NAN slot */
 	uint8_t ucNanBandwidth;
@@ -1272,14 +1317,24 @@ struct WIFI_VAR {
 	uint8_t ucNanFtmBw;
 	uint8_t ucNanDiscBcnInterval;
 	uint8_t ucNanCommittedDw;
-	unsigned char fgNoPmf;
+	uint8_t fgNoPmf;
 	uint8_t fgNanIsSigma;
+	uint8_t ucNanNSS;
+	uint8_t ucNanVendorIoctl;
+	uint8_t ucDiscBcnPeriod;
+	uint8_t ucNanMacAddrOverride;
+	uint8_t aucNanMacAddrStr[WLAN_CFG_VALUE_LEN_MAX];
 #endif
 #if CFG_SUPPORT_WAC
 	uint16_t u2WACIELen;
 	uint8_t aucWACIECache[ELEM_MAX_LEN_WAC_INFO];
 	bool fgEnableWACIE;
 #endif
+
+#if (CFG_SUPPORT_APF == 1)
+	uint8_t ucApfEnable;
+#endif
+
 #if CFG_SUPPORT_ONE_TIME_CAL
 	uint8_t fgOneTimeCalEnable;
 #endif
@@ -1287,6 +1342,23 @@ struct WIFI_VAR {
 	uint32_t u4P2pGoWmmParamAC1;
 	uint32_t u4P2pGoWmmParamAC2;
 	uint32_t u4P2pGoWmmParamAC3;
+#if (CONFIG_WIFI_ULTRA_RADIO_OFF_CTRL == 1)
+	uint8_t ucRadioCtrlEn;
+#endif
+
+	uint32_t u4PciIrqSMPAffinity;
+#if CFG_SUPPORT_RX_WORK
+	uint8_t ucRxWorkCpu;
+#endif
+
+#if (CFG_SUPPORT_MCC_TUNING == 1)
+	int8_t cFixBssTxFreeQuota;
+#endif
+	int8_t cP2pMgmtTxRetryLimit;
+
+	u_int8_t ucChannelMinDwellTime;
+	u_int8_t ucChannelMaxDwellTime;
+
 };
 
 /* cnm_timer module */
@@ -1622,10 +1694,12 @@ struct ADAPTER {
 	u_int8_t fgTxDirectInited;
 
 	#define TX_DIRECT_CHECK_INTERVAL	(1000 * HZ / USEC_PER_SEC)
+	#define TX_FWD_PATH_CHECK_INTERVAL	(TX_DIRECT_CHECK_INTERVAL)
 	/* check if an empty MsduInfo is available */
 	struct timer_list rTxDirectSkbTimer;
 	/* check if HIF port is ready to accept a new Msdu */
 	struct timer_list rTxDirectHifTimer;
+	struct timer_list rTxFwdTimer;
 
 	struct sk_buff_head rTxDirectSkbQueue;
 	struct QUE rTxDirectHifQueue[TX_PORT_NUM];
@@ -1689,11 +1763,12 @@ struct ADAPTER {
 	unsigned char fgIsNANfromHAL;
 	bool fgIsNanSendRequestToCnm;
 	uint8_t ucNanReqTokenId;
-	uint8_t ucNanPubNum;
-	uint8_t ucNanSubNum;
+	uint32_t ucNanOobNum;
 
 	/* Container for Data Engine */
 	struct _NAN_DATA_PATH_INFO_T rDataPathInfo;
+	/* NDP OOB frame */
+	struct _NAN_CMD_OOB_ACTION rNanCmdOOBAction;
 
 	/* Container for Ranging Engine */
 	struct _NAN_RANGING_INFO_T rRangingInfo;
@@ -2019,10 +2094,6 @@ struct ADAPTER {
 #endif
 	int8_t cArpNoResponseIdx;
 
-#if (CFG_SUPPORT_WIFI_RNR == 1)
-	struct LINK rNeighborAPInfoList;
-#endif
-
 #if WLAN_INCLUDE_SYS
 	u_int8_t fgEnDbgPowerMode;
 #endif
@@ -2046,6 +2117,8 @@ struct ADAPTER {
 #if (CFG_SUPPORT_MAILBOX_ACK == 1)
 	u_int8_t fgIsSupportMailBoxDriverOwnAck;
 #endif
+
+	bool fgIsPostponeTxEAPOLM3;
 
 #if CFG_SUPPORT_WIFI_DL_BT_PATCH || CFG_SUPPORT_WIFI_DL_ZB_PATCH
 	u_int8_t fgIsNeedDlPatch;
@@ -2075,6 +2148,12 @@ struct ADAPTER {
 	uint32_t total_scandone_timeout_count;
 	uint32_t total_mgmtTX_timeout_count;
 	uint32_t total_mgmtRX_timeout_count;
+#endif
+
+	struct LINK rStartApPendingMsgList;
+
+#if (CFG_WIFI_RAM_COEX_SPDT_SHR_ANT_CTRL == 1)
+	enum ENUM_DBDC_UPDATING_REASON eDbdcUpdatingReason;
 #endif
 };				/* end of _ADAPTER_T */
 
@@ -2118,6 +2197,9 @@ struct ADAPTER {
 #define IS_BSS_APGO(_prBssInfo) \
 	(IS_BSS_P2P(_prBssInfo) && \
 	(_prBssInfo)->eCurrentOPMode == OP_MODE_ACCESS_POINT)
+
+#define IS_BSS_NAN(_prBssInfo) \
+	((_prBssInfo)->eNetworkType == NETWORK_TYPE_NAN)
 
 #define SET_NET_ACTIVE(_prAdapter, _BssIndex) \
 	{(_prAdapter)->aprBssInfo[(_BssIndex)]->fgIsNetActive = TRUE; }

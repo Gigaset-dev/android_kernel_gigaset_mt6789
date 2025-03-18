@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/include/config.h#3
  */
@@ -34,7 +35,7 @@
  *******************************************************************************
  */
 /* 2 Flags for OS capability */
-#undef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+
 #if defined(_HIF_SDIO)
 /* #ifdef CONFIG_X86 */
 /*Kernel-3.10-ARM did not provide X86_FLAG & HIF shouldn't bind platform*/
@@ -245,7 +246,9 @@
 #define CFG_SUPPORT_MDNS_OFFLOAD_TV 1
 #endif
 
-#define TEST_CODE_FOR_MDNS			0
+#ifndef TEST_CODE_FOR_MDNS
+#define TEST_CODE_FOR_MDNS	0
+#endif
 #endif
 
 /* Enable A-MSDU RX Reordering Support */
@@ -381,12 +384,24 @@
 #define CFG_NATIVE_802_11                       0
 #endif
 
+
+
+#ifndef CFG_SUPPORT_RX_WORK
+#define CFG_SUPPORT_RX_WORK                     0
+#endif /* CFG_SUPPORT_RX_WORK */
+
 /* By using GRO at NAPI level, the driver is doing the aggregation to a large
  * SKB very early, right at the receive completion handler. This means that all
  * the next functions in the receive stack do much less processing.
  * The GRO feature could enhance "Rx" tput.
  */
-#define CFG_SUPPORT_RX_GRO                      1
+#ifndef CFG_SUPPORT_RX_GRO
+#define CFG_SUPPORT_RX_GRO                     1
+#endif
+
+#ifndef CFG_DBG_PRINT_RTP_INFO
+#define CFG_DBG_PRINT_RTP_INFO 0
+#endif
 
 /* 0 : direct-GRO mode (without NAPI poll-callback) (Default)
  * 1 : NAPI+GRO mode
@@ -700,9 +715,6 @@
 /*! Maximum size of Header buffer of each SCAN record */
 #define CFG_RAW_BUFFER_SIZE                      1024
 
-/*! Maximum size of IE buffer of each SCAN record */
-#define CFG_IE_BUFFER_SIZE                      512
-
 /*------------------------------------------------------------------------------
  * Flags and Parameters for Power management
  *------------------------------------------------------------------------------
@@ -732,23 +744,22 @@
 #define CFG_SUPPORT_DROP_ALL_MC_PACKET		0
 
 /*------------------------------------------------------------------------------
- * Auto Channel Selection maximun channel number
+ * Auto Channel Selection maximum channel number
  *------------------------------------------------------------------------------
  */
-/* ARRAY_SIZE(mtk_5ghz_channels) + ARRAY_SIZE(mtk_2ghz_channels) */
-#if (CFG_SUPPORT_WIFI_6G == 1)
 #define MAX_CHN_NUM			(MAX_2G_BAND_CHN_NUM + \
-				MAX_5G_BAND_CHN_NUM + MAX_6G_BAND_CHN_NUM)
+			MAX_5G_BAND_CHN_NUM + MAX_6G_BAND_CHN_NUM)
+
+#if (CFG_SUPPORT_WIFI_6G == 1)
 #define MAX_2G_BAND_CHN_NUM		14
 #define MAX_5G_BAND_CHN_NUM		25
 #define MAX_6G_BAND_CHN_NUM		59
-#define MAX_PER_BAND_CHN_NUM		25
+#define MAX_PER_BAND_CHN_NUM		59
 #else
-#define MAX_CHN_NUM			39
 #define MAX_2G_BAND_CHN_NUM		14
-#define MAX_5G_BAND_CHN_NUM		(MAX_CHN_NUM - MAX_2G_BAND_CHN_NUM)
+#define MAX_5G_BAND_CHN_NUM		25
 #define MAX_6G_BAND_CHN_NUM		0
-#define MAX_PER_BAND_CHN_NUM		(MAX_CHN_NUM - MAX_2G_BAND_CHN_NUM)
+#define MAX_PER_BAND_CHN_NUM		25
 #endif
 
 #define ACS_PRINT_BUFFER_LEN		200
@@ -770,7 +781,7 @@
 #define SCAN_CMD_SSID_NUM                       (4)
 #define SCAN_CMD_CHNL_NUM                       (32)
 
-#if 1
+#if 0
 /* to be compatible with old FW, we set ssid num to 0 here,
  * we should set correct num when query of scan capability from FW is done
  */
@@ -780,6 +791,7 @@
 #define SCAN_CMD_EXT_SSID_NUM                   (6)
 #define SCAN_CMD_EXT_CHNL_NUM                   (32)
 #endif
+#define CFG_SCAN_OOB_MAX_NUM	4
 #define CFG_SCAN_SSID_MAX_NUM (SCAN_CMD_SSID_NUM+SCAN_CMD_EXT_SSID_NUM)
 
 #if (CFG_SUPPORT_WIFI_6G == 1)
@@ -1393,10 +1405,16 @@
 #ifndef CFG_DBDC_SW_FOR_P2P_LISTEN
 #define CFG_DBDC_SW_FOR_P2P_LISTEN	0
 #endif
+#ifndef CFG_WIFI_RAM_COEX_SPDT_SHR_ANT_CTRL
+#define CFG_WIFI_RAM_COEX_SPDT_SHR_ANT_CTRL	0
+#endif
 #else
 #undef CFG_DBDC_SW_FOR_P2P_LISTEN
 #define CFG_DBDC_SW_FOR_P2P_LISTEN	0
+#undef CFG_WIFI_RAM_COEX_SPDT_SHR_ANT_CTRL
+#define CFG_WIFI_RAM_COEX_SPDT_SHR_ANT_CTRL	0
 #endif /* CFG_SUPPORT_DBDC */
+
 /*------------------------------------------------------------------------------
  * Flags for Using TC4 Resource in ROM code stage
  *------------------------------------------------------------------------------
@@ -1470,6 +1488,14 @@
 
 #ifndef CFG_SUPPORT_SINGLE_SKU_LOCAL_DB
 #define CFG_SUPPORT_SINGLE_SKU_LOCAL_DB 1
+#endif
+
+#ifndef CFG_SUPPORT_SINGLE_SKU_DFS_PROTECT
+#define CFG_SUPPORT_SINGLE_SKU_DFS_PROTECT 1
+#endif
+
+#ifndef CFG_SUPPORT_REG_BY_USER
+#define CFG_SUPPORT_REG_BY_USER 1
 #endif
 
 #ifndef CFG_SUPPORT_BW160
@@ -1565,6 +1591,14 @@
  */
 #define CFG_SUPPORT_P2P_PREFERRED_FREQ_LIST  1
 
+#ifndef CFG_SAP_SUPPORT_WPA3_H2E
+#define CFG_SAP_SUPPORT_WPA3_H2E		0
+#endif
+
+#ifndef CFG_SUPPORT_SOFTAP_OWE
+#define CFG_SUPPORT_SOFTAP_OWE		0
+#endif
+
 /*------------------------------------------------------------------------------
  * Flag used for P2P GO CSA
  * Value 0: Disable
@@ -1620,8 +1654,8 @@
  * Note: Must Enable CFG_SUPPORT_P2P_PREFERRED_FREQ_LIST in advance
  *------------------------------------------------------------------------------
  */
-#ifndef CFG_SUPPORT_P2PGO_ACS
-#define CFG_SUPPORT_P2PGO_ACS 0
+#if (CFG_SUPPORT_P2P_PREFERRED_FREQ_LIST == 1)
+#define CFG_SUPPORT_P2PGO_ACS 1
 #endif
 
 /*-----------------------------------------------------------------------------
@@ -1759,10 +1793,12 @@
  *          and unregister & free AIS netdev during module exit.
  *------------------------------------------------------------------------------
  */
+#ifndef CFG_SUPPORT_PERSIST_NETDEV
 #if defined(_HIF_AXI)
 #define CFG_SUPPORT_PERSIST_NETDEV 1
 #else
 #define CFG_SUPPORT_PERSIST_NETDEV 0
+#endif
 #endif
 
 /*
@@ -1850,6 +1886,28 @@
 #endif
 
 /*------------------------------------------------------------------------------
+ * Flag used for APF support.
+ * Value 0: Do not enable APF.
+ * Value 1: Enable APF.
+ *------------------------------------------------------------------------------
+ */
+#ifndef CFG_SUPPORT_APF
+#define CFG_SUPPORT_APF 0
+#endif
+
+/*------------------------------------------------------------------------------
+ * Flag used for packet offload support.
+ * Value 0: Do not enable packet offload.
+ * Value 1: Enable packet offload.
+ *------------------------------------------------------------------------------
+ */
+#if (CFG_SUPPORT_APF == 1)
+#define CFG_SUPPORT_PKT_OFLD 1
+#else
+#define CFG_SUPPORT_PKT_OFLD 0
+#endif
+
+/*------------------------------------------------------------------------------
  * Support NAN or not.
  *------------------------------------------------------------------------------
  */
@@ -1866,6 +1924,11 @@
 	1 /* 0: use NDI if available, 1: always use NMI */
 
 #define CFG_SUPPORT_NAN_SHOULD_REMOVE_FOR_NO_TYPEDEF 1
+#define CFG_SUPPORT_NAN_CUSTOMIZATION_VERSION	0 /*0: MTK default */
+#define CFG_SUPPORT_NAN_NDP_DUAL_BAND		0
+#define CFG_SUPPORT_NAN_CUST_DW_CHNL		1
+#define CFG_SUPPORT_NAN_AVAILABILITY_CONTROL_BY_UPPER_LAYER 1
+#define CFG_NAN_SUPPORT_FAST_DISC	1
 #else
 #define CFG_SUPPORT_NAN_SHOULD_REMOVE_FOR_NO_TYPEDEF 0
 #endif
@@ -2107,11 +2170,6 @@
 #define CFG_SUPPORT_WAC				0
 #endif
 
-/* Compact for some platforms, or wifi will probe fail */
-#ifndef CFG_ALLOC_IRQ_VECTORS_IN_WIFI_DRV
-#define CFG_ALLOC_IRQ_VECTORS_IN_WIFI_DRV		0
-#endif
-
 #ifndef CFG_SUPPORT_STAT_STATISTICS
 #define CFG_SUPPORT_STAT_STATISTICS	0 /* fos_change oneline */
 #endif
@@ -2134,6 +2192,26 @@
  */
 #ifndef CFG_DISABLE_DRIVER_MAPPING_TXQ
 #define CFG_DISABLE_DRIVER_MAPPING_TXQ 0
+#endif
+
+#ifndef CONFIG_WIFI_ULTRA_RADIO_OFF_CTRL
+#define CONFIG_WIFI_ULTRA_RADIO_OFF_CTRL		1
+#endif
+
+#ifndef CFG_SUPPORT_DUAL_WTBL_GTK_REKEY_OFFLOAD
+#define CFG_SUPPORT_DUAL_WTBL_GTK_REKEY_OFFLOAD 1
+#endif
+
+#ifndef CFG_SUPPORT_SW_BIP_GMAC
+#define CFG_SUPPORT_SW_BIP_GMAC 1
+#endif
+
+#ifndef CFG_SUPPORT_PCIE_WFDMA_WMM
+#define CFG_SUPPORT_PCIE_WFDMA_WMM 0
+#endif
+
+#ifndef CFG_SUPPORT_MCC_TUNING
+#define CFG_SUPPORT_MCC_TUNING 0
 #endif
 
 /*******************************************************************************

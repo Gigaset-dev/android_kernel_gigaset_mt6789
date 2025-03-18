@@ -278,7 +278,7 @@ int fwp_if_get_datetime(char *buf, int max_len)
 		tmp = tmp + strlen(tmp);
 	}
 	buf[ret_len] = '\0';
-	BTMTK_INFO("%s: %s, %d", __func__, buf, strlen(buf));
+	BTMTK_INFO("%s: %s, %lu", __func__, buf, strlen(buf));
 	return ret_len + 1;
 }
 
@@ -305,7 +305,7 @@ int fwp_if_get_bt_patch_path(char *buf, int max_len)
 		BTMTK_INFO("%s: snprintf error", __func__);
 		return 0;
 	}
-	BTMTK_INFO("%s: %s, %d", __func__, buf, strlen(buf));
+	BTMTK_INFO("%s: %s, %lu", __func__, buf, strlen(buf));
 	return strlen(buf) + 1;
 }
 
@@ -341,16 +341,12 @@ static void bgfsys_cal_data_backup(
 		return;
 	}
 
-	if (!conninfra_reg_readable()) {
-		int32_t ret = conninfra_is_bus_hang();
-		if (ret > 0)
-			BTMTK_ERR("%s: conninfra bus is hang, needs reset ret = %d", __func__, ret);
-		else
-			BTMTK_ERR("%s: conninfra not readable, but not bus hang ret = %d", __func__, ret);
+	if (bgfsys_check_conninfra_ready())
 		return;
-	}
 
 	memcpy_fromio(cal_data, (const volatile void *)(CON_REG_INFRA_SYS_ADDR + start_offset), data_len);
+	/* release conn_infra force on */
+	CLR_BIT(CONN_INFRA_WAKEUP_BT, BIT(0));
 }
 
 /* bgfsys_cal_data_restore
@@ -386,20 +382,16 @@ static void bgfsys_cal_data_restore(uint32_t start_addr,
 		return;
 	}
 
-	if (!conninfra_reg_readable()) {
-		int32_t ret = conninfra_is_bus_hang();
-		if (ret > 0)
-			BTMTK_ERR("%s: conninfra bus is hang, needs reset ret = %d", __func__, ret);
-		else
-			BTMTK_ERR("%s: conninfra not readable, but not bus hang ret = %d", __func__, ret);
+	if (bgfsys_check_conninfra_ready())
 		return;
-	}
 
 	memcpy_toio((volatile void *)(CON_REG_INFRA_SYS_ADDR + start_offset), cal_data, data_len);
 	/* Firmware will not do calibration again when BT func on */
 	REG_WRITEL(CON_REG_INFRA_SYS_ADDR + ready_offset, CAL_READY_BIT_PATTERN);
 	ready_status = REG_READL(CON_REG_INFRA_SYS_ADDR + ready_offset);
 	BTMTK_DBG("Ready pattern after restore cal=[0x%08x]", ready_status);
+	/* release conn_infra force on */
+	CLR_BIT(CONN_INFRA_WAKEUP_BT, BIT(0));
 }
 
 /* __download_patch_to_emi
@@ -489,10 +481,10 @@ static int32_t __download_patch_to_emi(
 	//if ((patch_emi_offset >= emi_start) &&
 	//    (patch_emi_offset + patch_size < emi_start + emi_size)) {
 		remap_addr = ioremap(emi_ap_phy_base + patch_emi_offset, patch_size);
-		BTMTK_INFO("[Patch] emi_ap_phy_base[0x%p], remap_addr[0x%08x]", emi_ap_phy_base, *remap_addr);
-		BTMTK_INFO("[Patch] patch_emi_offset[0x%08x], patch_size[0x%08x]", patch_emi_offset, patch_size);
 
 		if (remap_addr) {
+			BTMTK_INFO("[Patch] emi_ap_phy_base[0x%llu], remap_addr[0x%08x]", emi_ap_phy_base, *remap_addr);
+			BTMTK_INFO("[Patch] patch_emi_offset[0x%08x], patch_size[0x%08x]", patch_emi_offset, patch_size);
 			memcpy_toio(remap_addr, p_buf, patch_size);
 			iounmap(remap_addr);
 		} else {
@@ -691,8 +683,6 @@ power_on_error:
 static void bt_hw_and_mcu_off(void)
 {
 	BTMTK_INFO("%s", __func__);
-	/* Close hardware bus interface */
-	btmtk_wcn_btif_close();
 
 	bt_disable_irq(BGF2AP_SW_IRQ);
 	bt_disable_irq(BGF2AP_BTIF_WAKEUP_IRQ);
@@ -707,6 +697,9 @@ static void bt_hw_and_mcu_off(void)
 	}
 	/* BGFSYS hardware power off */
 	bgfsys_power_off();
+
+	/* Close hardware bus interface */
+	btmtk_wcn_btif_close();
 }
 
 uint8_t *_internal_evt_result(u_int8_t wmt_evt_result)
@@ -863,14 +856,7 @@ static int32_t _send_wmt_get_cal_data_cmd(
 
 	if (p_inter_cmd->result == WMT_EVT_SUCCESS)
 		ret = 0;
-	else if (!conninfra_reg_readable()) {
-		ret = conninfra_is_bus_hang();
-		if (ret > 0)
-			BTMTK_ERR("%s: conninfra bus is hang, needs reset ret = %d", __func__, ret);
-		else
-			BTMTK_ERR("%s: conninfra not readable, but not bus hang ret = %d", __func__, ret);
-		ret = -EIO;
-	} else {
+	else if (bgfsys_check_conninfra_ready()) {
 		uint32_t offset = *p_start_addr & 0x00000FFF;
 		uint8_t *data = NULL;
 
@@ -885,6 +871,8 @@ static int32_t _send_wmt_get_cal_data_cmd(
 			else
 				BTMTK_ERR("get wrong calibration length [%d]", *p_data_len);
 		}
+		/* release conn_infra force on */
+		CLR_BIT(CONN_INFRA_WAKEUP_BT, BIT(0));
 		ret = -EIO;
 	}
 
@@ -1588,12 +1576,11 @@ int32_t btmtk_intcmd_send_connfem_cmd(void)
 int32_t btmtk_set_power_on(struct hci_dev *hdev, u_int8_t for_precal)
 {
 	int ret;
-	bool skip_up_sem = FALSE;
 	int sch_ret = -1;
+	bool skip_up_sem = FALSE;
 	struct sched_param sch_param;
 	struct btmtk_dev *bdev = hci_get_drvdata(hdev);
 	struct btmtk_btif_dev *cif_dev = (struct btmtk_btif_dev *)g_sbdev->cif_dev;
-	bool is_wmt_power_on_error = false;
 
 	if (g_bt_trace_pt)
 		bt_dbg_tp_evt(TP_ACT_PWR_ON, 0, 0, NULL);
@@ -1775,7 +1762,6 @@ int32_t btmtk_set_power_on(struct hci_dev *hdev, u_int8_t for_precal)
 	else if (ret) {
 		BTMTK_ERR("btmtk_intcmd_wmt_power_on fail");
 		skip_up_sem = TRUE;
-		is_wmt_power_on_error = true;
 		goto wmt_power_on_error;
 	}
 
@@ -1790,8 +1776,10 @@ int32_t btmtk_set_power_on(struct hci_dev *hdev, u_int8_t for_precal)
 
 wmt_power_on_error:
 	wake_up_interruptible(&cif_dev->tx_waitq);
-	kthread_stop(cif_dev->tx_thread);
-	cif_dev->tx_thread = NULL;
+	if (!IS_ERR_OR_NULL(cif_dev->tx_thread)) {
+		kthread_stop(cif_dev->tx_thread);
+		cif_dev->tx_thread = NULL;
+	}
 #if (DRIVER_CMD_CHECK == 1)
 	cmd_workqueue_exit();
 	cmd_list_destory();
@@ -1807,9 +1795,6 @@ mcu_error:
 		conninfra_pwr_off(CONNDRV_TYPE_BT);
 		bt_pwrctrl_post_off();
 	}
-
-	if (!is_wmt_power_on_error)
-		up(&cif_dev->halt_sem);
 
 conninfra_error:
 	cif_dev->bt_state = FUNC_OFF;
@@ -1854,6 +1839,7 @@ int32_t btmtk_set_power_off(struct hci_dev *hdev, u_int8_t for_precal)
 		up(&cif_dev->halt_sem);
 		return 0;
 	}
+	cif_dev->bt_state = TURNING_OFF;
 
 	/* 1. Send WMT cmd to set BT off */
 	btmtk_intcmd_wmt_power_off(hdev);

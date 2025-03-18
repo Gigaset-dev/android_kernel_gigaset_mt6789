@@ -1,15 +1,7 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2006 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
-/*
- * AES functions
- * Copyright (c) 2003-2006, Jouni Malinen <j@w1.fi>
- *
- * This software may be distributed under the terms of the BSD license.
- * See README for more details.
- */
-
 
 #ifndef AES_H
 #define AES_H

@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  ** Id: include/debug.h
  */
@@ -154,14 +155,14 @@ enum ENUM_DBG_MODULE {
 	DBG_ROAMING_IDX,	/* 0x1B *//* ROAMING */
 	DBG_TDLS_IDX,		/* 0x1C *//* TDLS *//* CFG_SUPPORT_TDLS */
 	DBG_PF_IDX,		/* 0x1D *//* PF */
-	DBG_OID_IDX,
-	DBG_NIC_IDX,
-	DBG_WNM_IDX,
-	DBG_WMM_IDX,
-	DBG_TWT_REQUESTER_IDX,
-	DBG_TWT_PLANNER_IDX,
-	DBG_TWT_RESPONDER_IDX,
-	DBG_RRM_IDX,
+	DBG_OID_IDX,		/* 0x1E *//* OID */
+	DBG_NIC_IDX,		/* 0x1F *//* NIC */
+	DBG_WNM_IDX,		/* 0x20 *//* WNM */
+	DBG_WMM_IDX,		/* 0x21 *//* WMM */
+	DBG_TWT_REQUESTER_IDX,	/* 0x22 *//* TWT REQ */
+	DBG_TWT_PLANNER_IDX,	/* 0x23 *//* TWT Planner */
+	DBG_TWT_RESPONDER_IDX,	/* 0x24 *//* TWT Hotspot */
+	DBG_RRM_IDX,		/* 0x25 *//* Radio Resource Management */
 #if (CFG_TX_RSRC_WMM_ENHANCE == 1)
 	DBG_HIF_WMM_ENHANCE_IDX,
 #endif

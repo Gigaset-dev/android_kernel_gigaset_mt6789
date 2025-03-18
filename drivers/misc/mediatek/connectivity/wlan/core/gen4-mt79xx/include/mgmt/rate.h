@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/
  *							include/mgmt/rate.h#1
@@ -59,7 +60,7 @@ extern const uint8_t aucDataRate[];
 /* Routines in rate.c                                                         */
 /*----------------------------------------------------------------------------*/
 void
-rateGetRateSetFromIEs(IN struct IE_SUPPORTED_RATE
+rateGetRateSetFromIEs(IN struct IE_SUPPORTED_RATE_IOT
 		      *prIeSupportedRate,
 		      IN struct IE_EXT_SUPPORTED_RATE *prIeExtSupportedRate, OUT
 		      uint16_t *pu2OperationalRateSet,

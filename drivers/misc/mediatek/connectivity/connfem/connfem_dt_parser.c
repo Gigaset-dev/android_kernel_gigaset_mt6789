@@ -7,6 +7,7 @@
 #include <linux/of_platform.h>
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
+#include <linux/version.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/iio/consumer.h>
 #include <linux/slab.h>
@@ -422,7 +423,12 @@ static int cfm_dt_epaelna_hwid_gpio_parse(struct device_node *np,
 	unsigned int consumed_bits = 0;
 	unsigned int gpio_value = 0;
 
+#if (KERNEL_VERSION(6, 4, 0) <= LINUX_VERSION_CODE)
+	cnt = of_count_phandle_with_args(np, CFM_DT_PROP_GPIO,
+					CFM_DT_PROP_GPIO_CELLS);
+#else
 	cnt = of_gpio_named_count(np, CFM_DT_PROP_GPIO);
+#endif
 	if (cnt <= 0 && cnt != -ENOENT) {
 		pr_info("[WARN] Invalid '%s' property", CFM_DT_PROP_GPIO);
 		return -EINVAL;

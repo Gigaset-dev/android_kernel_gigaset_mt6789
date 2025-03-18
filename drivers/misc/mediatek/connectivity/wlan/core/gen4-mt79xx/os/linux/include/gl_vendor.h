@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Log: gl_vendor.h
  *
@@ -55,6 +56,8 @@
 #define QCA_WLAN_VENDOR_ATTR_ROAMING_POLICY 5
 #define NL80211_VENDOR_SUBCMD_NAN 12
 #define NL80211_VENDOR_SUBCMD_GET_APF_CAPABILITIES 14
+#define NL80211_VENDOR_SUBCMD_SET_PACKET_FILTER 15
+#define NL80211_VENDOR_SUBCMD_READ_PACKET_FILTER 16
 #define NL80211_VENDOR_SUBCMD_NDP 81
 
 #define WIFI_VENDOR_ATTR_FEATURE_FLAGS 7
@@ -118,6 +121,7 @@ enum WIFI_SUB_COMMAND {
 	WIFI_SUBCMD_ENABLE_ROAMING,				/* 0x000b */
 	WIFI_SUBCMD_SELECT_TX_POWER_SCENARIO,			/* 0x000c */
 	WIFI_SUBCMD_SET_LATENCY_MODE,				/*0x000d*/
+	WIFI_SUBCMD_SET_SCAN_PARAM,				/*0x000e*/
 };
 
 enum RTT_SUB_COMMAND {
@@ -256,8 +260,13 @@ enum WIFI_MKEEP_ALIVE_ATTRIBUTE {
 	MKEEP_ALIVE_ATTRIBUTE_MAX
 };
 
+#if (CFG_SUPPORT_APF == 1)
+#define APF_VERSION		4
+#define APF_MAX_PROGRAM_LEN	2048
+#else
 #define APF_VERSION		0
 #define APF_MAX_PROGRAM_LEN	0
+#endif
 
 enum WIFI_APF_ATTRIBUTE {
 	APF_ATTRIBUTE_INVALID = 0,
@@ -273,6 +282,7 @@ enum QCA_SET_BAND {
 	QCA_SETBAND_AUTO,
 	QCA_SETBAND_5G,
 	QCA_SETBAND_2G,
+	QCA_SETBAND_6G,
 };
 
 enum QCA_ATTR_ROAM_SUBCMD {
@@ -351,6 +361,19 @@ enum WIFI_DATA_STALL_ATTRIBUTE {
 	WIFI_ATTRIBUTE_ERROR_REASON
 };
 #endif
+
+enum WIFI_SCAN_PARAMS_ATTRIBUTE {
+	WIFI_ATTR_SCAN_IFACE_TYPE = 0,
+	WIFI_ATTR_SCAN_ASSOC_TYPE,
+	WIFI_ATTR_SCAN_TYPE,
+	WIFI_ATTR_SCAN_PROBE_NUM,
+	WIFI_ATTR_SCAN_ACTIVE_TIME,
+	WIFI_ATTR_SCAN_PASSIVE_TIME,
+	WIFI_ATTR_SCAN_HOME_TIME,
+	WIFI_ATTR_SCAN_ACTIVE_N_CH_BACK,
+	WIFI_ATTR_SCAN_PASSIVE_N_CH_BACK,
+	WIFI_ATTR_SCAN_MAX
+};
 
 /*******************************************************************************
  *                             D A T A   T Y P E S
@@ -819,6 +842,16 @@ int mtk_cfg80211_vendor_get_features(struct wiphy *wiphy,
 int mtk_cfg80211_vendor_get_apf_capabilities(struct wiphy *wiphy,
 	struct wireless_dev *wdev, const void *data, int data_len);
 
+#if (CFG_SUPPORT_APF == 1)
+int mtk_cfg80211_vendor_set_packet_filter(
+	struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void *data, int data_len);
+
+int mtk_cfg80211_vendor_read_packet_filter(
+	struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void *data, int data_len);
+#endif /* CFG_SUPPORT_APF */
+
 int mtk_cfg80211_vendor_driver_memory_dump(struct wiphy *wiphy,
 					   struct wireless_dev *wdev,
 					   const void *data,
@@ -833,5 +866,8 @@ int mtk_cfg80211_vendor_event_wowlan_magic_pkt(
 int mtk_cfg80211_vendor_set_wifi_low_latency_mode(struct wiphy *wiphy,
 		struct wireless_dev *wdev, const void *data, int data_len);
 #endif
+
+int mtk_cfg80211_vendor_set_scan_param(struct wiphy *wiphy,
+		struct wireless_dev *wdev, const void *data, int data_len);
 
 #endif /* _GL_VENDOR_H */

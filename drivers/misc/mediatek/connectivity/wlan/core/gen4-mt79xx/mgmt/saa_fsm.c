@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /*
  * Id: //Department/DaVinci/BRANCHES/MT6620_WIFI_DRIVER_V2_3/mgmt/saa_fsm.c#2
  */
@@ -86,7 +87,7 @@ static uint8_t *apucDebugAAState[AA_STATE_NUM] = {
 void saaSendAuthAssoc(IN struct ADAPTER *prAdapter,
 	IN struct STA_RECORD *prStaRec)
 {
-	uint32_t rStatus = WLAN_STATUS_FAILURE;
+	uint32_t rStatus;
 	struct CONNECTION_SETTINGS *prConnSettings = NULL;
 	struct P2P_CONNECTION_SETTINGS *prP2pConnSettings = NULL;
 	uint16_t u2AuthTransSN =
@@ -213,9 +214,9 @@ void saaSendAuthAssoc(IN struct ADAPTER *prAdapter,
 		} else { /* Prepare to send association frame */
 
 			/* Fill Cipher/AKM before sending association request,
-			* copy from AIS search step
-			*/
-			/*Add patch to resolve PMF 5.3.3.5 &
+			 * copy from AIS search step
+			 */
+			/* Add patch to resolve PMF 5.3.3.5 &
 			 * PMF 5.4.3.1 test failure issue.
 			 * choose right prBssDesc to do actions based on BSSID &
 			 * SSID or channel Number
@@ -294,7 +295,8 @@ void saaSendAuthAssoc(IN struct ADAPTER *prAdapter,
 				&prStaRec->rTxReqDoneOrRxRespTimer,
 				(PFN_MGMT_TIMEOUT_FUNC)
 					saaFsmRunEventTxReqTimeOut,
-				(unsigned long) prStaRec);
+				(unsigned long) prStaRec,
+				TIMER_WAKELOCK_AUTO);
 
 			cnmTimerStartTimer(prAdapter,
 				&prStaRec->rTxReqDoneOrRxRespTimer,
@@ -308,7 +310,7 @@ void saaSendAuthAssoc(IN struct ADAPTER *prAdapter,
 void saaSendAuthSeq3(IN struct ADAPTER *prAdapter,
 		IN struct STA_RECORD *prStaRec)
 {
-	uint32_t rStatus = WLAN_STATUS_FAILURE;
+	uint32_t rStatus;
 
 	ASSERT(prAdapter);
 	ASSERT(prStaRec);
@@ -345,7 +347,8 @@ void saaSendAuthSeq3(IN struct ADAPTER *prAdapter,
 					&prStaRec->rTxReqDoneOrRxRespTimer,
 					(PFN_MGMT_TIMEOUT_FUNC)
 					saaFsmRunEventTxReqTimeOut,
-					(unsigned long) prStaRec);
+					(unsigned long) prStaRec,
+					TIMER_WAKELOCK_AUTO);
 
 			cnmTimerStartTimer(prAdapter,
 					&prStaRec->rTxReqDoneOrRxRespTimer,
@@ -374,7 +377,7 @@ saaFsmSteps(IN struct ADAPTER *prAdapter,
 	    IN struct STA_RECORD *prStaRec, IN enum ENUM_AA_STATE eNextState,
 	    IN struct SW_RFB *prRetainedSwRfb)
 {
-	uint32_t rStatus = WLAN_STATUS_FAILURE;
+	uint32_t rStatus;
 	enum ENUM_AA_STATE ePreviousState;
 	u_int8_t fgIsTransition;
 	uint32_t u4AuthAssocState;
@@ -510,7 +513,8 @@ saaFsmSteps(IN struct ADAPTER *prAdapter,
 					   &prStaRec->rTxReqDoneOrRxRespTimer,
 					   (PFN_MGMT_TIMEOUT_FUNC)
 					   saaFsmRunEventTxReqTimeOut,
-					   (unsigned long) prStaRec);
+					   (unsigned long) prStaRec,
+					   TIMER_WAKELOCK_AUTO);
 
 					cnmTimerStartTimer(prAdapter,
 					   &prStaRec->rTxReqDoneOrRxRespTimer,
@@ -558,7 +562,8 @@ saaFsmSteps(IN struct ADAPTER *prAdapter,
 					   &prStaRec->rTxReqDoneOrRxRespTimer,
 					   (PFN_MGMT_TIMEOUT_FUNC)
 					   saaFsmRunEventTxReqTimeOut,
-					   (unsigned long) prStaRec);
+					   (unsigned long) prStaRec,
+					   TIMER_WAKELOCK_AUTO);
 
 					cnmTimerStartTimer(prAdapter,
 					   &prStaRec->rTxReqDoneOrRxRespTimer,
@@ -593,7 +598,8 @@ saaFsmSteps(IN struct ADAPTER *prAdapter,
 					    &prStaRec->rTxReqDoneOrRxRespTimer,
 					    (PFN_MGMT_TIMEOUT_FUNC)
 					    saaFsmRunEventTxReqTimeOut,
-					    (unsigned long) prStaRec);
+					    (unsigned long) prStaRec,
+					    TIMER_WAKELOCK_AUTO);
 
 					cnmTimerStartTimer(prAdapter,
 					    &prStaRec->rTxReqDoneOrRxRespTimer,
@@ -718,6 +724,12 @@ saaFsmSendEventJoinComplete(IN struct ADAPTER *prAdapter,
 		mboxSendMsg(prAdapter, MBOX_ID_0,
 			    (struct MSG_HDR *) prSaaFsmCompMsg,
 			    MSG_SEND_METHOD_UNBUF);
+#if CFG_SUPPORT_NAN
+		mtk_cfg80211_vendor_event_nan_infra_assoc_done_indication(
+							prAdapter,
+							rJoinStatus,
+							prStaRec);
+#endif
 
 		return WLAN_STATUS_SUCCESS;
 	}
@@ -981,14 +993,22 @@ saaFsmRunEventTxDone(IN struct ADAPTER *prAdapter,
 		cnmTimerInitTimer(prAdapter,
 			&prStaRec->rTxReqDoneOrRxRespTimer,
 			(PFN_MGMT_TIMEOUT_FUNC) saaFsmRunEventRxRespTimeOut,
-			(unsigned long) prStaRec);
+			(unsigned long) prStaRec,
+			TIMER_WAKELOCK_AUTO);
 		if (prAdapter->prGlueInfo->rWpaInfo[prStaRec->ucBssIndex].
-						u4AuthAlg & AUTH_TYPE_SAE)
-			cnmTimerStartTimer(prAdapter,
-				&prStaRec->rTxReqDoneOrRxRespTimer,
-				TU_TO_MSEC(
-				DOT11_RSNA_SAE_RETRANS_PERIOD_TU));
-		else
+						u4AuthAlg & AUTH_TYPE_SAE) {
+			if (prStaRec->ucTxAuthAssocRetryCount >=
+				prStaRec->ucTxAuthAssocRetryLimit)
+				cnmTimerStartTimer(prAdapter,
+					&prStaRec->rTxReqDoneOrRxRespTimer,
+					TU_TO_MSEC(
+					DOT11_RSNA_SAE_RETRANS_PERIOD_TU));
+			else
+				cnmTimerStartTimer(prAdapter,
+					&prStaRec->rTxReqDoneOrRxRespTimer,
+					TU_TO_MSEC(
+					RSNA_SAE_RETRY_AUTH_PERIOD_TU));
+		} else
 			cnmTimerStartTimer(prAdapter,
 				&prStaRec->rTxReqDoneOrRxRespTimer,
 				TU_TO_MSEC(
@@ -1024,7 +1044,8 @@ saaFsmRunEventTxDone(IN struct ADAPTER *prAdapter,
 			    &prStaRec->rTxReqDoneOrRxRespTimer,
 			    (PFN_MGMT_TIMEOUT_FUNC)
 			    saaFsmRunEventRxRespTimeOut,
-			    (unsigned long) prStaRec);
+			    (unsigned long) prStaRec,
+			    TIMER_WAKELOCK_AUTO);
 			if (prAdapter->prGlueInfo->
 				rWpaInfo[prStaRec->ucBssIndex].u4AuthAlg
 							& AUTH_TYPE_SAE)
@@ -1067,7 +1088,8 @@ saaFsmRunEventTxDone(IN struct ADAPTER *prAdapter,
 				      &prStaRec->rTxReqDoneOrRxRespTimer,
 				      (PFN_MGMT_TIMEOUT_FUNC)
 				      saaFsmRunEventRxRespTimeOut,
-				      (unsigned long) prStaRec);
+				      (unsigned long) prStaRec,
+				      TIMER_WAKELOCK_AUTO);
 
 				cnmTimerStartTimer(prAdapter,
 				    &prStaRec->rTxReqDoneOrRxRespTimer,
@@ -1103,7 +1125,8 @@ saaFsmRunEventTxDone(IN struct ADAPTER *prAdapter,
 				      &prStaRec->rTxReqDoneOrRxRespTimer,
 				      (PFN_MGMT_TIMEOUT_FUNC)
 					saaFsmRunEventRxRespTimeOut,
-				      (unsigned long) prStaRec);
+				      (unsigned long) prStaRec,
+				      TIMER_WAKELOCK_AUTO);
 
 				cnmTimerStartTimer(prAdapter,
 				      &(prStaRec->rTxReqDoneOrRxRespTimer),
@@ -1352,8 +1375,12 @@ void saaFsmRunEventRxAuth(IN struct ADAPTER *prAdapter,
 					prNetDev->ifindex,
 					MAC2STR(prNetDev->dev_addr));
 			} else {
+#if (KAL_AIS_NUM == 1)
 				prNetDev = prGlueInfo->prDevHandler;
-
+#else
+				prNetDev = wlanGetNetDev(prGlueInfo,
+							 prStaRec->ucBssIndex);
+#endif
 				DBGLOG(SAA, INFO,
 					"name %s, ifindex %d, dev_addr"
 					MACSTR"\n",
@@ -1613,7 +1640,12 @@ uint32_t saaFsmRunEventRxAssoc(IN struct ADAPTER *prAdapter,
 				prNetDev = prGlueInfo->prP2PInfo[ucRoleIdx]->aprRoleHandler;
 				bss = prP2pConnSettings->bss;
 		} else {
+#if (KAL_AIS_NUM == 1)
 				prNetDev = prGlueInfo->prDevHandler;
+#else
+				prNetDev = wlanGetNetDev(prGlueInfo,
+							 prStaRec->ucBssIndex);
+#endif
 				prConnSettings = aisGetConnSettings(prAdapter, prStaRec->ucBssIndex);
 				bss = prConnSettings->bss;
 		}
@@ -1629,6 +1661,11 @@ uint32_t saaFsmRunEventRxAssoc(IN struct ADAPTER *prAdapter,
 			"Report RX Assoc to upper layer, %s\n",
 			bss ? "DO IT" : "Oops");
 		if (bss) {
+#if CFG_SUPPORT_NAN
+			mtk_cfg80211_vendor_event_nan_infra_assoc_rx_ind(
+						prAdapter,
+						(uint8_t *)prAssocRspFrame);
+#endif
 			kalIndicateRxAssocToUpperLayer(
 					prNetDev,
 					(uint8_t *)prAssocRspFrame,
@@ -2215,7 +2252,8 @@ uint32_t saaFsmRunEventRxDisassoc(IN struct ADAPTER *prAdapter,
 				 * avoid kernel WARN_ON
 				 * in cfg80211_process_disassoc().
 				 */
-#if (CFG_ADVANCED_80211_MLO == 1)
+#if (CFG_ADVANCED_80211_MLO == 1) || \
+	KERNEL_VERSION(6, 0, 0) <= CFG80211_VERSION_CODE
 				if (wdev->connected)
 #else
 				if (wdev->current_bss)
@@ -2252,7 +2290,8 @@ uint32_t saaFsmRunEventRxDisassoc(IN struct ADAPTER *prAdapter,
 			ucRoleIdx = (uint8_t)prBssInfo->u4PrivateData;
 			wdev = prAdapter->prGlueInfo->prP2PInfo[ucRoleIdx]
 						->aprRoleHandler->ieee80211_ptr;
-#if (CFG_ADVANCED_80211_MLO == 1)
+#if (CFG_ADVANCED_80211_MLO == 1) || \
+	KERNEL_VERSION(6, 0, 0) <= CFG80211_VERSION_CODE
 			if (wdev->connected)
 #else
 			if (wdev->current_bss)

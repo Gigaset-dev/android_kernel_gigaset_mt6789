@@ -46,15 +46,18 @@ static int drv_sys_spi_read(
 	struct fm_spi_interface *si, unsigned int subsystem,
 	unsigned int addr, unsigned int *data)
 {
-	WCN_DBG(FM_DBG | CHIP, "[0x%08x]=[0x%08x]\n", addr, *data);
-	return conninfra_spi_read(subsystem, addr, data);
+	int ret;
+
+	ret = conninfra_spi_read(subsystem, addr, data);
+	WCN_DBG(FM_DBG | CHIP, "SUB[%u] [0x%08x]=[0x%08x]\n", subsystem, addr, *data);
+	return ret;
 }
 
 static int drv_sys_spi_write(
 	struct fm_spi_interface *si, unsigned int subsystem,
 	unsigned int addr, unsigned int data)
 {
-	WCN_DBG(FM_DBG | CHIP, "[0x%08x]=[0x%08x]\n", addr, data);
+	WCN_DBG(FM_DBG | CHIP, "SUB[%u] [0x%08x]=[0x%08x]\n", subsystem, addr, data);
 	return conninfra_spi_write(subsystem, addr, data);
 }
 #else /* CFG_FM_CONNAC2 */
@@ -287,7 +290,7 @@ static void drv_host_read(
 	}
 
 	WCN_DBG(FM_DBG | CHIP, "read [0x%08x]=[0x%08x]\n",
-		new_addr, addr, *data);
+		new_addr, *data);
 }
 
 static void drv_host_write(
@@ -1455,7 +1458,7 @@ static unsigned char drv_get_top_index(void)
 
 static unsigned int drv_get_get_adie(void)
 {
-	return 0x6635;
+	return conninfra_get_ic_info(CONNSYS_ADIE_CHIPID);
 }
 
 #if CFG_FM_CONNAC2
@@ -1526,9 +1529,10 @@ static int fm_conninfra_func_on(void)
 		/* set top_ck_en_adie */
 		ret = conninfra_adie_top_ck_en_on(
 			CONNSYS_ADIE_CTL_HOST_FM);
-	} else if (ei->family_id == 0x6877 || ei->family_id == 0x6983)
-		ret = fm_conninfra_set_reg_top_ck_en(0x1);
-	else {
+	} else if (ei->family_id == 0x6877 || ei->family_id == 0x6983) {
+		if (ei->top_clk_en)
+			ret = ei->top_clk_en(0x1);
+	} else {
 		WCN_DBG(FM_ERR | CHIP,
 			"%s: invalid family_id:0x%04x!!!\n",
 			__func__, ei->family_id);
@@ -1560,9 +1564,10 @@ static int fm_conninfra_func_off(void)
 		/* clear top_clk_en_adie */
 		ret = conninfra_adie_top_ck_en_off(
 			CONNSYS_ADIE_CTL_HOST_FM);
-	} else if (ei->family_id == 0x6877 || ei->family_id == 0x6983)
-		ret = fm_conninfra_set_reg_top_ck_en(0x0);
-	else {
+	} else if (ei->family_id == 0x6877 || ei->family_id == 0x6983) {
+		if (ei->top_clk_en)
+			ret = ei->top_clk_en(0x0);
+	} else {
 		WCN_DBG(FM_ERR | CHIP,
 			"%s: invalid family_id:0x%04x!!!\n",
 			__func__, ei->family_id);
@@ -1750,7 +1755,8 @@ int fm_register_irq(struct platform_driver *drv, unsigned int irq_num)
 	return ret;
 }
 
-int fm_register_plat(unsigned int family_id, unsigned int conn_id)
+int fm_register_plat(unsigned int host_id, unsigned int family_id,
+	unsigned int conn_id)
 {
 	struct fm_ext_interface *ei = &fm_wcn_ops.ei;
 	int i = 0;
@@ -1879,13 +1885,6 @@ int fm_register_plat(unsigned int family_id, unsigned int conn_id)
 	return drv_do_ioremap();
 }
 
-static bool drv_is_aoc_support(void)
-{
-	struct fm_ext_interface *ei = &fm_wcn_ops.ei;
-
-	return !(ei->family_id == 0x6885 || ei->family_id == 0x6877);
-}
-
 static void register_drv_ops_init(void)
 {
 	struct fm_ext_interface *ei = &fm_wcn_ops.ei;
@@ -1897,7 +1896,8 @@ static void register_drv_ops_init(void)
 	ei->get_hw_version = drv_get_hw_version;
 	ei->get_top_index = drv_get_top_index;
 	ei->get_get_adie = drv_get_get_adie;
-	ei->is_aoc_support = drv_is_aoc_support;
+
+	WCN_DBG(FM_NTC | CHIP, "adie=0x%x\n", drv_get_get_adie());
 
 #if CFG_FM_CONNAC2
 	ei->enable_eint = drv_enable_eint;
@@ -1917,6 +1917,7 @@ static void register_drv_ops_init(void)
 	ei->host_post_on = drv_host_post_on;
 	ei->host_pre_off = drv_host_pre_off;
 	ei->host_post_off = drv_host_post_off;
+	ei->top_clk_en = fm_conninfra_set_reg_top_ck_en;
 #else
 	ei->enable_eint = NULL;
 	ei->disable_eint = NULL;
@@ -1935,6 +1936,7 @@ static void register_drv_ops_init(void)
 	ei->host_post_on = NULL;
 	ei->host_pre_off = NULL;
 	ei->host_post_off = NULL;
+	ei->top_clk_en = NULL;
 #endif
 	ei->low_ops_register = connac2x_fm_low_ops_register;
 	ei->low_ops_unregister = connac2x_fm_low_ops_unregister;

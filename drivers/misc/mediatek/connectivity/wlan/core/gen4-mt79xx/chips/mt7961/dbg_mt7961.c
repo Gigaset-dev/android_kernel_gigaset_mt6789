@@ -1,7 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
+// SPDX-License-Identifier: BSD-2-Clause
 /*
- * Copyright (c) 2016 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  */
+
 /******************************************************************************
  *[File]             dbg_mt7961.c
  *[Version]          v1.0
@@ -9,11 +10,9 @@
  *[Author]
  *[Description]
  *    The program provides WIFI FALCON MAC Debug APIs
- *[Copyright]
- *    Copyright (C) 2015 MediaTek Incorporation. All Rights Reserved.
  ******************************************************************************/
 
-#if defined(MT7961) || defined(MT7922) || defined(MT7902)
+#if defined(MT7961) || defined(MT7922) || defined(MT7902) || defined(MT7926)
 /*******************************************************************************
  *                         C O M P I L E R   F L A G S
  *******************************************************************************
@@ -1192,6 +1191,76 @@ void mt7961_show_wfdma_info(
 /* Because debug CR is placed in BT, so need to call BT driver export API
  *  to R/W these DEBUG CR.
  */
+#if CFG_CHIP_RESET_KO_SUPPORT
+u_int8_t sdio_show_mcu_debug_info(struct ADAPTER *prAdapter,
+	IN uint8_t *pucBuf, IN uint32_t u4Max, IN uint8_t ucFlag,
+	OUT uint32_t *pu4Length)
+{
+	struct {
+		uint8_t PcLogSel;
+		uint32_t *pu4Val;
+	} bt_func_args;
+
+	struct ModuleMsg msg;
+	uint32_t u4Val = 0;
+	int ret = -EINVAL;
+	int i = 0;
+
+	msg.msgId = WIFI_TO_BT_READ_WIFI_MCU_PC;
+	bt_func_args.pu4Val = &u4Val;
+	msg.input = &bt_func_args;
+	msg.output = &ret;
+
+	bt_func_args.PcLogSel = CURRENT_PC;
+	if ((send_msg_to_module(RESET_MODULE_TYPE_WIFI, RESET_MODULE_TYPE_BT,
+				&msg) != RESET_RETURN_STATUS_SUCCESS) ||
+	    (ret < 0)) {
+		DBGLOG(INIT, ERROR, "btmtk_sdio_read_wifi_mcu_pc fail\n");
+		return FALSE;
+	}
+	DBGLOG(INIT, INFO, "Current PC LOG: 0x%08x\n", u4Val);
+	if (pucBuf) {
+		LOGBUF(pucBuf, u4Max, *pu4Length, "\n");
+		LOGBUF(pucBuf, u4Max, *pu4Length,
+			"----<Dump MCU Debug Information>----\n");
+		LOGBUF(pucBuf, u4Max, *pu4Length,
+			"Current PC LOG: 0x%08x\n", u4Val);
+	}
+
+	/*
+	 * Prevent dump log too much, because 7961 cmd res
+	 * is not sufficient, so will wakeup hif_thread() to dump
+	 * debug info frequently.
+	 */
+	if (ucFlag != DBG_MCU_DBG_CURRENT_PC) {
+		bt_func_args.PcLogSel = PC_LOG_IDX;
+		if ((send_msg_to_module(RESET_MODULE_TYPE_WIFI,
+					RESET_MODULE_TYPE_BT,
+					&msg) != RESET_RETURN_STATUS_SUCCESS) ||
+		    (ret < 0))
+			return FALSE;
+		DBGLOG(INIT, INFO, "PC LOG Index: 0x%08x\n", u4Val);
+		if (pucBuf)
+			LOGBUF(pucBuf, u4Max, *pu4Length,
+			"PC LOG Index: 0x%08x\n", u4Val);
+
+		for (i = 0; i < PC_LOG_NUM; i++) {
+			bt_func_args.PcLogSel = i;
+			if ((send_msg_to_module(RESET_MODULE_TYPE_WIFI,
+					RESET_MODULE_TYPE_BT,
+					&msg) != RESET_RETURN_STATUS_SUCCESS) ||
+			    (ret < 0))
+				return FALSE;
+			DBGLOG(INIT, INFO, "PC LOG %d: 0x%08x\n", i, u4Val);
+			if (pucBuf)
+				LOGBUF(pucBuf, u4Max, *pu4Length,
+				"PC LOG %d: 0x%08x\n", i, u4Val);
+		}
+	}
+
+	return TRUE;
+}
+#else
 u_int8_t sdio_show_mcu_debug_info(struct ADAPTER *prAdapter,
 	IN uint8_t *pucBuf, IN uint32_t u4Max, IN uint8_t ucFlag,
 	OUT uint32_t *pu4Length)
@@ -1205,13 +1274,6 @@ u_int8_t sdio_show_mcu_debug_info(struct ADAPTER *prAdapter,
 
 #if	(CFG_ENABLE_GKI_SUPPORT != 1)
 	pvAddr = GLUE_SYMBOL_GET(bt_func_name);
-#else
-#ifdef CFG_CHIP_RESET_KO_SUPPORT
-	struct BT_NOTIFY_DESC *bt_notify_desc = NULL;
-
-	bt_notify_desc = get_bt_notify_callback();
-	pvAddr = bt_notify_desc->WifiNotifyReadWifiMcuPc;
-#endif /* CFG_CHIP_RESET_KO_SUPPORT */
 #endif
 	if (!pvAddr) {
 		DBGLOG(INIT, WARN, "%s does not exist\n", bt_func_name);
@@ -1255,7 +1317,8 @@ u_int8_t sdio_show_mcu_debug_info(struct ADAPTER *prAdapter,
 #endif
 	return TRUE;
 }
-#endif
+#endif  // CFG_CHIP_RESET_KO_SUPPORT
+#endif  // _HIF_SDIO
 
 #if defined(_HIF_USB)
 u_int8_t usb_read_wifi_mcu_pc(IN struct ADAPTER *prAdapter,
@@ -1301,11 +1364,21 @@ u_int8_t usb_show_mcu_debug_info(IN struct ADAPTER *prAdapter,
 	/* Enable USB mcu debug function. */
 	HAL_UHW_RD(prAdapter, CONNAC2X_UDMA_CONDBGCR_SEL, &u4Val,
 		&fgStatus);
+	if (fgStatus == FALSE) {
+		DBGLOG(HAL, INFO,
+			"HAL_UHW_RD fail, cannot get mcu info\n");
+		return FALSE;
+	}
 	u4Val |= USB_CTRL_EN;
 	u4Val &= CONNAC2X_UDMA_WM_MONITER_SEL;
 	u4Val &= CONNAC2X_UDMA_PC_MONITER_SEL;
 	HAL_UHW_WR(prAdapter, CONNAC2X_UDMA_CONDBGCR_SEL, u4Val,
 		&fgStatus);
+	if (fgStatus == FALSE) {
+		DBGLOG(HAL, INFO,
+			"HAL_UHW_WR fail, cannot get mcu info\n");
+		return FALSE;
+	}
 
 	usb_read_wifi_mcu_pc(prAdapter, CURRENT_PC, &u4Val);
 
@@ -1332,9 +1405,19 @@ u_int8_t usb_show_mcu_debug_info(IN struct ADAPTER *prAdapter,
 		/* Switch to LR. */
 		HAL_UHW_RD(prAdapter, CONNAC2X_UDMA_CONDBGCR_SEL, &u4Val,
 			&fgStatus);
+		if (fgStatus == FALSE) {
+			DBGLOG(HAL, INFO,
+				"HAL_UHW_RD fail, cannot get mcu info\n");
+			return FALSE;
+		}
 		u4Val |= CONNAC2X_UDMA_LR_MONITER_SEL;
 		HAL_UHW_WR(prAdapter, CONNAC2X_UDMA_CONDBGCR_SEL, u4Val,
 			&fgStatus);
+		if (fgStatus == FALSE) {
+			DBGLOG(HAL, INFO,
+				"HAL_UHW_WR fail, cannot get mcu info\n");
+			return FALSE;
+		}
 
 		usb_read_wifi_mcu_pc(prAdapter, PC_LOG_IDX, &u4Val);
 		DBGLOG(INIT, INFO, "LR log contorl=0x%08x\n", u4Val);
@@ -1354,9 +1437,19 @@ u_int8_t usb_show_mcu_debug_info(IN struct ADAPTER *prAdapter,
 	/* Disable USB mcu debug function. */
 	HAL_UHW_RD(prAdapter, CONNAC2X_UDMA_CONDBGCR_SEL, &u4Val,
 		&fgStatus);
+	if (fgStatus == FALSE) {
+		DBGLOG(HAL, INFO,
+			"HAL_UHW_RD fail, cannot get mcu info\n");
+		return FALSE;
+	}
 	u4Val &= ~USB_CTRL_EN;
 	HAL_UHW_WR(prAdapter, CONNAC2X_UDMA_CONDBGCR_SEL, u4Val,
 		&fgStatus);
+	if (fgStatus == FALSE) {
+		DBGLOG(HAL, INFO,
+			"HAL_UHW_WR fail, cannot get mcu info\n");
+		return FALSE;
+	}
 
 	return TRUE;
 }
@@ -1660,4 +1753,6 @@ u_int8_t mt7961_get_sdio_debug_info(struct ADAPTER *prAdapter)
 #endif
 
 
-#endif /* defined(MT7961) || defined(MT7922) || defined(MT7902) */
+#endif /* defined(MT7961) || defined(MT7922) || defined(MT7902) ||
+	* defined(MT7926)
+	*/

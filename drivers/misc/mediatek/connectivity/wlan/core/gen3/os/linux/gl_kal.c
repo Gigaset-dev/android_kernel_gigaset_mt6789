@@ -5970,6 +5970,59 @@ BOOLEAN kalIsValidMacAddr(IN const uint8_t *addr)
 {
 	return is_valid_ether_addr(addr);
 }
+
+int kalMaskMemCmp(const void *cs, const void *ct,
+	const void *mask, size_t count)
+{
+	const uint8_t *su1, *su2, *su3;
+	int res = 0;
+
+	for (su1 = cs, su2 = ct, su3 = mask;
+		count > 0; ++su1, ++su2, ++su3, count--) {
+		if (mask != NULL)
+			res = ((*su1)&(*su3)) - ((*su2)&(*su3));
+		else
+			res = (*su1) - (*su2);
+		if (res != 0)
+			break;
+	}
+	return res;
+}
+
+const uint8_t *kalFindIeMatchMask(uint8_t eid,
+				const uint8_t *ies, int len,
+				const uint8_t *match,
+				int match_len, int match_offset,
+				const uint8_t *match_mask)
+{
+	/* match_offset can't be smaller than 2, unless match_len is
+	 * zero, in which case match_offset must be zero as well.
+	 */
+	if (WARN_ON((match_len && match_offset < 2) ||
+		(!match_len && match_offset)))
+		return NULL;
+	while (len >= 2 && len >= ies[1] + 2) {
+		if ((ies[0] == eid) &&
+			(ies[1] + 2 >= match_offset + match_len) &&
+			!kalMaskMemCmp(ies + match_offset,
+			match, match_mask, match_len))
+			return ies;
+		len -= ies[1] + 2;
+		ies += ies[1] + 2;
+	}
+	return NULL;
+}
+
+const uint8_t *kalFindIeExtIE(uint8_t eid,
+			uint8_t exteid,
+			const uint8_t *ies, int len)
+{
+	if (eid != ELEM_ID_RESERVED)
+		return kalFindIeMatchMask(eid, ies, len, NULL, 0, 0, NULL);
+	else
+		return kalFindIeMatchMask(eid, ies, len, &exteid, 1, 2, NULL);
+}
+
 #if (KERNEL_VERSION(3, 19, 0) <= CFG80211_VERSION_CODE)
 static BOOLEAN kalParseRandomMac(
 	IN P_GLUE_INFO_T prGlueInfo,
