@@ -540,6 +540,7 @@ static int battery_psy_get_property(struct power_supply *psy,
 			}
 			val->intval = q_max_uah;
 		}
+		val->intval = 5000000;
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 		bs_data = &gm->bs_data;
