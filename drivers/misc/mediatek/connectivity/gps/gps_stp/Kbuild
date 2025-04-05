@@ -253,7 +253,7 @@ endif
 ifeq ($(CONFIG_MTK_CONN_MT3337_CHIP_SUPPORT),y)
         $(MODULE_NAME)-objs += gps_stp/gps_mt3337.o
 else
-        $(MODULE_NAME)-objs += gps_stp/stp_chrdev_gps.o
+        $(MODULE_NAME)-objs += stp_chrdev_gps.o
 ifeq ($(CONFIG_ARCH_MTK_PROJECT),"k6833v1_64_swrgo")
         $(MODULE_NAME)-objs += gps_stp/stp_chrdev_gps2.o
 endif
@@ -268,10 +268,10 @@ ifeq ($(GPS_DRV_CONTROL_LNA),y)
 endif
 endif
 ifneq ($(CONFIG_MTK_GPS_EMI),)
-$(MODULE_NAME)-objs += gps_stp/gps_emi.o
+$(MODULE_NAME)-objs += gps_emi.o
 endif
 ifneq ($(CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH),)
-$(MODULE_NAME)-objs += gps_stp/fw_log_gps.o
+$(MODULE_NAME)-objs += fw_log_gps.o
 endif
 
 endif

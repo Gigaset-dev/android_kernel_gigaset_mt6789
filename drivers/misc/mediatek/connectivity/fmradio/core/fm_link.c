@@ -28,6 +28,8 @@ static struct fm_trace_fifo_t *cmd_fifo;
 
 static struct fm_trace_fifo_t *evt_fifo;
 
+unsigned int g_fm_cmd_timeout_cnt;
+
 signed int fm_link_setup(void *data)
 {
 	signed int ret = 0;
@@ -133,7 +135,7 @@ signed int fm_cmd_tx(unsigned char *buf, unsigned short len, signed int mask, si
 	struct task_struct *task = current;
 	struct fm_trace_t trace;
 
-	if ((buf == NULL) || (mask == 0)
+	if ((buf == NULL) || (len < 0) || (mask == 0)
 	    || (cnt > SW_RETRY_CNT_MAX) || (timeout > SW_WAIT_TIMEOUT_MAX)) {
 		WCN_DBG(FM_ERR | LINK, "cmd tx, invalid para\n");
 		return -FM_EPARA;
@@ -169,15 +171,19 @@ signed int fm_cmd_tx(unsigned char *buf, unsigned short len, signed int mask, si
 	ret_time = FM_EVENT_WAIT_TIMEOUT(link_event->ln_event, mask, timeout);
 
 	if (!ret_time) {
+		g_fm_cmd_timeout_cnt++;
 		if (cnt-- > 0) {
-			WCN_DBG(FM_WAR | LINK, "wait event timeout, [retry_cnt=%d], pid=%d\n", cnt, task->pid);
+			WCN_DBG(FM_WAR | LINK,
+				"wait event timeout, [retry_cnt=%d], pid=%d total_fail=%u\n",
+				cnt, task->pid, g_fm_cmd_timeout_cnt);
 			fm_print_cmd_fifo();
 			fm_print_evt_fifo();
 		} else
 			WCN_DBG(FM_ALT | LINK, "fatal error, SW retry failed, reset HW\n");
 
 		return -FM_EFW;
-	}
+	} else
+		g_fm_cmd_timeout_cnt = 0;
 
 	FM_EVENT_CLR(link_event->ln_event, mask);
 
@@ -207,11 +213,6 @@ signed int fm_event_parser(signed int(*rds_parser) (struct rds_rx_t *, signed in
 		rx_buf[1], rx_buf[2], rx_buf[3]);
 
 	while (i < len) {
-		if (i < 0) {
-			WCN_DBG(FM_DBG | LINK, "invalid i:%d, len:%d\n", i, len);
-			break;
-		}
-
 		ch = rx_buf[i];
 
 		switch (state) {

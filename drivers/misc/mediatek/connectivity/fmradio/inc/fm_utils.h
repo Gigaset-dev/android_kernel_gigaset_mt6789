@@ -15,8 +15,6 @@
 #define __FM_UTILS_H__
 
 #include <linux/version.h>
-#include <linux/arm-smccc.h> /* for Kernel Native SMC API */
-#include <linux/soc/mediatek/mtk_sip_svc.h> /* for SMC ID table */
 
 #if (KERNEL_VERSION(4, 9, 0) <= LINUX_VERSION_CODE)
 #include <linux/device.h>
@@ -26,26 +24,6 @@
 #endif
 
 #include "fm_typedef.h"
-
-enum ENUM_FM_STATUS {
-	FM_STATUS_OK = 0x1111,
-	FM_STATUS_ERR = 0xFFFF
-};
-
-/* OPID for FM ATF */
-enum ENUM_FM_SMC_OPID {
-	SMC_FM_SET_OWN = 1,
-	SMC_FM_CLR_OWN,
-	SMC_FM_PRE_ON,
-	SMC_FM_POST_ON,
-	SMC_FM_PRE_OFF,
-	SMC_FM_POST_OFF,
-	SMC_FM_REG_DUMP,
-	SMC_FM_TOP_CLK_ON,
-	SMC_FM_TOP_CLK_OFF,
-	SMC_FM_SPI_HOPPING_ON,
-	SMC_FM_SPI_HOPPING_OFF
-};
 
 /**
 * Base structure of fm object
@@ -391,5 +369,4 @@ unsigned int fm_get_u32_from_auc(unsigned char *buf);
 
 void fm_set_u32_to_auc(unsigned char *buf, unsigned int val);
 
-signed int fm_smc_call(unsigned int opid);
 #endif /* __FM_UTILS_H__ */

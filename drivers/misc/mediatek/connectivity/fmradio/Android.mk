@@ -1,6 +1,3 @@
-$(info [fm_drv:Android.mk] LINUX_KERNEL_VERSION = $(LINUX_KERNEL_VERSION))
-
-ifneq ($(LINUX_KERNEL_VERSION),kernel-6.6)
 LOCAL_PATH := $(call my-dir)
 MAIN_PATH := $(LOCAL_PATH)
 
@@ -11,36 +8,60 @@ ifeq ($(strip $(MTK_FM_SUPPORT)), yes)
     # LD 1.0 should have FM_CHIP_ID
     # FM_CHIP/FM_PLAT is assigned by Android.mk
     ifneq ($(FM_CHIP_ID),)
-        LEGACY_BUILD := yes
         include $(MAIN_PATH)/Include.mk
     else
+#        # soc
+#        BUILD_CONNAC2 := false
+#        FM_CHIP := mt6580
+#        FM_PLAT := soc
+#        include $(MAIN_PATH)/Include.mk
+#
+#        # mt6625
+#        BUILD_CONNAC2 := false
+#        FM_CHIP := mt6625
+#        FM_PLAT := mt6625
+#        include $(MAIN_PATH)/Include.mk
+#
+#        # mt6627
+#        BUILD_CONNAC2 := false
+#        FM_CHIP := mt6627
+#        FM_PLAT := mt6627
+#        include $(MAIN_PATH)/Include.mk
+#
+#        # mt6630
+#        BUILD_CONNAC2 := false
+#        FM_CHIP := mt6630
+#        FM_PLAT := mt6630
+#        include $(MAIN_PATH)/Include.mk
+#
+#        # mt6632
+#        BUILD_CONNAC2 := false
+#        FM_CHIP := mt6632
+#        FM_PLAT := mt6632
+#        include $(MAIN_PATH)/Include.mk
+
         # mt6631 connac 1.x
         BUILD_CONNAC2 := false
         FM_CHIP := mt6631
         FM_PLAT := mt6631
-        LEGACY_BUILD := yes
         include $(MAIN_PATH)/Include.mk
 
         # mt6635 connac 1.x
         BUILD_CONNAC2 := false
         FM_CHIP := mt6635
         FM_PLAT := mt6635
-        LEGACY_BUILD := yes
         include $(MAIN_PATH)/Include.mk
 
         # dynamic mt6631/mt6635 connac 1.x
         BUILD_CONNAC2 := false
         FM_CHIP :=
         FM_PLAT := mt6631_6635
-        LEGACY_BUILD := yes
         include $(MAIN_PATH)/Include.mk
 
         # mt6635 connac 2.x
         BUILD_CONNAC2 := true
         FM_CHIP := mt6635
         FM_PLAT := connac2x
-        LEGACY_BUILD := yes
         include $(MAIN_PATH)/Include.mk
     endif
-endif
 endif

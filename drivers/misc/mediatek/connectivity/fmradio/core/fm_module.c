@@ -34,7 +34,6 @@
 #include "fm_main.h"
 #include "fm_ioctl.h"
 
-#define DEBUG_FM                0
 #define FM_PROC_FILE		"fm"
 
 unsigned int g_dbg_level = 0xfffffff5;	/* Debug level of FM */
@@ -447,13 +446,12 @@ static long fm_ops_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			struct fm_ctl_parm parm_ctl;
 
 			WCN_DBG(FM_INF | MAIN, "FM_IOCTL_RW_REG\n");
-#if !DEBUG_FM
 			if (fm->chipon == false || fm_pwr_state_get(fm) == FM_PWR_OFF) {
 				WCN_DBG(FM_ERR | MAIN, "ERROR, FM chip is OFF\n");
 				ret = -EFAULT;
 				goto out;
 			}
-#endif /* !DEBUG_FM */
+
 			if (copy_from_user(&parm_ctl, (void *)arg, sizeof(struct fm_ctl_parm))) {
 				WCN_DBG(FM_ALT | MAIN, "copy from user error\n");
 				ret = -EFAULT;
@@ -483,18 +481,18 @@ static long fm_ops_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 			WCN_DBG(FM_INF | MAIN, "FM_IOCTL_TOP_RDWR\n");
 
-#if !DEBUG_FM
 #ifdef CONFIG_MTK_USER_BUILD
 			WCN_DBG(FM_ERR | MAIN, "Not support FM_IOCTL_TOP_RDWR\n");
 			ret = -EFAULT;
 			goto out;
 #endif
+
 			if (g_dbg_level != 0xfffffff7) {
 				WCN_DBG(FM_ERR | MAIN, "Not support FM_IOCTL_TOP_RDWR\n");
 				ret = -EFAULT;
 				goto out;
 			}
-#endif /* !DEBUG_FM */
+
 			if (copy_from_user(&parm_ctl, (void *)arg, sizeof(struct fm_top_rw_parm))) {
 				WCN_DBG(FM_ALT | MAIN, "copy from user error\n");
 				ret = -EFAULT;
@@ -524,18 +522,18 @@ static long fm_ops_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 			WCN_DBG(FM_INF | MAIN, "FM_IOCTL_HOST_RDWR\n");
 
-#if !DEBUG_FM
 #ifdef CONFIG_MTK_USER_BUILD
 			WCN_DBG(FM_ERR | MAIN, "Not support FM_IOCTL_HOST_RDWR\n");
 			ret = -EFAULT;
 			goto out;
 #endif
+
 			if (g_dbg_level != 0xfffffff7) {
 				WCN_DBG(FM_ERR | MAIN, "Not support FM_IOCTL_HOST_RDWR\n");
 				ret = -EFAULT;
 				goto out;
 			}
-#endif /* !DEBUG_FM */
+
 			if (copy_from_user(&parm_ctl, (void *)arg, sizeof(struct fm_host_rw_parm))) {
 				WCN_DBG(FM_ALT | MAIN, "copy from user error\n");
 				ret = -EFAULT;
@@ -711,53 +709,6 @@ static long fm_ops_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				ret = -EFAULT;
 				goto out;
 			}
-			break;
-		}
-
-	case FM_IOCTL_FM_SET_STATUS:{
-			signed int tx_support = -1;
-			struct fm_status_t fm_stat;
-
-			WCN_DBG(FM_DBG | MAIN, "FM_IOCTL_FM_SET_STATUS");
-
-			/* no tx support */
-			ret = fm_tx_support(fm, &tx_support);
-			if (tx_support == 0)
-				goto out;
-
-			if (copy_from_user(&fm_stat, (void *)arg, sizeof(struct fm_status_t))) {
-				ret = -EFAULT;
-				goto out;
-			}
-
-			fm_set_stat(fm, fm_stat.which, fm_stat.stat);
-
-			break;
-		}
-
-	case FM_IOCTL_FM_GET_STATUS:{
-			signed int tx_support = -1;
-			struct fm_status_t fm_stat;
-
-			WCN_DBG(FM_DBG | MAIN, "FM_IOCTL_FM_GET_STATUS");
-
-			/* no tx support */
-			ret = fm_tx_support(fm, &tx_support);
-			if (tx_support == 0)
-				goto out;
-
-			if (copy_from_user(&fm_stat, (void *)arg, sizeof(struct fm_status_t))) {
-				ret = -EFAULT;
-				goto out;
-			}
-
-			fm_get_stat(fm, fm_stat.which, &fm_stat.stat);
-
-			if (copy_to_user((void *)arg, &fm_stat, sizeof(struct fm_status_t))) {
-				ret = -EFAULT;
-				goto out;
-			}
-
 			break;
 		}
 
@@ -970,11 +921,10 @@ static long fm_ops_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		{
 			WCN_DBG(FM_NTC | MAIN, "......FM_IOCTL_DUMP_REG......\n");
 			if (g_dbg_level != 0xfffffff7) {
-				WCN_DBG(FM_ERR | MAIN, "Not support FM_IOCTL_DUMP_REG\n");
+				WCN_DBG(FM_ERR | MAIN, "Not support FM_IOCTL_HOST_RDWR\n");
 				ret = -EFAULT;
 				goto out;
 			}
-
 			if (fm->chipon == false || fm_pwr_state_get(fm) == FM_PWR_OFF) {
 				WCN_DBG(FM_ERR | MAIN, "ERROR, FM chip is OFF\n");
 				ret = -EFAULT;
@@ -1392,12 +1342,10 @@ static ssize_t fm_proc_write(struct file *file, const char *buffer, size_t count
 		return count;
 	}
 
-#if !DEBUG_FM
 	if (!fm->chipon || (fm_pwr_state_get(fm) != FM_PWR_RX_ON)) {
 		WCN_DBG(FM_ERR | MAIN, "FM is off.\n");
 		return -EFAULT;
 	}
-#endif /* !DEBUG_FM */
 
 	if (kstrtouint(tmp_buf, 0, &g_dbg_level)) {
 		tmp_buf[50] = '\0';
@@ -1456,11 +1404,7 @@ static signed int fm_cdev_setup(struct fm *fm)
 		return ret;
 	}
 #ifndef FM_DEV_STATIC_ALLOC
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
-	plat->cls = class_create(FM_NAME);
-#else
 	plat->cls = class_create(THIS_MODULE, FM_NAME);
-#endif
 
 	if (IS_ERR(plat->cls)) {
 		ret = PTR_ERR(plat->cls);
@@ -1620,7 +1564,7 @@ static signed int mt_fm_probe(struct platform_device *pdev)
 		if (ret)
 			return ret;
 
-		ret = fm_register_plat(host_id, family_id, conn_id);
+		ret = fm_register_plat(family_id, conn_id);
 		if (ret)
 			return ret;
 	}
@@ -1698,8 +1642,8 @@ static signed int mt_fm_init(void)
 
 	WCN_DBG(FM_NTC | MAIN, "%s\n", __func__);
 	if (test_bit(FM_DEINIT_BIT, &g_fm_module_flag)) {
-		WCN_DBG(FM_NTC | MAIN, "%s\n",
-			"mt_fm_exit does not finished yet\n");
+		WCN_DBG(FM_NTC | MAIN,
+			"mt_fm_exit does not finished yet\n", __func__);
 		return -1;
 	}
 

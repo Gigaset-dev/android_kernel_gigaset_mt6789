@@ -11,7 +11,6 @@
  * GNU General Public License for more details.
  */
 
-#include <linux/ctype.h>
 #include <linux/string.h>
 #include <linux/slab.h>
 
