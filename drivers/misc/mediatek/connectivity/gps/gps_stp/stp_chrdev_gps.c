@@ -914,16 +914,12 @@ long GPS_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			do {
 				char *addr = ioremap((phys_addr_t)md_status_addr, 0x4);
 
-				if (addr != NULL) {
-					md2gps_status = *(unsigned int *)addr;
-					GPS_INFO_FUNC("MD2GPS_REG (0x%x), md2gps_status=0x%x\n",
-						md_status_addr, md2gps_status);
-					if (copy_to_user((int __user *)arg, &md2gps_status, sizeof(md2gps_status)))
-						retval = -EFAULT;
-					iounmap(addr);
-				} else {
-					GPS_ERR_FUNC("ioremao failed\n");
-				}
+				md2gps_status = *(unsigned int *)addr;
+				GPS_INFO_FUNC("MD2GPS_REG (0x%x), md2gps_status=0x%x\n",
+					md_status_addr, md2gps_status);
+				if (copy_to_user((int __user *)arg, &md2gps_status, sizeof(md2gps_status)))
+					retval = -EFAULT;
+				iounmap(addr);
 			} while (0);
 		} else {
 			retval = -EFAULT;
@@ -1266,7 +1262,6 @@ static int GPS_init(void)
 #endif
 #endif
 	int alloc_ret = 0;
-	md_status_addr = 0;
 #ifdef MTK_GENERIC_HAL
 	gps_lna_linux_plat_drv_register();
 #else
@@ -1289,11 +1284,7 @@ static int GPS_init(void)
 		goto error;
 #if WMT_CREATE_NODE_DYNAMIC || REMOVE_MK_NODE
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
-	stpgps_class = class_create("stpgps");
-#else
 	stpgps_class = class_create(THIS_MODULE, "stpgps");
-#endif
 	if (IS_ERR(stpgps_class))
 		goto error;
 	stpgps_dev = device_create(stpgps_class, NULL, dev, NULL, "stpgps");
@@ -1316,11 +1307,7 @@ static int GPS_init(void)
 		goto error;
 #if WMT_CREATE_NODE_DYNAMIC || REMOVE_MK_NODE
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
-	stpgps2_class = class_create("stpgps2");
-#else
 	stpgps2_class = class_create(THIS_MODULE, "stpgps2");
-#endif
 	if (IS_ERR(stpgps2_class))
 		goto error;
 	stpgps2_dev = device_create(stpgps2_class, NULL, dev2, NULL, "stpgps2");
@@ -1344,11 +1331,7 @@ static int GPS_init(void)
 		goto error;
 #if WMT_CREATE_NODE_DYNAMIC || REMOVE_MK_NODE
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
-	stpgps2_class = class_create("stpgps2");
-#else
 	stpgps2_class = class_create(THIS_MODULE, "stpgps2");
-#endif
 	if (IS_ERR(stpgps2_class))
 		goto error;
 	stpgps2_dev = device_create(stpgps2_class, NULL, dev2, NULL, "stpgps2");
@@ -1368,6 +1351,8 @@ static int GPS_init(void)
 		pr_info("%s %d: init gps wakeup source fail!", __func__, __LINE__);
 		goto error;
 	}
+
+	md_status_addr = 0;
 
 	sema_init(&status_mtx, 1);
 	sema_init(&fwctl_mtx, 1);

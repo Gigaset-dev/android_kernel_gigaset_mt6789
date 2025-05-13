@@ -224,6 +224,8 @@ INT32 gps_emi_mpu_set_region_protection(INT32 region)
 #if EMI_MPU_PROTECTION_IS_READY
 #if defined(GPS_EMI_NEW_API)
 	struct emimpu_region_t region_info;
+	memset((void *)&region_info, 0x0, sizeof(region_info));
+
 	int emimpu_ret1, emimpu_ret2, emimpu_ret3, emimpu_ret4, emimpu_ret5, emimpu_ret6;
 	/* Set EMI MPU permission */
 	GPS_DBG("emi mpu cfg: region = %d, no protection domain = %d, %d",
@@ -513,11 +515,7 @@ static int gps_emi_mod_init(void)
 		GPS_ERR("cdev_add fail: %d\n", err);
 		goto err_out;
 	}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
-	devobj->cls = class_create("gpsemi");
-#else
 	devobj->cls = class_create(THIS_MODULE, "gpsemi");
-#endif
 	if (IS_ERR(devobj->cls)) {
 		GPS_ERR("Unable to create class, err = %d\n", (int)PTR_ERR(devobj->cls));
 	goto err_out;
